@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, X, Search, Globe, Database, Zap, Sparkles, Box, DollarSign, Ruler, FileText, CheckCircle } from 'lucide-react';
-import { mockRequisitions } from '../services/mockData';
+import { mockRequisitions, mockSuppliers } from '../services/mockData';
 import { KanbanStatus, Requisition } from '../types';
 import RequisitionCard from '../components/RequisitionCard';
 
@@ -15,6 +15,13 @@ const RequisitionsPage: React.FC = () => {
   const [requisitions, setRequisitions] = useState<Requisition[]>(mockRequisitions);
   const [isNewReqModalOpen, setIsNewReqModalOpen] = useState(false);
   const [selectedRequisition, setSelectedRequisition] = useState<Requisition | null>(null);
+
+  // Calculate dynamic counts
+  const suppliersCount = mockSuppliers.length;
+  const itemsCount = mockSuppliers.reduce((total, supplier) => total + (supplier.items?.length || 0), 0);
+  
+  // Generate next requisition ID
+  const nextRequisitionId = `#${Math.max(...mockRequisitions.map(r => parseInt(r.displayId.replace('#', '')))) + 1}`;
 
   const handleCreateClick = () => setIsNewReqModalOpen(true);
   const handleCloseModal = () => setIsNewReqModalOpen(false);
@@ -57,14 +64,14 @@ const RequisitionsPage: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4 flex-wrap">
         <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">Requisições</h1>
-            <p className="text-gray-500 text-sm mt-1">Gerencie seu fluxo de suprimentos</p>
+            <p className="text-gray-500 text-sm mt-1">Gerencie seu fluxo de cotação</p>
         </div>
         <button 
           onClick={handleCreateClick}
-          className="bg-black text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2 hover:bg-gray-800 transition-colors shadow-lg shadow-black/10 active:scale-95 transform duration-150"
+          className="bg-black text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2 hover:bg-gray-800 transition-colors shadow-lg shadow-black/10 active:scale-95 transform duration-150 shrink-0 border-r-4 border-transparent"
         >
           <Plus size={20} />
           NOVA REQUISIÇÃO
@@ -72,12 +79,12 @@ const RequisitionsPage: React.FC = () => {
       </div>
 
       {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto pb-4">
-        <div className="flex gap-6 min-w-[1000px] h-full">
+      <div className="flex-1 overflow-x-auto pb-4 w-full min-w-0">
+        <div className="flex gap-4 sm:gap-6 h-full w-full">
           {columns.map((column) => (
             <div 
               key={column} 
-              className="flex-1 flex flex-col min-w-[280px]"
+              className="flex-1 flex flex-col min-w-[200px]"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, column)}
             >
@@ -120,32 +127,15 @@ const RequisitionsPage: React.FC = () => {
             </button>
             
             <div className="p-10 text-center">
+                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-mono mb-4">
+                    Nova Requisição {nextRequisitionId}
+                </span>
                 <h2 className="text-3xl font-bold mb-3">Como deseja iniciar esta cotação?</h2>
-                <p className="text-gray-500 mb-10 max-w-lg mx-auto">Selecione o método de busca de fornecedores para esta nova requisição de compras.</p>
+                <p className="text-gray-500 mb-10 max-w-lg mx-auto">Selecione o método dessa cotação.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Option 1 */}
-                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-gray-100 hover:border-primary hover:bg-primary/5 transition-all group text-left relative overflow-hidden">
-                        <div className="w-16 h-16 rounded-2xl bg-gray-50 text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                            <Database size={32} />
-                        </div>
-                        <h3 className="font-bold text-lg mb-2 text-gray-900">Base Cadastrada</h3>
-                        <p className="text-sm text-gray-500 text-center leading-relaxed">Cotar apenas com fornecedores já homologados no sistema.</p>
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
-                    </button>
-
-                    {/* Option 2 */}
-                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-gray-100 hover:border-blue-400 hover:bg-blue-50 transition-all group text-left relative overflow-hidden">
-                        <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                            <Globe size={32} />
-                        </div>
-                        <h3 className="font-bold text-lg mb-2 text-gray-900">Novos Fornecedores</h3>
-                        <p className="text-sm text-gray-500 text-center leading-relaxed">Expandir a busca para o mercado global e novos parceiros.</p>
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
-                    </button>
-
-                    {/* Option 3 */}
-                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-primary/50 bg-gradient-to-b from-primary/10 to-transparent hover:shadow-xl hover:shadow-primary/20 transition-all group text-left relative overflow-hidden ring-1 ring-primary">
+                    {/* Option 1 - Base de Custo IA */}
+                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-primary/50 bg-gradient-to-b from-primary/10 to-transparent hover:shadow-xl hover:shadow-primary/20 transition-all group text-center relative overflow-hidden ring-1 ring-primary">
                         <div className="absolute top-4 right-4 bg-black text-primary text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
                             <Sparkles size={10} /> IA
                         </div>
@@ -153,7 +143,35 @@ const RequisitionsPage: React.FC = () => {
                             <Zap size={32} fill="currentColor" />
                         </div>
                         <h3 className="font-bold text-lg mb-2 text-gray-900">Base de Custo IA</h3>
-                        <p className="text-sm text-gray-600 text-center leading-relaxed">Utilizar inteligência artificial para estimar custos e sugerir o melhor momento.</p>
+                        <p className="text-sm text-gray-600 text-center leading-relaxed mb-4">Utilizar a IA para trazer itens já cadastrados</p>
+                        <span className="text-xs font-semibold bg-black/10 text-gray-900 px-3 py-1 rounded-full">{itemsCount} Itens Encontrados</span>
+                    </button>
+
+                    {/* Option 2 - Fornecedores Cadastrados */}
+                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-gray-100 hover:border-primary hover:bg-primary/5 transition-all group text-center relative overflow-hidden">
+                        <div className="absolute top-4 right-4 bg-black text-primary text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                            <Sparkles size={10} /> IA
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-gray-50 text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                            <Database size={32} />
+                        </div>
+                        <h3 className="font-bold text-lg mb-2 text-gray-900">Fornecedores Cadastrados</h3>
+                        <p className="text-sm text-gray-500 text-center leading-relaxed mb-4">Solicitar nova cotação para fornecedores homologados no sistema</p>
+                        <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1 rounded-full">{suppliersCount} Fornecedores Encontrados</span>
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
+                    </button>
+
+                    {/* Option 3 - Novos Fornecedores */}
+                    <button className="flex flex-col items-center p-8 rounded-2xl border-2 border-gray-100 hover:border-blue-400 hover:bg-blue-50 transition-all group text-center relative overflow-hidden">
+                        <div className="absolute top-4 right-4 bg-black text-primary text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                            <Sparkles size={10} /> IA
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                            <Globe size={32} />
+                        </div>
+                        <h3 className="font-bold text-lg mb-2 text-gray-900">Novos Fornecedores</h3>
+                        <p className="text-sm text-gray-500 text-center leading-relaxed">Expandir a busca para novos fornecedores</p>
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
                     </button>
                 </div>
             </div>

@@ -14,7 +14,7 @@ const SupplierModal: React.FC<SupplierModalProps> = ({ supplier, isOpen, onClose
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div 
-        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -79,33 +79,30 @@ const SupplierModal: React.FC<SupplierModalProps> = ({ supplier, isOpen, onClose
             </div>
           </div>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg w-fit">
-                <Sparkles size={14} className="text-purple-500" />
-                <span>Valores atualizados pela IA: <span className="font-medium text-gray-700">{supplier.lastAiUpdate}</span></span>
-              </div>
-            </div>
-          </div>
+
 
           {/* History */}
           <div>
             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-900">
-              <History size={20} /> Histórico de Itens
+              <History size={20} /> Item/Custo
             </h3>
             <div className="border rounded-xl overflow-hidden">
               <table className="w-full text-sm text-left">
                 <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                   <tr>
                     <th className="px-4 py-3">Item</th>
-                    <th className="px-4 py-3 text-right">Custo Histórico</th>
-                    <th className="px-4 py-3 text-right">Data Cotação</th>
+                    <th className="px-4 py-3">Tipo</th>
+                    <th className="px-4 py-3">Unidade de Medida</th>
+                    <th className="px-4 py-3 text-right">Custo</th>
+                    <th className="px-4 py-3 text-right">Data de Atualização</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {supplier.items.map(item => (
                     <tr key={item.id} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                      <td className="px-4 py-3 text-gray-500">{item.type}</td>
+                      <td className="px-4 py-3 text-gray-500">{item.unit}</td>
                       <td className="px-4 py-3 text-right">R$ {item.historicalCost.toFixed(2)}</td>
                       <td className="px-4 py-3 text-right text-gray-500">{item.lastQuoteDate}</td>
                     </tr>
@@ -118,6 +115,19 @@ const SupplierModal: React.FC<SupplierModalProps> = ({ supplier, isOpen, onClose
 
         {/* Footer */}
         <div className="p-6 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
+          <div className="w-full mb-4">
+            <div className="flex items-center gap-4 px-6 py-4 rounded-xl w-full shadow-sm" style={{ backgroundColor: '#EBF57D' }}>
+              <div className="bg-black/5 p-2.5 rounded-lg shadow-sm backdrop-blur-sm">
+                  <Sparkles size={20} className="text-black" />
+              </div>
+              <div>
+                  <p className="text-xs font-bold text-black/70 uppercase tracking-wider mb-0.5">Atualização de Valores via IA</p>
+                  <p className="text-base font-bold text-black">
+                      Dados sincronizados em: {supplier.lastAiUpdate}
+                  </p>
+              </div>
+            </div>
+          </div>
           <a 
             href={supplier.website} 
             target="_blank" 

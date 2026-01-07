@@ -5,12 +5,14 @@ import {
   LogOut, 
   ChevronLeft, 
   ChevronRight,
-  Package2
+  Package2,
+  Settings,
+  CreditCard
 } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'requisitions' | 'suppliers';
-  onTabChange: (tab: 'requisitions' | 'suppliers') => void;
+  activeTab: 'requisitions' | 'suppliers' | 'settings' | 'subscription';
+  onTabChange: (tab: 'requisitions' | 'suppliers' | 'settings' | 'subscription') => void;
   isCollapsed: boolean;
   toggleCollapse: () => void;
 }
@@ -70,6 +72,21 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, isCollapsed, 
             {!isCollapsed && <span className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">Fornecedores</span>}
           </button>
           
+          <button
+            onClick={() => onTabChange('subscription')}
+            className={getButtonStyle(activeTab === 'subscription')}
+          >
+            <CreditCard size={22} className="shrink-0" />
+            {!isCollapsed && <span className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">Gerenciar Assinatura</span>}
+          </button>
+
+          <button
+            onClick={() => onTabChange('settings')}
+            className={getButtonStyle(activeTab === 'settings')}
+          >
+            <Settings size={22} className="shrink-0" />
+            {!isCollapsed && <span className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">Configurações</span>}
+          </button>
 
         </nav>
       </div>

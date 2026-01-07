@@ -33,6 +33,8 @@ export interface Requisition {
 export interface SupplierItem {
   id: string;
   name: string;
+  type: string;
+  unit: string;
   historicalCost: number;
   lastQuoteDate: string;
 }
