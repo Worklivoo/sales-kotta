@@ -61,6 +61,12 @@ const RequisitionsPage: React.FC = () => {
     }
   };
 
+  const columnTheme = {
+    dot: 'bg-gray-400',
+    card: 'border-gray-200/80 bg-gradient-to-b from-gray-50/70 to-white',
+    count: 'text-gray-600 border-gray-200/80 bg-white/80'
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -81,36 +87,35 @@ const RequisitionsPage: React.FC = () => {
       {/* Kanban Board */}
       <div className="flex-1 overflow-x-auto pb-4 w-full min-w-0">
         <div className="flex gap-4 sm:gap-6 h-full w-full">
-          {columns.map((column) => (
-            <div 
-              key={column} 
-              className="flex-1 flex flex-col min-w-[200px]"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, column)}
-            >
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="font-semibold text-gray-700 text-sm uppercase tracking-wider flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                        column === 'Novas Requisições' ? 'bg-blue-400' :
-                        column === 'Em análise' ? 'bg-yellow-400' :
-                        column === 'Recebendo Propostas' ? 'bg-purple-400' : 'bg-green-400'
-                    }`} />
+          {columns.map((column) => {
+            const theme = columnTheme;
+            return (
+              <div
+                key={column}
+                className={`flex-1 flex flex-col min-w-[220px] rounded-3xl border shadow-sm ring-1 ring-black/5 p-3 sm:p-4 ${theme.card}`}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, column)}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${theme.dot}`} />
                     {column}
-                </h2>
-                <span className="text-xs text-gray-400 font-medium bg-white px-2 py-1 rounded-md shadow-sm">
-                  {requisitions.filter(r => r.status === column).length}
-                </span>
+                  </h2>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-md shadow-sm border ${theme.count}`}>
+                    {requisitions.filter(r => r.status === column).length}
+                  </span>
+                </div>
+
+                <div className="flex-1 bg-white/70 rounded-2xl p-3 border border-gray-100/70 space-y-3 overflow-y-auto max-h-[calc(100vh-220px)] custom-scrollbar">
+                  {requisitions
+                    .filter(r => r.status === column)
+                    .map(req => (
+                      <RequisitionCard key={req.id} requisition={req} onClick={handleCardClick} />
+                    ))}
+                </div>
               </div>
-              
-              <div className="flex-1 bg-gray-100/50 rounded-2xl p-3 border border-gray-100/50 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar">
-                {requisitions
-                  .filter(r => r.status === column)
-                  .map(req => (
-                    <RequisitionCard key={req.id} requisition={req} onClick={handleCardClick} />
-                  ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
