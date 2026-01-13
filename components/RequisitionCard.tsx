@@ -17,6 +17,27 @@ const RequisitionCard: React.FC<RequisitionCardProps> = ({ requisition, onClick 
     }
   };
 
+  const getDaysAgo = (dateString: string) => {
+    if (!dateString) return '';
+    const parts = dateString.split('/');
+    if (parts.length !== 3) return dateString;
+    
+    const [day, month, year] = parts.map(Number);
+    const date = new Date(year, month - 1, day);
+    const now = new Date();
+    
+    // Reset time part for accurate day calculation
+    date.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+    
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Hoje';
+    if (diffDays === 1) return '1d';
+    return `${diffDays}d`;
+  };
+
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('requisitionId', requisition.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -54,7 +75,7 @@ const RequisitionCard: React.FC<RequisitionCardProps> = ({ requisition, onClick 
           </div>
           <div className="flex items-center gap-1 text-[10px] text-gray-400">
             <Clock size={12} />
-            <span>2d</span>
+            <span>{getDaysAgo(requisition.createdAt)}</span>
           </div>
         </div>
       </div>

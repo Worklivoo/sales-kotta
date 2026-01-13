@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/webhook': {
+            target: 'https://primary-production-d442.up.railway.app',
+            changeOrigin: true,
+            secure: false,
+          }
+        }
       },
       plugins: [react()],
       define: {

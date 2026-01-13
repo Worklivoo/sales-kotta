@@ -1,3 +1,8 @@
 {
-  "name": "worklivoo-ia-compras"
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

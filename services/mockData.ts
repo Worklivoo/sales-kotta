@@ -9,6 +9,7 @@ export const mockRequisitions: Requisition[] = [
     department: 'Produção',
     priority: 'Alta',
     status: 'Novas Requisições',
+    statusCategory: 'Aberto',
     createdAt: '07/01/2026',
     items: [
       { id: 'i1', type: 'Chapa', name: 'Aço Carbono ASTM A36', dimensions: 'Espessura 1/8"', cost: 8.65, quantity: 500, lastAiUpdate: '07/01/2026, 10:30' },
@@ -23,6 +24,7 @@ export const mockRequisitions: Requisition[] = [
     department: 'Manutenção',
     priority: 'Média',
     status: 'Novas Requisições',
+    statusCategory: 'Aberto',
     createdAt: '06/01/2026',
     items: [
       { id: 'i3', type: 'Tubo', name: 'Tubo Industrial Redondo Galvanizado', dimensions: '2" - Parede 2mm', cost: 235.00, quantity: 30, lastAiUpdate: '06/01/2026, 14:00' },
@@ -37,6 +39,7 @@ export const mockRequisitions: Requisition[] = [
     department: 'Manutenção',
     priority: 'Baixa',
     status: 'Em análise',
+    statusCategory: 'Aberto',
     createdAt: '05/01/2026',
     items: [
       { id: 'i5', type: 'Barra', name: 'Barra Redonda Aço Inox 304', dimensions: 'Diâmetro 1"', cost: 162.50, quantity: 15, lastAiUpdate: '05/01/2026' },
@@ -51,6 +54,7 @@ export const mockRequisitions: Requisition[] = [
     department: 'Usinagem',
     priority: 'Alta',
     status: 'Recebendo Propostas',
+    statusCategory: 'Aberto',
     createdAt: '04/01/2026',
     items: [
       { id: 'i7', type: 'Barra', name: 'Barra Sextavada de Latão CLA', dimensions: '3/4"', cost: 72.50, quantity: 50, lastAiUpdate: '04/01/2026' },
@@ -70,6 +74,7 @@ export const mockRequisitions: Requisition[] = [
     department: 'Montagem',
     priority: 'Média',
     status: 'Avaliação/Negociações',
+    statusCategory: 'Aberto',
     createdAt: '02/01/2026',
     items: [
       { id: 'i9', type: 'Chapa', name: 'Alumínio Naval 5052', dimensions: 'Espessura 2.0mm', cost: 48.50, quantity: 200, lastAiUpdate: '03/01/2026' },

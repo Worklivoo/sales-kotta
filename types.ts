@@ -4,6 +4,7 @@ export interface RequisitionItem {
   id: string;
   type: string;
   name: string;
+  category?: string;
   dimensions: string;
   cost: number;
   quantity: number;
@@ -15,6 +16,11 @@ export interface Proposal {
   supplierName: string;
   value: number;
   deliveryDays: number;
+  paymentConditions?: string;
+  proposalValidity?: string;
+  items?: any[];
+  attachments?: string[];
+  originalData?: any;
 }
 
 export interface Requisition {
@@ -25,8 +31,10 @@ export interface Requisition {
   department: string;
   priority: 'Baixa' | 'Média' | 'Alta';
   status: KanbanStatus;
+  statusCategory: 'Aberto' | 'Finalizado' | 'Negado';
   items: RequisitionItem[];
   createdAt: string;
+  attachments?: string[];
   proposals?: Proposal[];
 }
 
