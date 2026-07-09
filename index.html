@@ -1,27 +1,58 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-PZNJC5ZS');</script>
+    <!-- End Google Tag Manager -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico?v=2" />
-    <link rel="shortcut icon" href="favicon.ico?v=2" />
-    <title>IA De Cotação</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
+    <link rel="shortcut icon" href="/favicon.ico?v=2" />
+    <title>SALES Kotta</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+              sans: ['"Google Sans"', 'Inter', 'Roboto', 'ui-sans-serif', 'system-ui', 'sans-serif'],
             },
             colors: {
               primary: '#EBF57D',
               background: '#F6F6F6',
               surface: '#FFFFFF',
-            }
+            },
+             borderRadius: {
+              lg: '0.5rem',
+              md: 'calc(0.5rem - 2px)',
+              sm: 'calc(0.5rem - 4px)',
+            },
+            keyframes: {
+              "accordion-down": {
+                from: { height: "0" },
+                to: { height: "var(--radix-accordion-content-height)" },
+              },
+              "accordion-up": {
+                from: { height: "var(--radix-accordion-content-height)" },
+                to: { height: "0" },
+              },
+              "slide-in-from-left": {
+                 "0%": { transform: "translateX(-100%)", opacity: 0 },
+                 "100%": { transform: "translateX(0)", opacity: 1 }
+              }
+            },
+            animation: {
+              "accordion-down": "accordion-down 0.2s ease-out",
+              "accordion-up": "accordion-up 0.2s ease-out",
+              "slide-in-from-left-10": "slide-in-from-left 0.3s ease-out forwards"
+            },
           }
         }
       }
@@ -42,10 +73,28 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #9CA3AF;
       }
+      
+      @keyframes slideInLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      .animate-in.slide-in-from-left-10 {
+        animation: slideInLeft 0.3s ease-out forwards;
+      }
     </style>
-<link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-background text-black antialiased overflow-hidden">
+  <body class="bg-background text-black antialiased overflow-hidden font-sans">
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PZNJC5ZS"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

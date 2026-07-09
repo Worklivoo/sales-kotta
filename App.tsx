@@ -1,72 +1,151 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
-import RequisitionsPage from './pages/Requisitions';
-import SuppliersPage from './pages/Suppliers';
-import SettingsPage from './pages/Settings';
-import SubscriptionPage from './pages/Subscription';
-import QuotePage from './pages/QuotePage';
 import LoginPage from './pages/Login';
+import CotacoesPage from './pages/Cotacoes';
+import CotacaoPage from './pages/Cotacao';
+import AtendimentosPage from './pages/Atendimentos';
+import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
+import { validateActiveMemberAccess } from './lib/memberAccess';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null); // null means loading state
-  const [activeTab, setActiveTab] = useState<'requisitions' | 'suppliers' | 'settings' | 'subscription'>(() => {
-    const path = window.location.pathname;
-    if (path.startsWith('/requisicao/')) return 'requisitions';
-    if (path === '/fornecedores') return 'suppliers';
-    if (path === '/configuracoes') return 'settings';
-    if (path === '/assinatura') return 'subscription';
-    return 'requisitions';
-  });
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  
-  // Initialize quoteId from URL synchronously to avoid initial render flash or missed state
-  const [quoteId, setQuoteId] = useState<string | null>(() => {
-    const path = window.location.pathname;
-    if (path.startsWith('/cotacao/')) {
-      let id = path.split('/cotacao/')[1];
-      if (id) {
-        if (id.endsWith('/')) id = id.slice(0, -1);
-        if (id.includes('?')) id = id.split('?')[0];
-        return id;
-      }
-    }
-    return null;
-  });
+  const isRegisterRoute = currentPath === '/registrar';
+  const cotacaoRoutePrefix = '/cotacao/';
+  const cotacaoAtendimentoId = currentPath.startsWith(cotacaoRoutePrefix)
+    ? decodeURIComponent(currentPath.slice(cotacaoRoutePrefix.length))
+    : null;
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
-    });
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
 
-    // Listen for auth changes
+    window.addEventListener('popstate', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isRegisterRoute) {
+      return;
+    }
+
+    let isMounted = true;
+    const setUnauthenticatedState = (message: string | null = null) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setAuthError(message);
+      setIsAuthenticated(false);
+    };
+
+    const applySessionAccess = async (session: Awaited<
+      ReturnType<typeof supabase.auth.getSession>
+    >['data']['session']) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (!session?.user?.id) {
+        setAuthError(null);
+        setIsAuthenticated(false);
+        return;
+      }
+
+      try {
+        const accessValidation = await validateActiveMemberAccess(session.user.id);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!accessValidation.allowed) {
+          try {
+            await supabase.auth.signOut();
+          } catch (signOutError) {
+            console.error('Error signing out after access denial:', signOutError);
+          }
+
+          setUnauthenticatedState(accessValidation.message);
+          return;
+        }
+
+        setAuthError(null);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error validating member access:', error);
+        try {
+          await supabase.auth.signOut();
+        } catch (signOutError) {
+          console.error('Error signing out after validation failure:', signOutError);
+        }
+
+        setUnauthenticatedState('Nao foi possivel validar seu acesso agora. Tente novamente.');
+      }
+    };
+
+    const syncAuthState = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        await applySessionAccess(session);
+      } catch (error) {
+        console.error('Error syncing auth state:', error);
+        setUnauthenticatedState('Nao foi possivel validar sua sessao agora. Tente novamente.');
+      }
+    };
+
+    syncAuthState();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
+      window.setTimeout(() => {
+        applySessionAccess(session).catch((error) => {
+          console.error('Error handling auth state change:', error);
+          setUnauthenticatedState('Nao foi possivel validar sua sessao agora. Tente novamente.');
+        });
+      }, 0);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path.startsWith('/requisicao/')) setActiveTab('requisitions');
-      else if (path === '/fornecedores') setActiveTab('suppliers');
-      else if (path === '/configuracoes') setActiveTab('settings');
-      else if (path === '/assinatura') setActiveTab('subscription');
-      else setActiveTab('requisitions');
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
     };
+  }, [isRegisterRoute]);
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  const handleNavigate = (path: string) => {
+    if (window.location.pathname === path) {
+      return;
+    }
 
-  // If we are on a quote page, render it directly (bypassing main app layout)
-  if (quoteId) {
-    return <QuotePage quoteId={quoteId} />;
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthError(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Error logging out:', error);
+      setAuthError(null);
+      setIsAuthenticated(false);
+    }
+  };
+
+  if (isRegisterRoute) {
+    return <RegisterPage />;
   }
 
   if (isAuthenticated === null) {
@@ -78,35 +157,36 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage onLogin={() => {}} />;
+    return <LoginPage initialError={authError} />;
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar 
-        activeTab={activeTab} 
-        onTabChange={(tab) => {
-          setActiveTab(tab);
-          let newPath = '/';
-          if (tab === 'suppliers') newPath = '/fornecedores';
-          if (tab === 'settings') newPath = '/configuracoes';
-          if (tab === 'subscription') newPath = '/assinatura';
-          window.history.pushState({}, '', newPath);
-        }}
         isCollapsed={isSidebarCollapsed}
         toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onLogout={handleLogout}
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
       />
       
       <main 
-        className={`flex-1 h-full overflow-hidden py-6 pr-6 lg:py-10 lg:pr-10 transition-all duration-300 ease-in-out w-full ${
+        className={`flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-6 lg:py-10 transition-all duration-300 ease-in-out w-full ${
           isSidebarCollapsed ? 'pl-[120px]' : 'pl-[320px]'
         }`}
       >
-        <div className="max-w-[1600px] mx-auto h-full w-full">
-          {activeTab === 'requisitions' && <RequisitionsPage />}
-          {activeTab === 'suppliers' && <SuppliersPage />}
-          {activeTab === 'settings' && <SettingsPage />}
-          {activeTab === 'subscription' && <SubscriptionPage />}
+        <div className="h-full w-full transition-all duration-300 ease-in-out">
+          {currentPath === '/cotacoes' ? (
+            <CotacoesPage
+              onOpenCotacao={(atendimentoId) => handleNavigate(`/cotacao/${encodeURIComponent(atendimentoId)}`)}
+            />
+          ) : currentPath === '/atendimentos' ? (
+            <AtendimentosPage />
+          ) : cotacaoAtendimentoId ? (
+            <CotacaoPage atendimentoId={cotacaoAtendimentoId} />
+          ) : (
+            <div className="h-full w-full" />
+          )}
         </div>
       </main>
     </div>
