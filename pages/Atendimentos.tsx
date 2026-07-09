@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Mail, Paperclip, Search, Tag } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Hash,
+  Paperclip,
+  Search,
+  SlidersHorizontal,
+  Tag,
+  User,
+  Zap,
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type MessageAuthor = 'CLIENTE' | 'IA' | 'HUMANO';
@@ -315,6 +326,7 @@ const AtendimentosPage: React.FC = () => {
   const [selectedCategories, setSelectedCategories] = useState<AtendimentoCategory[]>([
     ...CATEGORY_OPTIONS,
   ]);
+  const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -474,6 +486,7 @@ const AtendimentosPage: React.FC = () => {
         const mappedAtendimentos = rawAtendimentos.map((atendimento) => {
           const messages = messagesByAtendimento.get(atendimento.atendimento_id) ?? [];
           const latestMessage = messages[0] ?? null;
+          const orderedMessages = [...messages].reverse();
           const senderEmail = senderEmailByAtendimento.get(atendimento.atendimento_id) || '';
           const subject = atendimento.assunto || 'Atendimento sem assunto';
           const lastActivityAt = latestMessage
@@ -495,7 +508,7 @@ const AtendimentosPage: React.FC = () => {
             responsible:
               (atendimento.membro_id && responsibleById.get(atendimento.membro_id)) ||
               'Membro nao identificado',
-            messages,
+            messages: orderedMessages,
           } satisfies AtendimentoItem;
         });
 
@@ -519,7 +532,7 @@ const AtendimentosPage: React.FC = () => {
             return currentSelectedAtendimentoId;
           }
 
-          return mappedAtendimentos[0]?.atendimentoId ?? '';
+          return '';
         });
       } catch (error: any) {
         console.error('Erro ao carregar atendimentos:', error);
@@ -575,12 +588,11 @@ const AtendimentosPage: React.FC = () => {
   }, [atendimentos, search, selectedCategories]);
 
   const selectedAtendimento =
-    filteredAtendimentos.find((item) => item.atendimentoId === selectedAtendimentoId) ??
-    filteredAtendimentos[0] ??
-    null;
+    filteredAtendimentos.find((item) => item.atendimentoId === selectedAtendimentoId) ?? null;
 
   useEffect(() => {
-    const defaultExpandedMessageId = selectedAtendimento?.messages[0]?.id ?? '';
+    const defaultExpandedMessageId =
+      selectedAtendimento?.messages[selectedAtendimento.messages.length - 1]?.id ?? '';
 
     setExpandedMessageIds((currentExpandedMessageIds) => {
       const validExpandedMessageIds = currentExpandedMessageIds.filter((messageId) =>
@@ -616,25 +628,17 @@ const AtendimentosPage: React.FC = () => {
   return (
     <div className="h-full w-full overflow-y-auto xl:overflow-hidden">
       <div className="flex h-full min-h-full flex-col gap-4">
-        <section className="rounded-2xl border border-black/5 bg-white px-5 py-4 shadow-[0_6px_24px_rgba(15,23,42,0.04)] lg:px-6">
-          <div className="space-y-1">
-            <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-              Atendimentos
-            </h1>
-            <p className="text-sm text-gray-500">
-              Visualize sua caixa de entrada e acompanhe o historico de cada atendimento.
-            </p>
-          </div>
-        </section>
-
         <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-black/5 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.06)] xl:overflow-hidden">
           <div className="grid min-h-0 grid-cols-1 xl:h-full xl:grid-cols-[360px_minmax(0,1fr)]">
             <aside className="flex min-h-0 flex-col border-b border-black/5 xl:border-b-0 xl:border-r">
               <div className="border-b border-black/5 px-5 py-4">
                 <div className="mb-4 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-                      Caixa de entrada
+                  <div className="space-y-0.5">
+                    <h1 className="text-sm font-semibold tracking-tight text-gray-900 sm:text-base">
+                      Atendimentos
+                    </h1>
+                    <p className="text-xs text-gray-500">
+                      Visualize sua caixa de entrada e acompanhe o historico de cada atendimento.
                     </p>
                   </div>
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
@@ -642,45 +646,86 @@ const AtendimentosPage: React.FC = () => {
                   </span>
                 </div>
 
-                <label className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-4 transition-colors focus-within:border-gray-300">
-                  <Search size={16} className="text-gray-400" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar atendimento"
-                    className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
-                  />
-                </label>
+                <div className="relative">
+                  <div className="flex items-center gap-2">
+                    <label className="flex h-10 flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-3 transition-colors focus-within:border-gray-300">
+                      <Search size={15} className="text-gray-400" />
+                      <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Buscar atendimento"
+                        className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
+                      />
+                    </label>
 
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {CATEGORY_OPTIONS.map((category) => {
-                    const isSelected = selectedCategories.includes(category);
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryFilterOpen((currentValue) => !currentValue)}
+                      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                        isCategoryFilterOpen || selectedCategories.length !== CATEGORY_OPTIONS.length
+                          ? 'border-[#EBF57D] bg-[#EBF57D] text-gray-900'
+                          : 'border-gray-200 bg-[#FAFAFA] text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      }`}
+                      aria-label="Filtrar categorias"
+                      aria-expanded={isCategoryFilterOpen}
+                    >
+                      <SlidersHorizontal size={16} />
+                    </button>
+                  </div>
 
-                    return (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() =>
-                          setSelectedCategories((currentSelectedCategories) => {
-                            if (currentSelectedCategories.includes(category)) {
-                              return currentSelectedCategories.filter((item) => item !== category);
-                            }
+                  {isCategoryFilterOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-2 w-full max-w-[290px] rounded-2xl border border-black/10 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.10)]">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-900">Filtrar categorias</p>
+                          <p className="text-[11px] text-gray-500">
+                            Selecione uma ou mais categorias
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategories([...CATEGORY_OPTIONS])}
+                          className="text-[11px] font-semibold text-gray-500 transition-colors hover:text-gray-800"
+                        >
+                          Todas
+                        </button>
+                      </div>
 
-                            return [...currentSelectedCategories, category];
-                          })
-                        }
-                        className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
-                          isSelected
-                            ? 'border-black/10 bg-black text-white'
-                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                        }`}
-                        aria-pressed={isSelected}
-                      >
-                        {formatCategoryLabel(category)}
-                      </button>
-                    );
-                  })}
+                      <div className="space-y-1.5">
+                        {CATEGORY_OPTIONS.map((category) => {
+                          const isSelected = selectedCategories.includes(category);
+
+                          return (
+                            <button
+                              key={category}
+                              type="button"
+                              onClick={() =>
+                                setSelectedCategories((currentSelectedCategories) => {
+                                  if (currentSelectedCategories.includes(category)) {
+                                    return currentSelectedCategories.filter(
+                                      (item) => item !== category,
+                                    );
+                                  }
+
+                                  return [...currentSelectedCategories, category];
+                                })
+                              }
+                              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium transition-colors ${
+                                isSelected
+                                  ? 'bg-[#EBF57D] text-gray-900'
+                                  : 'bg-[#FAFAFA] text-gray-600 hover:bg-gray-100'
+                              }`}
+                              aria-pressed={isSelected}
+                            >
+                              <span>{formatCategoryLabel(category)}</span>
+                              {isSelected ? <Check size={14} /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -694,20 +739,19 @@ const AtendimentosPage: React.FC = () => {
                         key={atendimento.atendimentoId}
                         type="button"
                         onClick={() => setSelectedAtendimentoId(atendimento.atendimentoId)}
-                        className={`w-full rounded-2xl border p-4 text-left transition-all ${
+                        className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
                           isActive
                             ? 'border-black/10 bg-[#F5F5F5] shadow-[0_8px_20px_rgba(15,23,42,0.06)]'
                             : 'border-transparent bg-white hover:border-black/5 hover:bg-[#FAFAFA]'
                         }`}
                         aria-pressed={isActive}
                       >
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="break-words text-sm font-semibold text-gray-900 sm:truncate">
-                                {atendimento.customer}
+                                {atendimento.email}
                               </p>
-                              <p className="break-all text-xs text-gray-500 sm:truncate">{atendimento.email}</p>
                             </div>
 
                             <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400">
@@ -715,18 +759,25 @@ const AtendimentosPage: React.FC = () => {
                             </span>
                           </div>
 
-                          <div className="space-y-1.5">
-                            <h3 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
+                          <div className="space-y-1">
+                            <h3 className="line-clamp-1 text-[13px] font-semibold leading-5 text-gray-800">
                               {atendimento.subject}
                             </h3>
-                            <p className="line-clamp-2 text-[12px] leading-5 text-gray-500">
+                            <p className="line-clamp-1 text-[12px] leading-5 text-gray-500">
                               {atendimento.preview}
                             </p>
                           </div>
 
                           <div className="flex items-center justify-between gap-3 pt-1">
                             <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <span className="max-w-full break-words rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                              <span
+                                className={`inline-flex max-w-full items-center gap-1.5 break-words rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                                  atendimento.categoryKey === 'COTACAO'
+                                    ? 'bg-[#EBF57D] text-gray-900'
+                                    : 'bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                {atendimento.categoryKey === 'COTACAO' ? <Zap size={10} /> : null}
                                 {atendimento.category}
                               </span>
                             </div>
@@ -758,16 +809,30 @@ const AtendimentosPage: React.FC = () => {
                       <div className="min-w-0 space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
-                            <Mail size={12} />
-                            Atendimento
+                            <Hash size={12} />
+                            {selectedAtendimento.ticketLabel.replace(/^#/, '')}
                           </span>
-                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-500">
-                            <Tag size={12} />
+                          <span
+                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
+                              selectedAtendimento.categoryKey === 'COTACAO'
+                                ? 'bg-[#EBF57D] text-gray-900'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {selectedAtendimento.categoryKey === 'COTACAO' ? (
+                              <Zap size={12} />
+                            ) : (
+                              <Tag size={12} />
+                            )}
                             {selectedAtendimento.category}
                           </span>
                           <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-500">
                             <Tag size={12} />
                             {selectedAtendimento.tag}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-500">
+                            <User size={12} />
+                            {selectedAtendimento.responsible}
                           </span>
                         </div>
 
@@ -775,42 +840,6 @@ const AtendimentosPage: React.FC = () => {
                           <h2 className="text-2xl font-semibold tracking-tight text-gray-900">
                             {selectedAtendimento.subject}
                           </h2>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <div className="min-w-0 rounded-2xl border border-black/5 bg-white px-4 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400">
-                            Cliente
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-gray-800">
-                            {selectedAtendimento.customer}
-                          </p>
-                          <p className="mt-1 break-all text-xs text-gray-500">{selectedAtendimento.email}</p>
-                        </div>
-
-                        <div className="min-w-0 rounded-2xl border border-black/5 bg-white px-4 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400">
-                            Responsavel
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-gray-800">
-                            {selectedAtendimento.responsible}
-                          </p>
-                          {companyName ? (
-                            <p className="mt-1 text-xs text-gray-500">{companyName}</p>
-                          ) : null}
-                        </div>
-
-                        <div className="min-w-0 rounded-2xl border border-black/5 bg-white px-4 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400">
-                            Ticket
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-gray-800">
-                            {selectedAtendimento.ticketLabel}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {selectedAtendimento.createdAt}
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -824,16 +853,8 @@ const AtendimentosPage: React.FC = () => {
                             const isExpanded = expandedMessageIds.includes(message.id);
 
                             return (
-                              <button
+                              <div
                                 key={message.id}
-                                type="button"
-                                onClick={() =>
-                                  setExpandedMessageIds((currentExpandedMessageIds) =>
-                                    currentExpandedMessageIds.includes(message.id)
-                                      ? currentExpandedMessageIds.filter((messageId) => messageId !== message.id)
-                                      : [...currentExpandedMessageIds, message.id],
-                                  )
-                                }
                                 className={`w-full rounded-2xl border border-black/5 bg-white text-left shadow-[0_10px_32px_rgba(15,23,42,0.04)] transition-all ${
                                   isExpanded
                                     ? 'px-4 py-4 sm:px-5 sm:py-5'
@@ -843,25 +864,45 @@ const AtendimentosPage: React.FC = () => {
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-start gap-3">
-                                      <div className="mt-0.5 text-gray-400">
-                                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                      </div>
-
                                       <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-3">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setExpandedMessageIds((currentExpandedMessageIds) =>
+                                              currentExpandedMessageIds.includes(message.id)
+                                                ? currentExpandedMessageIds.filter(
+                                                    (messageId) => messageId !== message.id,
+                                                  )
+                                                : [...currentExpandedMessageIds, message.id],
+                                            )
+                                          }
+                                          className="flex w-full items-start justify-between gap-3 text-left"
+                                          aria-expanded={isExpanded}
+                                        >
                                           <div className="min-w-0 flex-1">
-                                            <span className="text-sm font-semibold text-gray-900">
-                                              {message.author}
-                                            </span>
-                                            <span className="mt-0.5 block break-all text-sm text-gray-500 sm:mt-0 sm:inline sm:break-all sm:pl-2">
-                                              {message.senderEmail}
-                                            </span>
+                                            <div className="flex items-start gap-3">
+                                              <div className="mt-0.5 text-gray-400">
+                                                {isExpanded ? (
+                                                  <ChevronDown size={18} />
+                                                ) : (
+                                                  <ChevronRight size={18} />
+                                                )}
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <span className="text-sm font-semibold text-gray-900">
+                                                  {message.author}
+                                                </span>
+                                                <span className="mt-0.5 block break-all text-sm text-gray-500 sm:mt-0 sm:inline sm:break-all sm:pl-2">
+                                                  {message.senderEmail}
+                                                </span>
+                                              </div>
+                                            </div>
                                           </div>
 
                                           <p className="shrink-0 text-xs font-medium text-gray-400">
                                             {message.time}
                                           </p>
-                                        </div>
+                                        </button>
 
                                         {isExpanded ? (
                                           <div className="mt-5 space-y-3">
@@ -895,7 +936,7 @@ const AtendimentosPage: React.FC = () => {
                                     </div>
                                   </div>
                                 </div>
-                              </button>
+                              </div>
                             );
                           })
                         ) : (

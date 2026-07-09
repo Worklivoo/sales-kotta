@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Mail, Paperclip } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, ClipboardList, FileText, Paperclip, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface CotacaoPageProps {
@@ -24,6 +24,7 @@ interface CurrentMemberRecord {
 interface AtendimentoRecord {
   atendimento_id: string;
   empresa_id: string;
+  cliente_id: string | null;
   created_at: string;
   status: KanbanStatus;
   categoria: string;
@@ -34,6 +35,30 @@ interface AtendimentoRecord {
 
 interface ResponsibleMemberRecord {
   nome: string | null;
+}
+
+interface ClientRecord {
+  nome: string | null;
+  razao_social: string | null;
+  email: string | null;
+  telefone: string | null;
+  cnpj: string | null;
+}
+
+interface OrcamentoRecord {
+  orcamento_id: string;
+  data_emissao: string | null;
+  validade: string | null;
+  valor_total: string | null;
+  status: string | null;
+  pdf_url: string | null;
+}
+
+interface OrcamentoItemRecord {
+  item_id: string;
+  quantidade: string | null;
+  preco_unitario: string | null;
+  total_item: string | null;
 }
 
 interface MensagemRecord {
@@ -57,15 +82,6 @@ interface ConversationItem {
   anexos: string[];
 }
 
-const kanbanStages = [
-  'TRIAGEM',
-  'COLETANDO_DADOS',
-  'AGUARDANDO_APROVACAO',
-  'ORCAMENTO_ENVIADO',
-  'CONCLUIDO',
-  'DESCARTADO',
-] as const;
-
 const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
 const formatDateTime = (value: string) => {
@@ -84,12 +100,110 @@ const formatDateTime = (value: string) => {
   }).format(parsedDate);
 };
 
-const formatKanbanLabel = (status: string) =>
-  status
+const formatDateOnly = (value: string | null) => {
+  if (!value) {
+    return '-';
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(parsedDate);
+};
+
+const formatEnumLabel = (value: string | null) => {
+  if (!value) {
+    return '-';
+  }
+
+  return value
     .toLowerCase()
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+};
+
+const formatDocument = (value: string | null) => {
+  if (!value) {
+    return '-';
+  }
+
+  const digits = value.replace(/\D/g, '');
+
+  if (digits.length !== 14) {
+    return value;
+  }
+
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+};
+
+const formatPhone = (value: string | null) => {
+  if (!value) {
+    return '-';
+  }
+
+  const digits = value.replace(/\D/g, '');
+
+  if (digits.length === 13) {
+    return digits.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '+$1 ($2) $3-$4');
+  }
+
+  if (digits.length === 12) {
+    return digits.replace(/^(\d{2})(\d{2})(\d{4})(\d{4})$/, '+$1 ($2) $3-$4');
+  }
+
+  if (digits.length === 11) {
+    return digits.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+  }
+
+  if (digits.length === 10) {
+    return digits.replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+  }
+
+  return value;
+};
+
+const formatCurrency = (value: string | number | null) => {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+
+  const numericValue = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+
+  if (Number.isNaN(numericValue)) {
+    return String(value);
+  }
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(numericValue);
+};
+
+const normalizeExternalUrl = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmedValue)) {
+    return trimmedValue;
+  }
+
+  return `https://${trimmedValue.replace(/^\/+/, '')}`;
+};
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   if (!value) {
@@ -239,9 +353,11 @@ const getAttachmentLabel = (attachment: string) => {
 const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
   const [responsibleName, setResponsibleName] = useState('Membro nao identificado');
+  const [clientData, setClientData] = useState<ClientRecord | null>(null);
+  const [orcamentoData, setOrcamentoData] = useState<OrcamentoRecord | null>(null);
+  const [orcamentoItems, setOrcamentoItems] = useState<OrcamentoItemRecord[]>([]);
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [emailsVinculados, setEmailsVinculados] = useState<string[]>([]);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -285,7 +401,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
         let atendimentoQuery = supabase
           .from('sales_atendimento')
           .select(
-            'atendimento_id, empresa_id, created_at, status, categoria, assunto, numero_ticket, membro_id',
+            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id',
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('atendimento_id', atendimentoId)
@@ -308,13 +424,13 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
           throw new Error('Cotacao nao encontrada.');
         }
 
-        const [messagesResponse, responsibleResponse] = await Promise.all([
+        const [messagesResponse, responsibleResponse, clientResponse, orcamentoResponse] = await Promise.all([
           supabase
             .from('sales_mensagens')
             .select('mensagem_id, created_at, origem, conteudo, metadata, anexos')
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: true }),
           atendimento.membro_id
             ? supabase
                 .from('sales_membros_empresa')
@@ -323,6 +439,20 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                 .eq('membro_id', atendimento.membro_id)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
+          atendimento.cliente_id
+            ? supabase
+                .from('sales_clientes_finais')
+                .select('nome, razao_social, email, telefone, cnpj')
+                .eq('empresa_id', currentMember.empresa_id)
+                .eq('cliente_id', atendimento.cliente_id)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          supabase
+            .from('sales_orcamentos')
+            .select('orcamento_id, data_emissao, validade, valor_total, status, pdf_url')
+            .eq('empresa_id', currentMember.empresa_id)
+            .eq('atendimento_id', atendimento.atendimento_id)
+            .maybeSingle(),
         ]);
 
         if (messagesResponse.error) {
@@ -333,18 +463,39 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
           throw responsibleResponse.error;
         }
 
+        if (clientResponse.error) {
+          throw clientResponse.error;
+        }
+
+        if (orcamentoResponse.error) {
+          throw orcamentoResponse.error;
+        }
+
         const resolvedResponsibleName =
           (responsibleResponse.data as ResponsibleMemberRecord | null)?.nome ||
           'Membro nao identificado';
+        const resolvedClientData = (clientResponse.data as ClientRecord | null) ?? null;
+        const resolvedOrcamentoData = (orcamentoResponse.data as OrcamentoRecord | null) ?? null;
         const cotacaoAssunto = atendimento.assunto || 'Cotacao sem assunto';
         const rawMessages = (messagesResponse.data ?? []) as MensagemRecord[];
-        const metadataEmailBucket = new Set<string>();
+        let resolvedOrcamentoItems: OrcamentoItemRecord[] = [];
+
+        if (resolvedOrcamentoData?.orcamento_id) {
+          const { data: itemsData, error: itemsError } = await supabase
+            .from('sales_orcamentos_itens')
+            .select('item_id, quantidade, preco_unitario, total_item')
+            .eq('orcamento_id', resolvedOrcamentoData.orcamento_id);
+
+          if (itemsError) {
+            throw itemsError;
+          }
+
+          resolvedOrcamentoItems = (itemsData ?? []) as OrcamentoItemRecord[];
+        }
 
         const mappedMessages = rawMessages.map((message) => {
           const parsedMetadata = parseJsonObject(message.metadata);
           const cleanContent = decodeHtmlContent(message.conteudo || 'Sem conteudo disponivel.');
-
-          collectEmailsFromValue(parsedMetadata, metadataEmailBucket);
 
           return {
             id: message.mensagem_id,
@@ -369,18 +520,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
         setCotacao(atendimento);
         setResponsibleName(resolvedResponsibleName);
+        setClientData(resolvedClientData);
+        setOrcamentoData(resolvedOrcamentoData);
+        setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
-        setSelectedMessageId((currentSelectedMessageId) => {
-          if (
-            currentSelectedMessageId &&
-            mappedMessages.some((message) => message.id === currentSelectedMessageId)
-          ) {
-            return currentSelectedMessageId;
-          }
-
-          return mappedMessages[0]?.id ?? null;
-        });
-        setEmailsVinculados(Array.from(metadataEmailBucket));
       } catch (error: any) {
         console.error('Erro ao carregar cotacao:', error);
 
@@ -390,9 +533,11 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
         setCotacao(null);
         setResponsibleName('Membro nao identificado');
+        setClientData(null);
+        setOrcamentoData(null);
+        setOrcamentoItems([]);
         setOrderedConversationItems([]);
-        setSelectedMessageId(null);
-        setEmailsVinculados([]);
+        setExpandedMessageIds([]);
         setLoadError(error?.message || 'Nao foi possivel carregar a cotacao.');
       } finally {
         if (isMounted) {
@@ -408,18 +553,22 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
     };
   }, [atendimentoId]);
 
-  const highlightedMessage = useMemo(
-    () =>
-      orderedConversationItems.find((message) => message.id === selectedMessageId) ??
-      orderedConversationItems[0] ??
-      null,
-    [orderedConversationItems, selectedMessageId],
-  );
+  useEffect(() => {
+    const defaultExpandedMessageId =
+      orderedConversationItems[orderedConversationItems.length - 1]?.id ?? '';
 
-  const currentKanbanStage = useMemo(
-    () => cotacao?.status ?? null,
-    [cotacao],
-  );
+    setExpandedMessageIds((currentExpandedMessageIds) => {
+      const validExpandedMessageIds = currentExpandedMessageIds.filter((messageId) =>
+        orderedConversationItems.some((message) => message.id === messageId),
+      );
+
+      if (validExpandedMessageIds.length > 0) {
+        return validExpandedMessageIds;
+      }
+
+      return defaultExpandedMessageId ? [defaultExpandedMessageId] : [];
+    });
+  }, [orderedConversationItems]);
 
   if (isLoading) {
     return (
@@ -442,178 +591,318 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
   return (
     <div className="h-full w-full overflow-y-auto" data-atendimento-id={atendimentoId}>
       <div className="flex min-h-full flex-col gap-4 pb-2">
-        <section className="rounded-2xl border border-black/5 bg-white px-5 py-5 shadow-[0_6px_24px_rgba(15,23,42,0.04)] lg:px-6">
-          <div className="space-y-2">
-            <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-              {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-            </span>
-            <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-              {cotacao.assunto || 'Cotacao sem assunto'}
-            </h1>
-            <p className="max-w-3xl text-sm leading-6 text-gray-500">
-              {formatDateTime(cotacao.created_at)}
-            </p>
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-gray-400">
-              {responsibleName}
-            </p>
-          </div>
-        </section>
-
         <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
-          <div className="mb-4 flex flex-col gap-2">
-            <h2 className="text-lg font-semibold text-gray-900">Status da Cotação</h2>
-          </div>
-
-          <div className="overflow-x-auto pb-2">
-            <div className="flex min-w-[980px] items-start gap-3">
-              {kanbanStages.map((stage, index) => {
-                const currentStageIndex = currentKanbanStage
-                  ? kanbanStages.indexOf(currentKanbanStage)
-                  : -1;
-                const isCurrent = stage === currentKanbanStage;
-                const isCompleted = currentStageIndex >= 0 && index < currentStageIndex;
-
-                return (
-                  <React.Fragment key={stage}>
-                    <div
-                      className={`min-w-[150px] flex-1 rounded-2xl border px-4 py-4 transition-all ${
-                        isCurrent
-                          ? 'border-[#EBF57D] bg-[#EBF57D] text-gray-900 shadow-[0_10px_24px_rgba(235,245,125,0.35)]'
-                          : isCompleted
-                            ? 'border-black/10 bg-[#F6F6F6] text-gray-800'
-                            : 'border-black/5 bg-white text-gray-500'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
-                            isCurrent
-                              ? 'bg-white/60 text-gray-900'
-                              : isCompleted
-                                ? 'bg-white text-gray-700'
-                                : 'bg-[#F6F6F6] text-gray-400'
-                          }`}
-                        >
-                          Etapa {index + 1}
-                        </span>
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            isCurrent
-                              ? 'bg-gray-900'
-                              : isCompleted
-                                ? 'bg-[#EBF57D]'
-                                : 'bg-gray-300'
-                          }`}
-                        />
-                      </div>
-
-                      <p className="mt-4 text-sm font-semibold leading-5">
-                        {formatKanbanLabel(stage)}
-                      </p>
-                    </div>
-
-                    {index < kanbanStages.length - 1 ? (
-                      <div className="flex items-center pt-7">
-                        <div
-                          className={`h-[2px] w-8 ${
-                            currentStageIndex >= 0 && index < currentStageIndex
-                              ? 'bg-[#EBF57D]'
-                              : 'bg-black/10'
-                          }`}
-                        />
-                      </div>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="rounded-xl bg-[#F6F6F6] p-2 text-gray-600">
-                <Mail size={18} />
+          <div className="border-b border-black/5 px-1 pb-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
               </span>
+              <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
+                {cotacao.assunto || 'Cotacao sem assunto'}
+              </h1>
+            </div>
+          </div>
+
+          <div className="grid min-h-0 flex-1 gap-8 pt-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="space-y-6 xl:border-r xl:border-black/5 xl:pr-6">
+              <section className="border-b border-black/5 pb-6">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
+                    <ClipboardList size={20} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                      Dados do Atendimento
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pl-1">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Status</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatEnumLabel(cotacao.status)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Categoria</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatEnumLabel(cotacao.categoria)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Ticket</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Data de Criacao</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatDateTime(cotacao.created_at)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Responsavel</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {responsibleName}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              </section>
+
+              <section className="border-b border-black/5 pb-6">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
+                    <UserRound size={20} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                      Dados do Cliente
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pl-1">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Nome</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {clientData?.nome || '-'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Razao Social</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {clientData?.razao_social || '-'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Email</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {clientData?.email || '-'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Telefone</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatPhone(clientData?.telefone || null)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">CNPJ</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatDocument(clientData?.cnpj || null)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              </section>
+
+              <section>
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
+                    <FileText size={20} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                      Dados do Orçamento
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pl-1">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Status</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatEnumLabel(orcamentoData?.status || null)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Data de Emissao</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {orcamentoData?.data_emissao ? formatDateTime(orcamentoData.data_emissao) : '-'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Validade</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatDateOnly(orcamentoData?.validade || null)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Valor Total</p>
+                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                      {formatCurrency(orcamentoData?.valor_total || null)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">PDF</p>
+                    {normalizeExternalUrl(orcamentoData?.pdf_url || null) ? (
+                      <a
+                        href={normalizeExternalUrl(orcamentoData?.pdf_url || null) || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-flex text-sm font-semibold tracking-tight text-gray-900 underline underline-offset-4"
+                      >
+                        Abrir orçamento
+                      </a>
+                    ) : (
+                      <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">-</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">Itens</p>
+                    <div className="mt-2 space-y-2">
+                      {orcamentoItems.length > 0 ? (
+                        orcamentoItems.map((item, index) => (
+                          <div
+                            key={item.item_id}
+                            className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-3 py-3"
+                          >
+                            <p className="text-xs font-medium text-gray-500">Item {index + 1}</p>
+                            <div className="mt-2 space-y-1">
+                              <p className="text-sm font-semibold tracking-tight text-gray-900">
+                                Quantidade: {item.quantidade || '-'}
+                              </p>
+                              <p className="text-sm font-semibold tracking-tight text-gray-900">
+                                Preço unitário: {formatCurrency(item.preco_unitario || null)}
+                              </p>
+                              <p className="text-sm font-semibold tracking-tight text-gray-900">
+                                Total: {formatCurrency(item.total_item || null)}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm font-semibold tracking-tight text-gray-900">
+                          Nenhum item encontrado
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </section>
+            </aside>
+
+            <section className="min-h-0">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Emails vinculados</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Atendimento</h2>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {emailsVinculados.length > 0 ? (
-                emailsVinculados.map((email) => (
-                  <span
-                    key={email}
-                    className="inline-flex items-center rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2 text-sm font-medium text-gray-700"
-                  >
-                    {email}
-                  </span>
-                ))
-              ) : (
-                <span className="inline-flex rounded-xl border border-dashed border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-400">
-                  Nenhum email vinculado encontrado
-                </span>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="min-h-0 flex-1 rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Atendimento</h2>
-            </div>
-          </div>
-
-          <div className="grid min-h-[640px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-black/5 bg-[#FAFAFA] p-3">
-              <div className="mb-3 flex items-center justify-between gap-3 px-1">
-                <h3 className="text-sm font-semibold text-gray-800">Mensagens</h3>
-                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-500">
-                  {orderedConversationItems.length}
-                </span>
-              </div>
-
-              <div className="space-y-2">
+            <div className="min-h-[640px] rounded-2xl bg-[#FCFCFC] px-1 py-1 sm:px-2 sm:py-2">
+              <div className="space-y-4">
                 {orderedConversationItems.length > 0 ? (
                   orderedConversationItems.map((message) => {
-                    const isSelected = message.id === highlightedMessage?.id;
+                    const isExpanded = expandedMessageIds.includes(message.id);
 
                     return (
-                      <button
+                      <div
                         key={message.id}
-                        type="button"
-                        onClick={() => setSelectedMessageId(message.id)}
-                        className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
-                          isSelected
-                            ? 'border-black/10 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.06)]'
-                            : 'border-transparent bg-white/60 hover:border-black/10 hover:bg-white'
+                        className={`w-full rounded-2xl border border-black/5 bg-white text-left transition-all ${
+                          isExpanded
+                            ? 'px-4 py-4 sm:px-5 sm:py-5'
+                            : 'px-4 py-4 hover:border-black/10 hover:bg-[#FCFCFC]'
                         }`}
-                        aria-pressed={isSelected}
                       >
-                        <div className="mb-3 flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400">
-                              {message.origem}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-gray-800">
-                              {message.remetente}
-                            </p>
-                          </div>
-                          <p className="text-[11px] font-medium text-gray-400">
-                            {message.horario}
-                          </p>
-                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-3">
+                              <div className="min-w-0 flex-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedMessageIds((currentExpandedMessageIds) =>
+                                      currentExpandedMessageIds.includes(message.id)
+                                        ? currentExpandedMessageIds.filter(
+                                            (messageId) => messageId !== message.id,
+                                          )
+                                        : [...currentExpandedMessageIds, message.id],
+                                    )
+                                  }
+                                  className="flex w-full items-start justify-between gap-3 text-left"
+                                  aria-expanded={isExpanded}
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 text-gray-400">
+                                        {isExpanded ? (
+                                          <ChevronDown size={18} />
+                                        ) : (
+                                          <ChevronRight size={18} />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="text-sm font-semibold text-gray-900">
+                                          {message.origem}
+                                        </span>
+                                        <span className="mt-0.5 block break-all text-sm text-gray-500 sm:mt-0 sm:inline sm:break-all sm:pl-2">
+                                          {message.remetente}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
 
-                        <p className="line-clamp-2 text-sm font-semibold leading-5 text-gray-800">
-                          {message.assunto}
-                        </p>
-                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-gray-500">
-                          {message.resumo}
-                        </p>
-                      </button>
+                                  <p className="shrink-0 text-xs font-medium text-gray-400">
+                                    {message.horario}
+                                  </p>
+                                </button>
+
+                                {isExpanded ? (
+                                  <div className="mt-5 space-y-3">
+                                    <p className="overflow-hidden break-words whitespace-pre-line text-sm leading-7 text-gray-600">
+                                      {message.corpo}
+                                    </p>
+                                    {message.anexos.length > 0 ? (
+                                      <div className="flex flex-wrap gap-2 pt-1">
+                                        {message.anexos.map((attachment) => (
+                                          <a
+                                            key={attachment}
+                                            href={attachment}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={(event) => event.stopPropagation()}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-black/20 hover:bg-white"
+                                          >
+                                            <Paperclip size={14} />
+                                            {getAttachmentLabel(attachment)}
+                                          </a>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <p className="mt-3 line-clamp-1 text-sm leading-6 text-gray-500">
+                                    {buildSummary(message.corpo)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })
                 ) : (
@@ -624,104 +913,8 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                   </div>
                 )}
               </div>
-            </aside>
-
-            <div className="flex min-h-[640px] flex-col rounded-2xl border border-black/5 bg-[#FAFAFA]">
-              {highlightedMessage ? (
-                <>
-                  <div className="border-b border-black/5 px-5 py-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                            Assunto
-                          </p>
-                          <h3 className="mt-1 text-lg font-semibold text-gray-900">
-                            {highlightedMessage.assunto}
-                          </h3>
-                        </div>
-
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                              Remetente
-                            </p>
-                            <p className="mt-1 text-sm font-medium text-gray-700">
-                              {highlightedMessage.remetente}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                              Copia
-                            </p>
-                            <p className="mt-1 text-sm font-medium text-gray-700">
-                              {highlightedMessage.copia}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                          Recebido em
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-gray-800">
-                          {highlightedMessage.horario}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 space-y-4 px-5 py-5">
-                    <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                        Conteudo do email
-                      </p>
-                      <div className="mt-3 whitespace-pre-line text-sm leading-7 text-gray-700">
-                        {highlightedMessage.corpo}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
-                      <div className="mb-3 flex items-center gap-2">
-                        <Paperclip size={16} className="text-gray-500" />
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
-                          Anexos
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {highlightedMessage.anexos.length > 0 ? (
-                          highlightedMessage.anexos.map((attachment) => (
-                            <a
-                              key={attachment}
-                              href={attachment}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-black/20 hover:bg-white"
-                            >
-                              <Paperclip size={14} />
-                              {getAttachmentLabel(attachment)}
-                            </a>
-                          ))
-                        ) : (
-                          <span className="inline-flex rounded-xl border border-dashed border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-400">
-                            Nenhum anexo vinculado
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-1 items-center justify-center px-6 text-center">
-                  <p className="text-sm font-medium text-gray-400">
-                    Nenhuma mensagem disponivel para exibir neste atendimento.
-                  </p>
-                </div>
-              )}
-            </div>
+              </div>
+            </section>
           </div>
         </section>
       </div>

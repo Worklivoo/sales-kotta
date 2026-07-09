@@ -171,7 +171,7 @@ function App() {
       />
       
       <main 
-        className={`flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-6 lg:py-10 transition-all duration-300 ease-in-out w-full ${
+        className={`flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-3 lg:py-5 transition-all duration-300 ease-in-out w-full ${
           isSidebarCollapsed ? 'pl-[120px]' : 'pl-[320px]'
         }`}
       >
