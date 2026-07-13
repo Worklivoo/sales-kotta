@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, ClipboardList, FileText, Paperclip, UserRound } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, FileText, Paperclip, UserRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface CotacaoPageProps {
@@ -205,6 +205,15 @@ const normalizeExternalUrl = (value: string | null) => {
   return `https://${trimmedValue.replace(/^\/+/, '')}`;
 };
 
+const goBackToCotacoes = () => {
+  if (window.history.length > 1) {
+    window.history.back();
+    return;
+  }
+
+  window.location.pathname = '/cotacoes';
+};
+
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   if (!value) {
     return null;
@@ -353,6 +362,7 @@ const getAttachmentLabel = (attachment: string) => {
 const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
   const [responsibleName, setResponsibleName] = useState('Membro nao identificado');
+  const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
   const [clientData, setClientData] = useState<ClientRecord | null>(null);
   const [orcamentoData, setOrcamentoData] = useState<OrcamentoRecord | null>(null);
   const [orcamentoItems, setOrcamentoItems] = useState<OrcamentoItemRecord[]>([]);
@@ -513,6 +523,12 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
             anexos: parseAttachmentList(message.anexos),
           };
         });
+        const resolvedLinkedEmails = Array.from(
+          rawMessages.reduce((bucket, message) => {
+            collectEmailsFromValue(parseJsonObject(message.metadata), bucket);
+            return bucket;
+          }, new Set<string>()),
+        );
 
         if (!isMounted) {
           return;
@@ -520,6 +536,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
         setCotacao(atendimento);
         setResponsibleName(resolvedResponsibleName);
+        setLinkedEmails(resolvedLinkedEmails);
         setClientData(resolvedClientData);
         setOrcamentoData(resolvedOrcamentoData);
         setOrcamentoItems(resolvedOrcamentoItems);
@@ -533,6 +550,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
         setCotacao(null);
         setResponsibleName('Membro nao identificado');
+        setLinkedEmails([]);
         setClientData(null);
         setOrcamentoData(null);
         setOrcamentoItems([]);
@@ -594,12 +612,23 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
         <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
           <div className="border-b border-black/5 px-1 pb-5">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-                {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-              </span>
-              <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-                {cotacao.assunto || 'Cotacao sem assunto'}
-              </h1>
+              <button
+                type="button"
+                onClick={goBackToCotacoes}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
+                aria-label="Voltar para cotacoes"
+              >
+                <ArrowLeft size={18} />
+              </button>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                  {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+                </span>
+                <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
+                  {cotacao.assunto || 'Cotacao sem assunto'}
+                </h1>
+              </div>
             </div>
           </div>
 
@@ -653,6 +682,24 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                     <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
                       {responsibleName}
                     </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">E-mails Vinculados</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {linkedEmails.length > 0 ? (
+                        linkedEmails.map((email) => (
+                          <span
+                            key={email}
+                            className="inline-flex rounded-full border border-black/10 bg-[#F7F7F7] px-3 py-1 text-xs font-medium text-gray-700"
+                          >
+                            {email}
+                          </span>
+                        ))
+                      ) : (
+                        <p className="text-sm font-semibold tracking-tight text-gray-900">-</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

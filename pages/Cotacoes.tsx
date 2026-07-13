@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Search, UserRound } from 'lucide-react';
+import { CalendarRange, Search, UserRound, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type KanbanStatus =
@@ -25,14 +25,17 @@ interface MockCotacao {
 const KANBAN_COLUMNS: Array<{
   key: KanbanStatus;
   label: string;
+  isAiStage?: boolean;
 }> = [
   {
     key: 'TRIAGEM',
     label: 'Triagem',
+    isAiStage: true,
   },
   {
     key: 'COLETANDO_DADOS',
     label: 'Coletando Dados',
+    isAiStage: true,
   },
   {
     key: 'AGUARDANDO_APROVACAO',
@@ -332,9 +335,17 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                   >
                     <div className="mb-3 flex items-center justify-between gap-3 px-1 py-1">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-gray-700">
-                          {column.label}
-                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-gray-700">
+                            {column.label}
+                          </h3>
+                          {column.isAiStage ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#EBF57D] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-800">
+                              <Zap size={10} className="text-gray-800" />
+                              IA
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-gray-500">
                         {columnItems.length}
