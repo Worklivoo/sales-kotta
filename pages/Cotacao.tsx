@@ -232,18 +232,33 @@ const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   }
 };
 
+const normalizeAttachmentUrl = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.replace(/`/g, '').trim();
+  return normalizedValue || null;
+};
+
 const normalizeAttachmentList = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [] as string[];
   }
 
   return value
-    .map((item) =>
-      String(item)
-        .replace(/`/g, '')
-        .trim(),
-    )
-    .filter(Boolean);
+    .map((item) => {
+      if (typeof item === 'string') {
+        return normalizeAttachmentUrl(item);
+      }
+
+      if (item && typeof item === 'object' && 'url' in item) {
+        return normalizeAttachmentUrl((item as { url?: unknown }).url);
+      }
+
+      return null;
+    })
+    .filter((item): item is string => Boolean(item));
 };
 
 const parseAttachmentList = (value: unknown) => {
