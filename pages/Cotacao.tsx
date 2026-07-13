@@ -206,11 +206,6 @@ const normalizeExternalUrl = (value: string | null) => {
 };
 
 const goBackToCotacoes = () => {
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
-  }
-
   window.location.pathname = '/cotacoes';
 };
 
