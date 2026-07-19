@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, ChevronLeft, ChevronRight, FileText, Users } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, FileText, Users, Settings } from 'lucide-react';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -27,6 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       label: 'Atendimentos',
       path: '/atendimentos',
       icon: Users,
+    },
+    {
+      label: 'Configurações',
+      path: '/configuracoes',
+      icon: Settings,
     },
   ];
 

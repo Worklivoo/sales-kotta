@@ -4,6 +4,7 @@ import LoginPage from './pages/Login';
 import CotacoesPage from './pages/Cotacoes';
 import CotacaoPage from './pages/Cotacao';
 import AtendimentosPage from './pages/Atendimentos';
+import ConfiguracoesPage from './pages/Configuracoes.tsx';
 import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
 import { validateActiveMemberAccess } from './lib/memberAccess';
@@ -12,7 +13,7 @@ function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const isRegisterRoute = currentPath === '/registrar';
   const cotacaoRoutePrefix = '/cotacao/';
   const cotacaoAtendimentoId = currentPath.startsWith(cotacaoRoutePrefix)
@@ -182,6 +183,8 @@ function App() {
             />
           ) : currentPath === '/atendimentos' ? (
             <AtendimentosPage />
+          ) : currentPath === '/configuracoes' ? (
+            <ConfiguracoesPage />
           ) : cotacaoAtendimentoId ? (
             <CotacaoPage atendimentoId={cotacaoAtendimentoId} />
           ) : (
