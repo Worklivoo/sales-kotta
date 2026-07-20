@@ -104,6 +104,8 @@ const generalShortcutItems = [
   },
 ] as const;
 
+const SHOW_TERMS_SHORTCUT = false;
+
 const QUOTE_RULE_LEVEL_OPTIONS: QuoteRuleLevel[] = ['OBRIGATORIO', 'DESEJAVEL'];
 const SCRAPPER_TYPE_OPTIONS: ScrapperType[] = ['API', 'XML', 'HTML', 'PLANILHA', 'SITE'];
 
@@ -1193,7 +1195,9 @@ const GeralTab: React.FC = () => {
           ) : null}
 
           <div className="space-y-1 px-1">
-            {generalShortcutItems.map((item) => {
+            {generalShortcutItems
+              .filter((item) => SHOW_TERMS_SHORTCUT || item.action !== 'view-terms')
+              .map((item) => {
               const Icon = item.icon;
 
               return (

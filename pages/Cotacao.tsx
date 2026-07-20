@@ -439,7 +439,20 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           throw new Error('Cotacao nao encontrada.');
         }
 
-        const [messagesResponse, responsibleResponse, clientResponse, orcamentoResponse] = await Promise.all([
+        const markNotificationsAsReadPromise = supabase
+          .from('sales_notificacoes')
+          .update({ notificacao_lida: true })
+          .eq('membro_id', session.user.id)
+          .eq('atendimento_id', atendimento.atendimento_id)
+          .eq('notificacao_lida', false);
+
+        const [
+          messagesResponse,
+          responsibleResponse,
+          clientResponse,
+          orcamentoResponse,
+          markNotificationsAsReadResponse,
+        ] = await Promise.all([
           supabase
             .from('sales_mensagens')
             .select('mensagem_id, created_at, origem, conteudo, metadata, anexos')
@@ -468,6 +481,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
             .limit(1),
+          markNotificationsAsReadPromise,
         ]);
 
         if (messagesResponse.error) {
@@ -484,6 +498,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
         if (orcamentoResponse.error) {
           throw orcamentoResponse.error;
+        }
+
+        if (markNotificationsAsReadResponse.error) {
+          console.error('Erro ao marcar notificacoes da cotacao como lidas:', markNotificationsAsReadResponse.error);
         }
 
         const resolvedResponsibleName =

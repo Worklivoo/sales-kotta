@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MoreVertical, Plus, User, X } from 'lucide-react';
+import { Eye, EyeOff, MoreVertical, Plus, User, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface TeamMemberRecord {
@@ -181,6 +181,7 @@ const MembrosTab: React.FC = () => {
     useState<CreateMemberFormState>(INITIAL_CREATE_MEMBER_FORM);
   const [createMemberError, setCreateMemberError] = useState<string | null>(null);
   const [isCreatingMember, setIsCreatingMember] = useState(false);
+  const [isCreateMemberPasswordVisible, setIsCreateMemberPasswordVisible] = useState(false);
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberRecord | null>(null);
   const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>(INITIAL_EDIT_MEMBER_FORM);
@@ -323,6 +324,7 @@ const MembrosTab: React.FC = () => {
     setCreateMemberForm(INITIAL_CREATE_MEMBER_FORM);
     setCreateMemberError(null);
     setMemberActionFeedback(null);
+    setIsCreateMemberPasswordVisible(false);
     setIsCreateMemberModalOpen(true);
   };
 
@@ -336,6 +338,7 @@ const MembrosTab: React.FC = () => {
     }
 
     setIsCreateMemberModalOpen(false);
+    setIsCreateMemberPasswordVisible(false);
   };
 
   const handleOpenEditMemberModal = (memberId: string) => {
@@ -949,14 +952,32 @@ const MembrosTab: React.FC = () => {
                 >
                   Senha
                 </label>
-                <input
-                  id="novo-membro-senha"
-                  type="password"
-                  value={createMemberForm.senha}
-                  onChange={handleCreateMemberInputChange('senha')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
-                  placeholder="Digite a senha inicial"
-                />
+                <div className="relative mt-2">
+                  <input
+                    id="novo-membro-senha"
+                    type={isCreateMemberPasswordVisible ? 'text' : 'password'}
+                    value={createMemberForm.senha}
+                    onChange={handleCreateMemberInputChange('senha')}
+                    className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    placeholder="Digite a senha inicial"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIsCreateMemberPasswordVisible((current) => !current)
+                    }
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-gray-400 transition-colors hover:text-gray-700"
+                    aria-label={
+                      isCreateMemberPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'
+                    }
+                  >
+                    {isCreateMemberPasswordVisible ? (
+                      <EyeOff size={18} />
+                    ) : (
+                      <Eye size={18} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
