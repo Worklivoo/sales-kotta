@@ -15,10 +15,9 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const isRegisterRoute = currentPath === '/registrar';
-  const cotacaoRoutePrefix = '/cotacao/';
-  const cotacaoAtendimentoId = currentPath.startsWith(cotacaoRoutePrefix)
-    ? decodeURIComponent(currentPath.slice(cotacaoRoutePrefix.length))
-    : null;
+  const cotacaoRouteMatch = currentPath.match(/^\/cotacao\/([^/]+)\/([^/]+)$/);
+  const cotacaoEmpresaId = cotacaoRouteMatch ? decodeURIComponent(cotacaoRouteMatch[1]) : null;
+  const cotacaoNumeroTicket = cotacaoRouteMatch ? decodeURIComponent(cotacaoRouteMatch[2]) : null;
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -179,14 +178,21 @@ function App() {
         <div className="h-full w-full transition-all duration-300 ease-in-out">
           {currentPath === '/cotacoes' ? (
             <CotacoesPage
-              onOpenCotacao={(atendimentoId) => handleNavigate(`/cotacao/${encodeURIComponent(atendimentoId)}`)}
+              onOpenCotacao={(empresaId, numeroTicket) =>
+                handleNavigate(
+                  `/cotacao/${encodeURIComponent(empresaId)}/${encodeURIComponent(numeroTicket)}`,
+                )
+              }
             />
           ) : currentPath === '/atendimentos' ? (
             <AtendimentosPage />
           ) : currentPath === '/configuracoes' ? (
             <ConfiguracoesPage />
-          ) : cotacaoAtendimentoId ? (
-            <CotacaoPage atendimentoId={cotacaoAtendimentoId} />
+          ) : cotacaoEmpresaId && cotacaoNumeroTicket ? (
+            <CotacaoPage
+              empresaId={cotacaoEmpresaId}
+              numeroTicket={cotacaoNumeroTicket}
+            />
           ) : (
             <div className="h-full w-full" />
           )}

@@ -11,6 +11,11 @@ import {
   User,
   Zap,
 } from 'lucide-react';
+import {
+  messageHtmlClassName,
+  sanitizeHtmlContent,
+  stripHtmlToText,
+} from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
 
 type MessageAuthor = 'CLIENTE' | 'IA' | 'HUMANO';
@@ -68,7 +73,8 @@ interface AtendimentoMessage {
   author: MessageAuthor;
   senderEmail: string;
   time: string;
-  content: string;
+  contentHtml: string;
+  contentText: string;
   attachments: string[];
 }
 
@@ -110,19 +116,6 @@ const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
     return null;
   }
 };
-
-const decodeHtmlContent = (value: string) =>
-  value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/<\/?[^>]+>/g, '')
-    .replace(/\u00a0/g, ' ')
-    .trim();
 
 const normalizeAttachmentUrl = (value: unknown) => {
   if (typeof value !== 'string') {
@@ -332,6 +325,8 @@ const buildMessageSenderEmail = (
   return 'Email nao identificado';
 };
 
+const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
+
 const AtendimentosPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [atendimentos, setAtendimentos] = useState<AtendimentoItem[]>([]);
@@ -366,17 +361,17 @@ const AtendimentosPage: React.FC = () => {
           throw new Error('Nao foi possivel identificar o usuario autenticado.');
         }
 
-        const { data: currentMemberData, error: currentMemberError } = await supabase
+        const { data: currentMemberRows, error: currentMemberError } = await supabase
           .from('sales_membros_empresa')
           .select('empresa_id, cargo')
           .eq('membro_id', session.user.id)
-          .maybeSingle();
+          .limit(1);
 
         if (currentMemberError) {
           throw currentMemberError;
         }
 
-        const currentMember = currentMemberData as CurrentMemberRecord | null;
+        const currentMember = getFirstRow(currentMemberRows as CurrentMemberRecord[] | null);
 
         if (!currentMember?.empresa_id) {
           throw new Error('Nao foi possivel identificar a empresa do usuario.');
@@ -441,7 +436,7 @@ const AtendimentosPage: React.FC = () => {
                 .from('sales_empresa')
                 .select('razao_social')
                 .eq('empresa_id', currentMember.empresa_id)
-                .maybeSingle()
+                .limit(1)
             : Promise.resolve({ data: null, error: null }),
         ]);
 
@@ -461,8 +456,9 @@ const AtendimentosPage: React.FC = () => {
         ((membersResponse.data ?? []) as MemberRecord[]).forEach((member) => {
           responsibleById.set(member.membro_id, member.nome || 'Membro nao identificado');
         });
-        const resolvedCompanyName =
-          ((companyResponse.data as EmpresaRecord | null)?.razao_social || '').trim();
+        const resolvedCompanyName = (
+          (getFirstRow(companyResponse.data as EmpresaRecord[] | null)?.razao_social || '')
+        ).trim();
 
         const messagesByAtendimento = new Map<string, AtendimentoMessage[]>();
         const senderEmailByAtendimento = new Map<string, string>();
@@ -470,14 +466,15 @@ const AtendimentosPage: React.FC = () => {
 
         ((messagesResponse.data ?? []) as MensagemRecord[]).forEach((message) => {
           const parsedMetadata = parseJsonObject(message.metadata);
-          const cleanContent = decodeHtmlContent(message.conteudo || 'Sem conteudo disponivel.');
+          const contentText = stripHtmlToText(message.conteudo || 'Sem conteudo disponivel.');
           const author = normalizeMessageAuthor(message.origem);
           const mappedMessage: AtendimentoMessage = {
             id: message.mensagem_id,
             author,
             senderEmail: buildMessageSenderEmail(author, parsedMetadata, resolvedCompanyName),
             time: formatDateTime(message.created_at),
-            content: cleanContent,
+            contentHtml: sanitizeHtmlContent(message.conteudo || 'Sem conteudo disponivel.'),
+            contentText,
             attachments: parseAttachmentList(message.anexos),
           };
 
@@ -514,7 +511,9 @@ const AtendimentosPage: React.FC = () => {
             subject,
             customer: buildCustomerLabel(senderEmail),
             email: senderEmail || 'Email nao identificado',
-            preview: latestMessage ? buildSummary(latestMessage.content) : 'Nenhuma mensagem vinculada.',
+            preview: latestMessage
+              ? buildSummary(latestMessage.contentText)
+              : 'Nenhuma mensagem vinculada.',
             categoryKey: atendimento.categoria || 'OUTROS',
             category: formatCategoryLabel(atendimento.categoria),
             tag: formatStatusLabel(atendimento.status),
@@ -921,9 +920,10 @@ const AtendimentosPage: React.FC = () => {
 
                                         {isExpanded ? (
                                           <div className="mt-5 space-y-3">
-                                            <p className="overflow-hidden break-words whitespace-pre-line text-sm leading-7 text-gray-600">
-                                              {message.content}
-                                            </p>
+                                            <div
+                                              className={messageHtmlClassName}
+                                              dangerouslySetInnerHTML={{ __html: message.contentHtml }}
+                                            />
                                             {message.attachments.length > 0 ? (
                                               <div className="flex flex-wrap gap-2 pt-1">
                                                 {message.attachments.map((attachment) => (
@@ -944,7 +944,7 @@ const AtendimentosPage: React.FC = () => {
                                           </div>
                                         ) : (
                                           <p className="mt-3 line-clamp-1 text-sm leading-6 text-gray-500">
-                                            {buildSummary(message.content)}
+                                            {buildSummary(message.contentText)}
                                           </p>
                                         )}
                                       </div>

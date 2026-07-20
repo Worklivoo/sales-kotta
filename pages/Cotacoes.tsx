@@ -13,6 +13,8 @@ type KanbanStatus =
 interface MockCotacao {
   id: string;
   atendimentoId: string;
+  empresaId: string;
+  numeroTicket: string;
   nome: string;
   membro: string;
   membroId: string;
@@ -68,6 +70,7 @@ interface MemberRecord {
 
 interface AtendimentoRow {
   atendimento_id: string;
+  empresa_id: string;
   assunto: string | null;
   status: KanbanStatus;
   categoria: string;
@@ -75,6 +78,10 @@ interface AtendimentoRow {
   numero_ticket: number | null;
   membro_id: string | null;
   cliente_id: string | null;
+}
+
+interface NotificationUnreadRow {
+  atendimento_id: string | null;
 }
 
 const formatDate = (value: string) => {
@@ -88,7 +95,7 @@ const formatDate = (value: string) => {
 };
 
 interface CotacoesPageProps {
-  onOpenCotacao: (atendimentoId: string) => void;
+  onOpenCotacao: (empresaId: string, numeroTicket: string) => void;
 }
 
 const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
@@ -98,6 +105,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
   const [selectedMember, setSelectedMember] = useState('Todos');
   const [cotacoes, setCotacoes] = useState<MockCotacao[]>([]);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
+  const [unreadNotificationsByAtendimento, setUnreadNotificationsByAtendimento] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -144,7 +152,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         const cotacoesQuery = supabase
           .from('sales_atendimento')
           .select(
-            'atendimento_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id',
+            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id',
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('categoria', 'COTACAO')
@@ -154,7 +162,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           ? cotacoesQuery
           : cotacoesQuery.eq('membro_id', session.user.id);
 
-        const [membersResponse, cotacoesResponse] = await Promise.all([
+        const [membersResponse, cotacoesResponse, notificationsResponse] = await Promise.all([
           adminAccess
             ? supabase
                 .from('sales_membros_empresa')
@@ -171,6 +179,11 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                 error: null,
               }),
           scopedCotacoesQuery,
+          supabase
+            .from('sales_notificacoes')
+            .select('atendimento_id')
+            .eq('membro_id', session.user.id)
+            .eq('notificacao_lida', false),
         ]);
 
         if (membersResponse.error) {
@@ -181,9 +194,24 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           throw cotacoesResponse.error;
         }
 
+        if (notificationsResponse.error) {
+          throw notificationsResponse.error;
+        }
+
         const members = (membersResponse.data ?? []) as MemberOption[];
         const memberNameById = new Map(
           members.map((member) => [member.membro_id, member.nome || 'Sem nome']),
+        );
+        const unreadNotificationsMap = ((notificationsResponse.data ?? []) as NotificationUnreadRow[]).reduce(
+          (bucket, notification) => {
+            if (!notification.atendimento_id) {
+              return bucket;
+            }
+
+            bucket[notification.atendimento_id] = (bucket[notification.atendimento_id] ?? 0) + 1;
+            return bucket;
+          },
+          {} as Record<string, number>,
         );
 
         const mappedCotacoes: MockCotacao[] = ((cotacoesResponse.data ?? []) as AtendimentoRow[]).map((item) => {
@@ -193,6 +221,8 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           return {
             id: ticketNumber,
             atendimentoId: item.atendimento_id,
+            empresaId: item.empresa_id,
+            numeroTicket: item.numero_ticket ? String(item.numero_ticket) : '',
             nome: item.assunto || 'Cotacao sem assunto',
             membro: memberName,
             membroId: item.membro_id || '',
@@ -209,6 +239,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
 
         setMemberOptions(members);
         setCotacoes(mappedCotacoes);
+        setUnreadNotificationsByAtendimento(unreadNotificationsMap);
         setIsAdmin(adminAccess);
       } catch (error: any) {
         console.error('Erro ao carregar cotacoes:', error);
@@ -218,6 +249,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         }
 
         setLoadError(error?.message || 'Nao foi possivel carregar as cotacoes.');
+        setUnreadNotificationsByAtendimento({});
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -368,46 +400,60 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                           </div>
                         ))
                       ) : columnItems.length > 0 ? (
-                        columnItems.map((cotacao) => (
-                          <button
-                            key={cotacao.atendimentoId}
-                            type="button"
-                            onClick={() => onOpenCotacao(cotacao.atendimentoId)}
-                            className="w-full rounded-xl border border-black/5 bg-white p-3 text-left shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-black/10 hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
-                          >
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                                  Ticket
-                                </span>
-                                <span className="text-[12px] font-semibold text-gray-700">
-                                  {cotacao.valor}
-                                </span>
-                              </div>
+                        columnItems.map((cotacao) => {
+                          const unreadNotificationCount =
+                            unreadNotificationsByAtendimento[cotacao.atendimentoId] ?? 0;
 
-                              <div className="space-y-1">
-                                <h4 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
-                                  {cotacao.nome}
-                                </h4>
-                              </div>
+                          return (
+                            <button
+                              key={cotacao.atendimentoId}
+                              type="button"
+                              onClick={() => onOpenCotacao(cotacao.empresaId, cotacao.numeroTicket)}
+                              className="w-full rounded-xl border border-black/5 bg-white p-3 text-left shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-black/10 hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
+                            >
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                                    Ticket
+                                  </span>
 
-                              <div className="space-y-2 border-t border-gray-100 pt-3 text-[11px] text-gray-500">
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="font-medium text-gray-400">Responsável</span>
-                                  <span className="truncate text-right font-semibold text-gray-700">
-                                    {cotacao.membro}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    {unreadNotificationCount > 0 ? (
+                                      <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
+                                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                                      </span>
+                                    ) : null}
+
+                                    <span className="text-[12px] font-semibold text-gray-700">
+                                      {cotacao.valor}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="font-medium text-gray-400">Criado em</span>
-                                  <span className="font-semibold text-gray-700">
-                                    {formatDate(cotacao.dataEntrada)}
-                                  </span>
+
+                                <div className="space-y-1">
+                                  <h4 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
+                                    {cotacao.nome}
+                                  </h4>
+                                </div>
+
+                                <div className="space-y-2 border-t border-gray-100 pt-3 text-[11px] text-gray-500">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="font-medium text-gray-400">Responsável</span>
+                                    <span className="truncate text-right font-semibold text-gray-700">
+                                      {cotacao.membro}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="font-medium text-gray-400">Criado em</span>
+                                    <span className="font-semibold text-gray-700">
+                                      {formatDate(cotacao.dataEntrada)}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </button>
-                        ))
+                            </button>
+                          );
+                        })
                       ) : (
                         <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white/70 px-4 text-center">
                           <p className="text-xs font-medium leading-5 text-gray-400">

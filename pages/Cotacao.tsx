@@ -1,9 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, FileText, Paperclip, UserRound } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Paperclip } from 'lucide-react';
+import {
+  messageHtmlClassName,
+  sanitizeHtmlContent,
+  stripHtmlToText,
+} from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
 
 interface CotacaoPageProps {
-  atendimentoId: string;
+  empresaId: string;
+  numeroTicket: string;
 }
 
 type KanbanStatus =
@@ -78,7 +84,8 @@ interface ConversationItem {
   assunto: string;
   horario: string;
   resumo: string;
-  corpo: string;
+  corpoHtml: string;
+  corpoTexto: string;
   anexos: string[];
 }
 
@@ -282,19 +289,6 @@ const parseAttachmentList = (value: unknown) => {
   }
 };
 
-const decodeHtmlContent = (value: string) =>
-  value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/<\/?[^>]+>/g, '')
-    .replace(/\u00a0/g, ' ')
-    .trim();
-
 const buildSummary = (value: string) => {
   const singleLine = value.replace(/\s+/g, ' ').trim();
 
@@ -369,7 +363,9 @@ const getAttachmentLabel = (attachment: string) => {
   }
 };
 
-const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
+const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
+
+const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
   const [responsibleName, setResponsibleName] = useState('Membro nao identificado');
   const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
@@ -402,17 +398,17 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
           throw new Error('Nao foi possivel identificar o usuario autenticado.');
         }
 
-        const { data: currentMemberData, error: currentMemberError } = await supabase
+        const { data: currentMemberRows, error: currentMemberError } = await supabase
           .from('sales_membros_empresa')
           .select('empresa_id, cargo')
           .eq('membro_id', session.user.id)
-          .maybeSingle();
+          .limit(1);
 
         if (currentMemberError) {
           throw currentMemberError;
         }
 
-        const currentMember = currentMemberData as CurrentMemberRecord | null;
+        const currentMember = getFirstRow(currentMemberRows as CurrentMemberRecord[] | null);
 
         if (!currentMember?.empresa_id) {
           throw new Error('Nao foi possivel identificar a empresa do usuario.');
@@ -423,22 +419,21 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
           .select(
             'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id',
           )
-          .eq('empresa_id', currentMember.empresa_id)
-          .eq('atendimento_id', atendimentoId)
+          .eq('empresa_id', empresaId)
+          .eq('numero_ticket', Number(numeroTicket))
           .eq('categoria', 'COTACAO');
 
         if (currentMember.cargo !== 'ADMIN') {
           atendimentoQuery = atendimentoQuery.eq('membro_id', session.user.id);
         }
 
-        const { data: atendimentoData, error: atendimentoError } =
-          await atendimentoQuery.maybeSingle();
+        const { data: atendimentoRows, error: atendimentoError } = await atendimentoQuery.limit(1);
 
         if (atendimentoError) {
           throw atendimentoError;
         }
 
-        const atendimento = atendimentoData as AtendimentoRecord | null;
+        const atendimento = getFirstRow(atendimentoRows as AtendimentoRecord[] | null);
 
         if (!atendimento) {
           throw new Error('Cotacao nao encontrada.');
@@ -457,7 +452,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                 .select('nome')
                 .eq('empresa_id', currentMember.empresa_id)
                 .eq('membro_id', atendimento.membro_id)
-                .maybeSingle()
+                .limit(1)
             : Promise.resolve({ data: null, error: null }),
           atendimento.cliente_id
             ? supabase
@@ -465,14 +460,14 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                 .select('nome, razao_social, email, telefone, cnpj')
                 .eq('empresa_id', currentMember.empresa_id)
                 .eq('cliente_id', atendimento.cliente_id)
-                .maybeSingle()
+                .limit(1)
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from('sales_orcamentos')
             .select('orcamento_id, data_emissao, validade, valor_total, status, pdf_url')
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
-            .maybeSingle(),
+            .limit(1),
         ]);
 
         if (messagesResponse.error) {
@@ -492,10 +487,11 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
         }
 
         const resolvedResponsibleName =
-          (responsibleResponse.data as ResponsibleMemberRecord | null)?.nome ||
+          getFirstRow(responsibleResponse.data as ResponsibleMemberRecord[] | null)?.nome ||
           'Membro nao identificado';
-        const resolvedClientData = (clientResponse.data as ClientRecord | null) ?? null;
-        const resolvedOrcamentoData = (orcamentoResponse.data as OrcamentoRecord | null) ?? null;
+        const resolvedClientData = getFirstRow(clientResponse.data as ClientRecord[] | null) ?? null;
+        const resolvedOrcamentoData =
+          getFirstRow(orcamentoResponse.data as OrcamentoRecord[] | null) ?? null;
         const cotacaoAssunto = atendimento.assunto || 'Cotacao sem assunto';
         const rawMessages = (messagesResponse.data ?? []) as MensagemRecord[];
         let resolvedOrcamentoItems: OrcamentoItemRecord[] = [];
@@ -515,7 +511,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
         const mappedMessages = rawMessages.map((message) => {
           const parsedMetadata = parseJsonObject(message.metadata);
-          const cleanContent = decodeHtmlContent(message.conteudo || 'Sem conteudo disponivel.');
+          const contentText = stripHtmlToText(message.conteudo || 'Sem conteudo disponivel.');
 
           return {
             id: message.mensagem_id,
@@ -528,8 +524,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
             copia: extractCopyRecipients(parsedMetadata),
             assunto: cotacaoAssunto,
             horario: formatDateTime(message.created_at),
-            resumo: buildSummary(cleanContent),
-            corpo: cleanContent,
+            resumo: buildSummary(contentText),
+            corpoHtml: sanitizeHtmlContent(message.conteudo || 'Sem conteudo disponivel.'),
+            corpoTexto: contentText,
             anexos: parseAttachmentList(message.anexos),
           };
         });
@@ -579,7 +576,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
     return () => {
       isMounted = false;
     };
-  }, [atendimentoId]);
+  }, [empresaId, numeroTicket]);
 
   useEffect(() => {
     const defaultExpandedMessageId =
@@ -617,7 +614,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
   }
 
   return (
-    <div className="h-full w-full overflow-y-auto" data-atendimento-id={atendimentoId}>
+    <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
       <div className="flex min-h-full flex-col gap-4 pb-2">
         <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
           <div className="border-b border-black/5 px-1 pb-5">
@@ -715,151 +712,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
               </div>
               </section>
 
-              <section className="border-b border-black/5 pb-6">
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
-                    <UserRound size={20} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
-                      Dados do Cliente
-                    </h2>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pl-1">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Nome</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {clientData?.nome || '-'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Razao Social</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {clientData?.razao_social || '-'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Email</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {clientData?.email || '-'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Telefone</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatPhone(clientData?.telefone || null)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">CNPJ</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatDocument(clientData?.cnpj || null)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              </section>
-
-              <section>
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
-                    <FileText size={20} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
-                      Dados do Orçamento
-                    </h2>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pl-1">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Status</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatEnumLabel(orcamentoData?.status || null)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Data de Emissao</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {orcamentoData?.data_emissao ? formatDateTime(orcamentoData.data_emissao) : '-'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Validade</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatDateOnly(orcamentoData?.validade || null)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Valor Total</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatCurrency(orcamentoData?.valor_total || null)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">PDF</p>
-                    {normalizeExternalUrl(orcamentoData?.pdf_url || null) ? (
-                      <a
-                        href={normalizeExternalUrl(orcamentoData?.pdf_url || null) || undefined}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex text-sm font-semibold tracking-tight text-gray-900 underline underline-offset-4"
-                      >
-                        Abrir orçamento
-                      </a>
-                    ) : (
-                      <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">-</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Itens</p>
-                    <div className="mt-2 space-y-2">
-                      {orcamentoItems.length > 0 ? (
-                        orcamentoItems.map((item, index) => (
-                          <div
-                            key={item.item_id}
-                            className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-3 py-3"
-                          >
-                            <p className="text-xs font-medium text-gray-500">Item {index + 1}</p>
-                            <div className="mt-2 space-y-1">
-                              <p className="text-sm font-semibold tracking-tight text-gray-900">
-                                Quantidade: {item.quantidade || '-'}
-                              </p>
-                              <p className="text-sm font-semibold tracking-tight text-gray-900">
-                                Preço unitário: {formatCurrency(item.preco_unitario || null)}
-                              </p>
-                              <p className="text-sm font-semibold tracking-tight text-gray-900">
-                                Total: {formatCurrency(item.total_item || null)}
-                              </p>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm font-semibold tracking-tight text-gray-900">
-                          Nenhum item encontrado
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </section>
             </aside>
 
             <section className="min-h-0">
@@ -929,9 +781,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
 
                                 {isExpanded ? (
                                   <div className="mt-5 space-y-3">
-                                    <p className="overflow-hidden break-words whitespace-pre-line text-sm leading-7 text-gray-600">
-                                      {message.corpo}
-                                    </p>
+                                    <div
+                                      className={messageHtmlClassName}
+                                      dangerouslySetInnerHTML={{ __html: message.corpoHtml }}
+                                    />
                                     {message.anexos.length > 0 ? (
                                       <div className="flex flex-wrap gap-2 pt-1">
                                         {message.anexos.map((attachment) => (
@@ -952,7 +805,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ atendimentoId }) => {
                                   </div>
                                 ) : (
                                   <p className="mt-3 line-clamp-1 text-sm leading-6 text-gray-500">
-                                    {buildSummary(message.corpo)}
+                                    {buildSummary(message.corpoTexto)}
                                   </p>
                                 )}
                               </div>
