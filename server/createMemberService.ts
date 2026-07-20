@@ -37,6 +37,18 @@ export class HttpError extends Error {
   }
 }
 
+const maskSecret = (value: string | null | undefined) => {
+  if (!value) {
+    return '';
+  }
+
+  if (value.length <= 8) {
+    return '*'.repeat(value.length);
+  }
+
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+};
+
 const normalizePhoneDigits = (value: string) => {
   let digits = value.replace(/\D/g, '');
 
@@ -54,6 +66,19 @@ export const createMemberService = async ({
   requesterAccessToken,
   payload,
 }: CreateMemberServiceOptions): Promise<CreateMemberServiceResult> => {
+  console.log('[createMemberService][start]', {
+    hasSupabaseUrl: Boolean(supabaseUrl),
+    hasSupabaseAnonKey: Boolean(supabaseAnonKey),
+    hasSupabaseServiceRoleKey: Boolean(supabaseServiceRoleKey),
+    requesterAccessTokenPreview: maskSecret(requesterAccessToken),
+    payloadPreview: {
+      nome: payload?.nome || null,
+      email: payload?.email || null,
+      telefone: payload?.telefone || null,
+      senhaPreview: maskSecret(payload?.senha),
+    },
+  });
+
   if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
     throw new HttpError(
       500,
@@ -105,6 +130,11 @@ export const createMemberService = async ({
     error: requesterUserError,
   } = await publicClient.auth.getUser(requesterAccessToken);
 
+  console.log('[createMemberService][requester-user]', {
+    requesterUserId: requesterUser?.id || null,
+    requesterUserErrorMessage: requesterUserError?.message || null,
+  });
+
   if (requesterUserError || !requesterUser?.id) {
     throw new HttpError(401, 'Nao foi possivel validar o usuario autenticado.');
   }
@@ -114,6 +144,13 @@ export const createMemberService = async ({
     .select('empresa_id, cargo')
     .eq('membro_id', requesterUser.id)
     .maybeSingle();
+
+  console.log('[createMemberService][requester-member]', {
+    requesterUserId: requesterUser.id,
+    empresaId: requesterMember?.empresa_id || null,
+    cargo: requesterMember?.cargo || null,
+    requesterMemberErrorMessage: requesterMemberError?.message || null,
+  });
 
   if (requesterMemberError) {
     throw new HttpError(500, requesterMemberError.message);
@@ -132,6 +169,12 @@ export const createMemberService = async ({
     email,
     password: senha,
     email_confirm: true,
+  });
+
+  console.log('[createMemberService][auth-create-user]', {
+    createdUserId: createdAuthUser.user?.id || null,
+    createUserErrorMessage: createUserError?.message || null,
+    email,
   });
 
   if (createUserError) {
@@ -155,10 +198,24 @@ export const createMemberService = async ({
     .from('sales_membros_empresa')
     .insert(memberRecord);
 
+  console.log('[createMemberService][member-insert]', {
+    createdUserId: createdAuthUser.user.id,
+    empresaId: requesterMember.empresa_id,
+    insertMemberErrorMessage: insertMemberError?.message || null,
+  });
+
   if (insertMemberError) {
     await adminClient.auth.admin.deleteUser(createdAuthUser.user.id);
+    console.warn('[createMemberService][rollback-delete-auth-user]', {
+      createdUserId: createdAuthUser.user.id,
+    });
     throw new HttpError(400, insertMemberError.message);
   }
+
+  console.log('[createMemberService][success]', {
+    createdUserId: memberRecord.membro_id,
+    email: memberRecord.email,
+  });
 
   return {
     member: memberRecord,

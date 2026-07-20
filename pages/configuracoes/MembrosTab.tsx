@@ -157,6 +157,18 @@ const getInitials = (name: string | null) => {
   return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
 };
 
+const maskSecret = (value: string | null | undefined) => {
+  if (!value) {
+    return '';
+  }
+
+  if (value.length <= 8) {
+    return '*'.repeat(value.length);
+  }
+
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+};
+
 const MembrosTab: React.FC = () => {
   const [members, setMembers] = useState<TeamMemberRecord[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
@@ -389,11 +401,21 @@ const MembrosTab: React.FC = () => {
       error: sessionError,
     } = await supabase.auth.getSession();
 
+    console.log('[MembrosTab][CreateMember][session:get]', {
+      hasSession: Boolean(session),
+      userId: session?.user?.id || null,
+      accessTokenPreview: maskSecret(session?.access_token),
+      refreshTokenPreview: maskSecret(session?.refresh_token),
+      sessionErrorMessage: sessionError?.message || null,
+    });
+
     if (sessionError) {
+      console.error('[MembrosTab][CreateMember][session:error]', sessionError);
       throw sessionError;
     }
 
     if (!session?.access_token) {
+      console.error('[MembrosTab][CreateMember][session:missing-access-token]');
       throw new Error('Nao foi possivel identificar a sessao atual do usuario.');
     }
 
@@ -625,7 +647,27 @@ const MembrosTab: React.FC = () => {
     setCreateMemberError(null);
 
     try {
+      console.log('[MembrosTab][CreateMember][submit:start]', {
+        companyId,
+        payloadPreview: {
+          nome,
+          email,
+          telefone: createMemberForm.telefone,
+          senhaPreview: maskSecret(senha),
+        },
+      });
+
       const accessToken = await getSessionAccessToken();
+      console.log('[MembrosTab][CreateMember][api:request]', {
+        endpoint: '/api/create-member',
+        accessTokenPreview: maskSecret(accessToken),
+        payloadPreview: {
+          nome,
+          email,
+          telefone: createMemberForm.telefone,
+          senhaPreview: maskSecret(senha),
+        },
+      });
 
       const response = await fetch('/api/create-member', {
         method: 'POST',
@@ -642,6 +684,11 @@ const MembrosTab: React.FC = () => {
       });
 
       const responseBody = await response.json().catch(() => null);
+      console.log('[MembrosTab][CreateMember][api:response]', {
+        status: response.status,
+        ok: response.ok,
+        body: responseBody,
+      });
 
       if (!response.ok) {
         throw new Error(responseBody?.error || 'Nao foi possivel criar o membro.');
@@ -660,8 +707,17 @@ const MembrosTab: React.FC = () => {
         type: 'success',
         message: 'Membro adicionado com sucesso.',
       });
+      console.log('[MembrosTab][CreateMember][submit:success]', {
+        createdMemberId: createdMember.membro_id,
+        createdMemberEmail: createdMember.email,
+      });
     } catch (error: any) {
       console.error('Erro ao criar membro da equipe:', error);
+      console.error('[MembrosTab][CreateMember][submit:error]', {
+        message: error?.message || null,
+        name: error?.name || null,
+        error,
+      });
       setCreateMemberError(error?.message || 'Nao foi possivel criar o membro.');
     } finally {
       setIsCreatingMember(false);
