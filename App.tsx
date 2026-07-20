@@ -32,6 +32,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (currentPath !== '/' || isRegisterRoute || isAuthenticated !== true) {
+      return;
+    }
+
+    window.history.replaceState({}, '', '/cotacoes');
+    setCurrentPath('/cotacoes');
+  }, [currentPath, isAuthenticated, isRegisterRoute]);
+
+  useEffect(() => {
     if (isRegisterRoute) {
       return;
     }
