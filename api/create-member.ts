@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createMemberService, HttpError } from '../server/createMemberService';
+import { createMemberService, HttpError } from '../server/createMemberService.js';
 
 const getBearerToken = (authorizationHeader?: string) => {
   if (!authorizationHeader?.startsWith('Bearer ')) {

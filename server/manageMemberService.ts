@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { HttpError } from './createMemberService';
+import { HttpError } from './createMemberService.js';
 
 type ManageMemberAction = 'reset-password' | 'update-info' | 'deactivate' | 'activate' | 'delete';
 

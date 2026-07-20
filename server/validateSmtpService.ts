@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { HttpError } from './createMemberService';
+import { HttpError } from './createMemberService.js';
 
 const SMTP_VALIDATION_WEBHOOK_URL =
   'https://primary-systec.up.railway.app/webhook/f76854a9-c075-4945-820e-b5bcb92ddafd';
