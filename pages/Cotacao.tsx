@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Paperclip } from 'lucide-react';
+import OrcamentoEditorModal from '../components/OrcamentoEditorModal';
 import {
   messageHtmlClassName,
   sanitizeHtmlContent,
@@ -58,6 +59,7 @@ interface OrcamentoRecord {
   valor_total: string | null;
   status: string | null;
   pdf_url: string | null;
+  html_orcamento: string | null;
 }
 
 interface OrcamentoItemRecord {
@@ -374,6 +376,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [orcamentoItems, setOrcamentoItems] = useState<OrcamentoItemRecord[]>([]);
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
+  const [isOrcamentoModalOpen, setIsOrcamentoModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -477,7 +480,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from('sales_orcamentos')
-            .select('orcamento_id, data_emissao, validade, valor_total, status, pdf_url')
+            .select('orcamento_id, data_emissao, validade, valor_total, status, pdf_url, html_orcamento')
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
             .limit(1),
@@ -566,6 +569,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrcamentoData(resolvedOrcamentoData);
         setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
+        setIsOrcamentoModalOpen(false);
       } catch (error: any) {
         console.error('Erro ao carregar cotacao:', error);
 
@@ -581,6 +585,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrcamentoItems([]);
         setOrderedConversationItems([]);
         setExpandedMessageIds([]);
+        setIsOrcamentoModalOpen(false);
         setLoadError(error?.message || 'Nao foi possivel carregar a cotacao.');
       } finally {
         if (isMounted) {
@@ -631,29 +636,74 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     );
   }
 
+  const shouldShowPdfButton = cotacao.status === 'AGUARDANDO_APROVACAO';
+  const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
+
   return (
     <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
+      <OrcamentoEditorModal
+        isOpen={isOrcamentoModalOpen}
+        onClose={() => setIsOrcamentoModalOpen(false)}
+        assunto={cotacao.assunto}
+        htmlOrcamento={orcamentoData?.html_orcamento || null}
+        orcamentoId={orcamentoData?.orcamento_id || null}
+        atendimentoId={cotacao.atendimento_id}
+        membroId={cotacao.membro_id}
+        onHtmlSaved={(html) =>
+          setOrcamentoData((currentValue) =>
+            currentValue ? { ...currentValue, html_orcamento: html } : currentValue,
+          )
+        }
+      />
+
       <div className="flex min-h-full flex-col gap-4 pb-2">
         <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
           <div className="border-b border-black/5 px-1 pb-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={goBackToCotacoes}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
-                aria-label="Voltar para cotacoes"
-              >
-                <ArrowLeft size={18} />
-              </button>
-
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-                  {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-                </span>
-                <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-                  {cotacao.assunto || 'Cotacao sem assunto'}
-                </h1>
+                <button
+                  type="button"
+                  onClick={goBackToCotacoes}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
+                  aria-label="Voltar para cotacoes"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
+                  <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                    {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+                  </span>
+                  <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
+                    {cotacao.assunto || 'Cotacao sem assunto'}
+                  </h1>
+                </div>
               </div>
+
+              {shouldShowPdfButton ? (
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                    Aprovacao Pendente
+                  </span>
+                  {hasOrcamentoHtml ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsOrcamentoModalOpen(true)}
+                      className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+                    >
+                      Visualizar Orçamento
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
+                    >
+                      Visualizar Orçamento
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
 

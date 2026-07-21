@@ -1,0 +1,1319 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+
+interface OrcamentoEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  assunto: string | null;
+  htmlOrcamento: string | null;
+  orcamentoId: string | null;
+  atendimentoId: string | null;
+  membroId: string | null;
+  onHtmlSaved: (html: string) => void;
+}
+
+interface EditorField {
+  id: string;
+  key: string;
+  label: string;
+  value: string;
+  isCustom?: boolean;
+}
+
+interface OrcamentoItemRow {
+  id: string;
+  itemId: string;
+  nome: string;
+  quantidade: string;
+  sku: string;
+  descricao: string;
+  ncm: string;
+  valorUnitario: string;
+  valorTotal: string;
+  disponivel: boolean;
+}
+
+interface ObservacaoField {
+  id: string;
+  texto: string;
+}
+
+const HEADER_FIELD_ORDER = [
+  'empresa_nome',
+  'empresa_cnpj',
+  'empresa_endereco',
+  'empresa_email',
+  'empresa_telefone',
+] as const;
+
+const HEADER_FIELD_LABELS: Record<(typeof HEADER_FIELD_ORDER)[number], string> = {
+  empresa_nome: 'Nome da empresa',
+  empresa_cnpj: 'CNPJ',
+  empresa_endereco: 'Endereco',
+  empresa_email: 'Email',
+  empresa_telefone: 'Telefone',
+};
+
+const CLIENT_FIELD_ORDER = ['razao_social', 'cnpj_cpf', 'endereco', 'email', 'telefone'] as const;
+
+const CLIENT_FIELD_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
+  razao_social: 'Razao Social',
+  cnpj_cpf: 'CNPJ/CPF',
+  endereco: 'Endereco',
+  email: 'Email',
+  telefone: 'Telefone',
+};
+
+const CLIENT_HTML_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
+  razao_social: 'Razão Social:',
+  cnpj_cpf: 'CNPJ/CPF:',
+  endereco: 'Endereço:',
+  email: 'Email:',
+  telefone: 'Telefone:',
+};
+
+const APROVACAO_WEBHOOK_URL =
+  'https://primary-systec.up.railway.app/webhook/c0b437a3-92f2-4e07-8017-33534099784b';
+
+const ITEM_FIELD_LABELS: Record<Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>, string> = {
+  nome: 'Nome',
+  quantidade: 'Quantidade',
+  sku: 'SKU',
+  descricao: 'Descricao',
+  ncm: 'NCM',
+  valorUnitario: 'Valor Unitario',
+  valorTotal: 'Valor Total',
+  disponivel: 'Disponivel',
+};
+
+const normalizeEmbeddedAssetUrl = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value
+    .replace(/`/g, '')
+    .replace(/^['"]+|['"]+$/g, '')
+    .trim();
+
+  return normalizedValue || null;
+};
+
+const buildFieldId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+
+const escapeHtmlValue = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const normalizeComparisonText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const decodeInlineHtmlText = (value: string) => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof DOMParser === 'undefined') {
+    return value
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/<\/?[^>]+>/g, '')
+      .replace(/\u00a0/g, ' ')
+      .trim();
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  return (documentNode.body.textContent || '').replace(/\u00a0/g, ' ').trim();
+};
+
+const serializeHtmlDocument = (documentNode: Document) => {
+  const doctype = documentNode.doctype
+    ? `<!DOCTYPE ${documentNode.doctype.name}${
+        documentNode.doctype.publicId ? ` PUBLIC "${documentNode.doctype.publicId}"` : ''
+      }${documentNode.doctype.systemId ? ` "${documentNode.doctype.systemId}"` : ''}>`
+    : '<!DOCTYPE html>';
+
+  return `${doctype}\n${documentNode.documentElement.outerHTML}`;
+};
+
+const buildDefaultHeaderFields = () =>
+  HEADER_FIELD_ORDER.map((key) => ({
+    id: buildFieldId(key),
+    key,
+    label: HEADER_FIELD_LABELS[key],
+    value: '',
+  })) satisfies EditorField[];
+
+const buildDefaultClientFields = () =>
+  CLIENT_FIELD_ORDER.map((key) => ({
+    id: buildFieldId(key),
+    key,
+    label: CLIENT_FIELD_LABELS[key],
+    value: '',
+  })) satisfies EditorField[];
+
+const buildDefaultItemRow = () => ({
+  id: buildFieldId('item'),
+  itemId: '',
+  nome: '',
+  quantidade: '',
+  sku: '',
+  descricao: '',
+  ncm: '',
+  valorUnitario: '',
+  valorTotal: '',
+  disponivel: true,
+}) satisfies OrcamentoItemRow;
+
+const buildDefaultObservacaoField = () =>
+  ({
+    id: buildFieldId('observacao'),
+    texto: '',
+  }) satisfies ObservacaoField;
+
+const extractHeaderSectionFields = (value: string | null) => {
+  const defaultFields = buildDefaultHeaderFields();
+
+  if (!value) {
+    return defaultFields;
+  }
+
+  const extractedValues = new Map<string, string>();
+  const companyMatch = value.match(/<div class=["']header-empresa["'][^>]*>([\s\S]*?)<\/div>/i);
+  const companyHtml = companyMatch?.[1] || '';
+  const companyNameMatch = companyHtml.match(/<strong>([\s\S]*?)<\/strong>/i);
+  const companyName = decodeInlineHtmlText(companyNameMatch?.[1] || '');
+
+  if (companyName) {
+    extractedValues.set('empresa_nome', companyName);
+  }
+
+  const companyRemainder = companyHtml
+    .replace(/<strong>[\s\S]*?<\/strong>/i, '')
+    .replace(/^\s*<br\s*\/?>/i, '');
+  const companyLines = companyRemainder
+    .split(/<br\s*\/?>/i)
+    .map((line) => decodeInlineHtmlText(line))
+    .filter(Boolean);
+
+  if (companyLines[0]) {
+    extractedValues.set('empresa_cnpj', companyLines[0].replace(/^CNPJ:\s*/i, '').trim());
+  }
+
+  if (companyLines[1]) {
+    extractedValues.set('empresa_endereco', companyLines[1]);
+  }
+
+  if (companyLines[2]) {
+    extractedValues.set('empresa_email', companyLines[2]);
+  }
+
+  if (companyLines[3]) {
+    extractedValues.set('empresa_telefone', companyLines[3]);
+  }
+
+  const dataEmissaoMatch = value.match(
+    /<p[^>]*>\s*Data de emiss[aã]o:\s*([\s\S]*?)<\/p>/i,
+  );
+  const atendimentoIdMatch = value.match(
+    /<p[^>]*class=["']atendimento-id["'][^>]*>\s*N[ºo]\s*([\s\S]*?)<\/p>/i,
+  );
+
+  if (dataEmissaoMatch?.[1]) {
+    extractedValues.set('data_emissao', decodeInlineHtmlText(dataEmissaoMatch[1]));
+  }
+
+  if (atendimentoIdMatch?.[1]) {
+    extractedValues.set('atendimento_id', decodeInlineHtmlText(atendimentoIdMatch[1]));
+  }
+
+  return defaultFields.map((field) => ({
+    ...field,
+    value: extractedValues.get(field.key) || '',
+  }));
+};
+
+const extractClientSectionFields = (value: string | null) => {
+  const defaultFields = buildDefaultClientFields();
+
+  if (!value || typeof DOMParser === 'undefined') {
+    return defaultFields;
+  }
+
+  const extractedValues = new Map<string, string>();
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const clientSection = documentNode.querySelector('.info-cliente');
+
+  if (!clientSection) {
+    return defaultFields;
+  }
+
+  const fieldElements = Array.from(clientSection.querySelectorAll('.campo'));
+
+  fieldElements.forEach((fieldElement) => {
+    const labelElement = fieldElement.querySelector('strong');
+    const label = decodeInlineHtmlText(labelElement?.textContent || '').replace(/:\s*$/, '').trim();
+    const valueOnly = decodeInlineHtmlText(
+      fieldElement.textContent?.replace(labelElement?.textContent || '', '') || '',
+    );
+
+    const normalizedLabel = normalizeComparisonText(label);
+
+    if (normalizedLabel === 'razao social') {
+      extractedValues.set('razao_social', valueOnly);
+    } else if (normalizedLabel === 'cnpj/cpf') {
+      extractedValues.set('cnpj_cpf', valueOnly);
+    } else if (normalizedLabel === 'endereco') {
+      extractedValues.set('endereco', valueOnly);
+    } else if (normalizedLabel === 'email') {
+      extractedValues.set('email', valueOnly);
+    } else if (normalizedLabel === 'telefone') {
+      extractedValues.set('telefone', valueOnly);
+    }
+  });
+
+  return defaultFields.map((field) => ({
+    ...field,
+    value: extractedValues.get(field.key) || '',
+  }));
+};
+
+const extractItemsSectionRows = (value: string | null) => {
+  if (!value || typeof DOMParser === 'undefined') {
+    return [] as OrcamentoItemRow[];
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const rowElements = Array.from(documentNode.querySelectorAll('table.itens-pedido tbody tr'));
+
+  return rowElements.map((rowElement, index) => {
+    const cells = Array.from(rowElement.querySelectorAll('td'));
+    const descricaoHtml = cells[3]?.innerHTML || '';
+    const descricaoText = decodeInlineHtmlText(descricaoHtml || cells[3]?.textContent || '');
+    const nomeText = decodeInlineHtmlText(cells[0]?.innerHTML || cells[0]?.textContent || '');
+    const itemId =
+      rowElement.getAttribute('data-item-id') ||
+      rowElement.getAttribute('data-itemid') ||
+      String(index + 1);
+
+    return {
+      id: buildFieldId(`item-row-${index}`),
+      itemId,
+      nome: nomeText,
+      quantidade: decodeInlineHtmlText(cells[1]?.textContent || ''),
+      sku: decodeInlineHtmlText(cells[2]?.textContent || ''),
+      descricao: descricaoText,
+      ncm: decodeInlineHtmlText(cells[4]?.textContent || ''),
+      valorUnitario: decodeInlineHtmlText(cells[5]?.textContent || ''),
+      valorTotal: decodeInlineHtmlText(cells[6]?.textContent || ''),
+      disponivel:
+        !rowElement.classList.contains('indisponivel-row') &&
+        !/indispon/i.test(descricaoText),
+    };
+  });
+};
+
+const extractObservacaoField = (value: string | null) => {
+  const defaultField = buildDefaultObservacaoField();
+
+  if (!value || typeof DOMParser === 'undefined') {
+    return defaultField;
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const observacaoParagraph = documentNode.querySelector('.observacoes p');
+
+  return {
+    ...defaultField,
+    texto: decodeInlineHtmlText(observacaoParagraph?.textContent || ''),
+  };
+};
+
+const applyHeaderFieldsToOrcamentoHtml = (value: string | null, fields: EditorField[]) => {
+  if (!value || fields.length === 0) {
+    return value || '';
+  }
+
+  const fieldMap = new Map(fields.map((field) => [field.key, field]));
+  const customFields = fields.filter(
+    (field) => field.isCustom && (field.label.trim() || field.value.trim()),
+  );
+
+  const companyLines: string[] = [];
+  const companyName = fieldMap.get('empresa_nome')?.value.trim() || '';
+
+  if (companyName) {
+    companyLines.push(`<strong>${escapeHtmlValue(companyName)}</strong>`);
+  }
+
+  const companyFieldDefinitions = [
+    { key: 'empresa_cnpj', prefix: 'CNPJ: ' },
+    { key: 'empresa_endereco', prefix: '' },
+    { key: 'empresa_email', prefix: '' },
+    { key: 'empresa_telefone', prefix: '' },
+  ] as const;
+
+  companyFieldDefinitions.forEach(({ key, prefix }) => {
+    const fieldValue = fieldMap.get(key)?.value.trim() || '';
+
+    if (fieldValue) {
+      companyLines.push(`${prefix}${escapeHtmlValue(fieldValue)}`);
+    }
+  });
+
+  customFields.forEach((field) => {
+    const fieldValue = field.value.trim();
+
+    if (!fieldValue) {
+      return;
+    }
+
+    companyLines.push(escapeHtmlValue(fieldValue));
+  });
+
+  const [companyFirstLine, ...companyRemainingLines] = companyLines;
+  const companyContent = [
+    companyFirstLine || '',
+    companyRemainingLines.length > 0 ? companyRemainingLines.join('<br>\n       ') : '',
+  ]
+    .filter(Boolean)
+    .join('\n       ');
+  const companyBlock = `<div class="header-empresa">
+       ${companyContent}
+     </div>`;
+
+  const orcamentoLines = ['<h1>ORÇAMENTO</h1>'];
+  const dataEmissaoMatch = value.match(
+    /<p[^>]*>\s*Data de emiss[aã]o:\s*([\s\S]*?)<\/p>/i,
+  );
+  const atendimentoIdMatch = value.match(
+    /<p[^>]*class=["']atendimento-id["'][^>]*>\s*N[ºo]\s*([\s\S]*?)<\/p>/i,
+  );
+  const dataEmissao = decodeInlineHtmlText(dataEmissaoMatch?.[1] || '');
+  const atendimentoId = decodeInlineHtmlText(atendimentoIdMatch?.[1] || '');
+
+  if (dataEmissao) {
+    orcamentoLines.push(`<p>Data de emissão: ${escapeHtmlValue(dataEmissao)}</p>`);
+  }
+
+  if (atendimentoId) {
+    orcamentoLines.push(
+      `<p class="atendimento-id">Nº ${escapeHtmlValue(atendimentoId)}</p>`,
+    );
+  }
+
+  const orcamentoBlock = `<div class="header-orcamento">
+       ${orcamentoLines.join('\n       ')}
+     </div>`;
+
+  return value
+    .replace(/<div class=["']header-empresa["'][^>]*>[\s\S]*?<\/div>/i, companyBlock)
+    .replace(/<div class=["']header-orcamento["'][^>]*>[\s\S]*?<\/div>/i, orcamentoBlock);
+};
+
+const applyClientFieldsToOrcamentoHtml = (value: string | null, fields: EditorField[]) => {
+  if (!value || fields.length === 0 || typeof DOMParser === 'undefined') {
+    return value || '';
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const clientSection = documentNode.querySelector('.info-cliente');
+
+  if (!clientSection) {
+    return value;
+  }
+
+  const titleElement = clientSection.querySelector('h3');
+  const rowsHtml = fields
+    .filter((field) => field.label.trim() || field.value.trim())
+    .map((field) => {
+      const fieldValue = field.value.trim();
+      const htmlLabel = field.isCustom
+        ? `${field.label.trim() || 'Novo campo'}:`
+        : CLIENT_HTML_LABELS[field.key as keyof typeof CLIENT_HTML_LABELS] || `${field.label.trim()}:`;
+
+      return `<div class="campo"><strong>${escapeHtmlValue(htmlLabel)}</strong>${fieldValue ? ` ${escapeHtmlValue(fieldValue)}` : ''}</div>`;
+    })
+    .join('');
+
+  clientSection.innerHTML = `${titleElement ? titleElement.outerHTML : '<h3>Informações do cliente:</h3>'}${rowsHtml}`;
+
+  return serializeHtmlDocument(documentNode);
+};
+
+const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow[]) => {
+  if (!value || typeof DOMParser === 'undefined') {
+    return value || '';
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const tbodyElement = documentNode.querySelector('table.itens-pedido tbody');
+
+  if (!tbodyElement) {
+    return value;
+  }
+
+  const rowsHtml = items
+    .map((item) => {
+      const isDisponivel = item.disponivel;
+      const descricaoCell = isDisponivel
+        ? escapeHtmlValue(item.descricao)
+        : `<span class="badge-indisponivel">${escapeHtmlValue(item.descricao || 'Indisponível')}</span>`;
+
+      return `<tr${isDisponivel ? '' : ' class="indisponivel-row"'} data-item-id="${escapeHtmlValue(
+        item.itemId,
+      )}">
+         <td>${escapeHtmlValue(item.nome)}</td>
+         <td>${escapeHtmlValue(item.quantidade)}</td>
+         <td>${escapeHtmlValue(item.sku)}</td>
+         <td>${descricaoCell}</td>
+         <td>${escapeHtmlValue(item.ncm)}</td>
+         <td style="text-align: right;">${escapeHtmlValue(item.valorUnitario)}</td>
+         <td style="text-align: right; font-weight: bold;">${escapeHtmlValue(item.valorTotal)}</td>
+       </tr>`;
+    })
+    .join('');
+
+  tbodyElement.innerHTML = rowsHtml;
+
+  return serializeHtmlDocument(documentNode);
+};
+
+const applyObservacaoToOrcamentoHtml = (value: string | null, observacao: ObservacaoField) => {
+  if (!value || typeof DOMParser === 'undefined') {
+    return value || '';
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const observacoesSection = documentNode.querySelector('.observacoes');
+
+  if (!observacoesSection) {
+    return value;
+  }
+
+  const titleElement = observacoesSection.querySelector('h3');
+  observacoesSection.innerHTML = `${
+    titleElement ? titleElement.outerHTML : '<h3>Observações</h3>'
+  }<p>${escapeHtmlValue(observacao.texto.trim())}</p>`;
+
+  return serializeHtmlDocument(documentNode);
+};
+
+const buildOrcamentoPreviewHtml = (value: string | null) => {
+  if (!value) {
+    return '';
+  }
+
+  const normalizedSource = value.replace(/\u0000/g, '').trim();
+
+  if (!normalizedSource) {
+    return '';
+  }
+
+  const cleanedSource = normalizedSource.replace(
+    /\b(src|href)\s*=\s*(["'])([\s\S]*?)\2/gi,
+    (_match, attributeName: string, _quote: string, attributeValue: string) => {
+      const cleanValue = normalizeEmbeddedAssetUrl(attributeValue);
+      return cleanValue ? `${attributeName}="${cleanValue}"` : '';
+    },
+  );
+
+  const viewportTag = '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+  const previewSpacingStyle =
+    '<style id="orcamento-preview-spacing">body{margin:24px !important;padding:24px 24px 120px 24px !important;box-sizing:border-box;background:#ffffff;}.footer{bottom:24px !important;}</style>';
+
+  const hasViewport = /meta\s+name=["']viewport["']/i.test(cleanedSource);
+
+  if (/<head[^>]*>/i.test(cleanedSource)) {
+    return cleanedSource.replace(
+      /<head([^>]*)>/i,
+      `<head$1>${hasViewport ? '' : viewportTag}${previewSpacingStyle}`,
+    );
+  }
+
+  if (/<html[^>]*>/i.test(cleanedSource)) {
+    return cleanedSource.replace(
+      /<html([^>]*)>/i,
+      `<html$1><head>${hasViewport ? '' : viewportTag}${previewSpacingStyle}</head>`,
+    );
+  }
+
+  return `<!DOCTYPE html><html><head>${viewportTag}${previewSpacingStyle}</head><body>${cleanedSource}</body></html>`;
+};
+
+const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
+  isOpen,
+  onClose,
+  assunto,
+  htmlOrcamento,
+  orcamentoId,
+  atendimentoId,
+  membroId,
+  onHtmlSaved,
+}) => {
+  const [headerFields, setHeaderFields] = useState<EditorField[]>([]);
+  const [clientFields, setClientFields] = useState<EditorField[]>([]);
+  const [itemsRows, setItemsRows] = useState<OrcamentoItemRow[]>([]);
+  const [observacaoField, setObservacaoField] = useState<ObservacaoField>(
+    buildDefaultObservacaoField(),
+  );
+  const [isHeaderSectionExpanded, setIsHeaderSectionExpanded] = useState(true);
+  const [isClientSectionExpanded, setIsClientSectionExpanded] = useState(true);
+  const [isItemsSectionExpanded, setIsItemsSectionExpanded] = useState(true);
+  const [isObservacaoSectionExpanded, setIsObservacaoSectionExpanded] = useState(true);
+  const [expandedHeaderFieldIds, setExpandedHeaderFieldIds] = useState<string[]>([]);
+  const [expandedClientFieldIds, setExpandedClientFieldIds] = useState<string[]>([]);
+  const [expandedItemRowIds, setExpandedItemRowIds] = useState<string[]>([]);
+  const [isObservacaoFieldExpanded, setIsObservacaoFieldExpanded] = useState(false);
+  const [isSavingHtml, setIsSavingHtml] = useState(false);
+  const [isApprovingOrcamento, setIsApprovingOrcamento] = useState(false);
+  const [isApproveConfirmationOpen, setIsApproveConfirmationOpen] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const extractedFields = extractHeaderSectionFields(htmlOrcamento);
+    const extractedClientFields = extractClientSectionFields(htmlOrcamento);
+    const extractedItemsRows = extractItemsSectionRows(htmlOrcamento);
+    const extractedObservacaoField = extractObservacaoField(htmlOrcamento);
+    setHeaderFields(extractedFields);
+    setClientFields(extractedClientFields);
+    setItemsRows(extractedItemsRows);
+    setObservacaoField(extractedObservacaoField);
+    setExpandedHeaderFieldIds([]);
+    setExpandedClientFieldIds([]);
+    setExpandedItemRowIds([]);
+    setIsObservacaoFieldExpanded(false);
+    setIsApproveConfirmationOpen(false);
+    setActionFeedback(null);
+    setActionError(null);
+  }, [htmlOrcamento, isOpen]);
+
+  const toggleHeaderFieldExpansion = (fieldId: string) => {
+    setExpandedHeaderFieldIds((currentIds) =>
+      currentIds.includes(fieldId)
+        ? currentIds.filter((currentId) => currentId !== fieldId)
+        : [...currentIds, fieldId],
+    );
+  };
+
+  const handleHeaderFieldValueChange = (fieldId: string, value: string) => {
+    setHeaderFields((currentFields) =>
+      currentFields.map((field) => (field.id === fieldId ? { ...field, value } : field)),
+    );
+  };
+
+  const handleHeaderFieldLabelChange = (fieldId: string, label: string) => {
+    setHeaderFields((currentFields) =>
+      currentFields.map((field) => (field.id === fieldId ? { ...field, label } : field)),
+    );
+  };
+
+  const handleRemoveHeaderField = (fieldId: string) => {
+    setHeaderFields((currentFields) => currentFields.filter((field) => field.id !== fieldId));
+  };
+
+  const handleAddHeaderField = () => {
+    const newFieldId = buildFieldId('custom-header');
+
+    setHeaderFields((currentFields) => [
+      ...currentFields,
+      {
+        id: newFieldId,
+        key: `custom_${Date.now()}`,
+        label: 'Novo campo',
+        value: '',
+        isCustom: true,
+      },
+    ]);
+    setExpandedHeaderFieldIds((currentIds) => [...currentIds, newFieldId]);
+  };
+
+  const toggleClientFieldExpansion = (fieldId: string) => {
+    setExpandedClientFieldIds((currentIds) =>
+      currentIds.includes(fieldId)
+        ? currentIds.filter((currentId) => currentId !== fieldId)
+        : [...currentIds, fieldId],
+    );
+  };
+
+  const handleClientFieldValueChange = (fieldId: string, value: string) => {
+    setClientFields((currentFields) =>
+      currentFields.map((field) => (field.id === fieldId ? { ...field, value } : field)),
+    );
+  };
+
+  const handleClientFieldLabelChange = (fieldId: string, label: string) => {
+    setClientFields((currentFields) =>
+      currentFields.map((field) => (field.id === fieldId ? { ...field, label } : field)),
+    );
+  };
+
+  const handleRemoveClientField = (fieldId: string) => {
+    setClientFields((currentFields) => currentFields.filter((field) => field.id !== fieldId));
+    setExpandedClientFieldIds((currentIds) => currentIds.filter((currentId) => currentId !== fieldId));
+  };
+
+  const handleAddClientField = () => {
+    const newFieldId = buildFieldId('custom-client');
+
+    setClientFields((currentFields) => [
+      ...currentFields,
+      {
+        id: newFieldId,
+        key: `custom_${Date.now()}`,
+        label: 'Novo campo',
+        value: '',
+        isCustom: true,
+      },
+    ]);
+    setExpandedClientFieldIds((currentIds) => [...currentIds, newFieldId]);
+  };
+
+  const toggleItemRowExpansion = (rowId: string) => {
+    setExpandedItemRowIds((currentIds) =>
+      currentIds.includes(rowId)
+        ? currentIds.filter((currentId) => currentId !== rowId)
+        : [...currentIds, rowId],
+    );
+  };
+
+  const handleItemRowChange = (
+    rowId: string,
+    fieldKey: keyof Omit<OrcamentoItemRow, 'id'>,
+    fieldValue: string | boolean,
+  ) => {
+    setItemsRows((currentRows) =>
+      currentRows.map((row) => (row.id === rowId ? { ...row, [fieldKey]: fieldValue } : row)),
+    );
+  };
+
+  const handleRemoveItemRow = (rowId: string) => {
+    setItemsRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
+    setExpandedItemRowIds((currentIds) => currentIds.filter((currentId) => currentId !== rowId));
+  };
+
+  const handleAddItemRow = () => {
+    const newItemRow = buildDefaultItemRow();
+    setItemsRows((currentRows) => [...currentRows, newItemRow]);
+    setExpandedItemRowIds((currentIds) => [...currentIds, newItemRow.id]);
+  };
+
+  const handleObservacaoChange = (texto: string) => {
+    setObservacaoField((currentField) => ({ ...currentField, texto }));
+  };
+
+  const editedOrcamentoHtmlSource = useMemo(
+    () =>
+      applyObservacaoToOrcamentoHtml(
+        applyItemsToOrcamentoHtml(
+          applyClientFieldsToOrcamentoHtml(
+            applyHeaderFieldsToOrcamentoHtml(htmlOrcamento, headerFields),
+            clientFields,
+          ),
+          itemsRows,
+        ),
+        observacaoField,
+      ),
+    [clientFields, headerFields, htmlOrcamento, itemsRows, observacaoField],
+  );
+  const orcamentoHtml = useMemo(
+    () => buildOrcamentoPreviewHtml(editedOrcamentoHtmlSource),
+    [editedOrcamentoHtmlSource],
+  );
+  const hasOrcamentoHtml = Boolean(orcamentoHtml);
+  const canSaveHtml = Boolean(orcamentoId && editedOrcamentoHtmlSource.trim()) && !isSavingHtml;
+  const canApproveOrcamento =
+    Boolean(orcamentoId && atendimentoId && membroId) && !isApprovingOrcamento;
+
+  const saveHtmlToDatabase = async () => {
+    if (!orcamentoId || !editedOrcamentoHtmlSource.trim()) {
+      throw new Error('Nao foi possivel identificar o HTML do orcamento para salvar.');
+    }
+
+    const { error } = await supabase
+      .from('sales_orcamentos')
+      .update({ html_orcamento: editedOrcamentoHtmlSource })
+      .eq('orcamento_id', orcamentoId);
+
+    if (error) {
+      throw error;
+    }
+
+    onHtmlSaved(editedOrcamentoHtmlSource);
+  };
+
+  const handleSaveHtml = async () => {
+    setIsSavingHtml(true);
+    setActionError(null);
+    setActionFeedback(null);
+
+    try {
+      await saveHtmlToDatabase();
+      setActionFeedback('Alteracoes salvas com sucesso.');
+    } catch (error: any) {
+      setActionError(error?.message || 'Nao foi possivel salvar as alteracoes.');
+    } finally {
+      setIsSavingHtml(false);
+    }
+  };
+
+  const handleApproveOrcamento = async () => {
+    if (!orcamentoId || !atendimentoId || !membroId) {
+      setActionError('Nao foi possivel identificar os dados necessarios para aprovar o orcamento.');
+      setActionFeedback(null);
+      return;
+    }
+
+    setIsApprovingOrcamento(true);
+    setActionError(null);
+    setActionFeedback(null);
+
+    try {
+      await saveHtmlToDatabase();
+
+      const response = await fetch(APROVACAO_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orcamento_id: orcamentoId,
+          atendimento_id: atendimentoId,
+          membro_id: membroId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Falha ao enviar o orcamento. Status ${response.status}.`);
+      }
+
+      setActionFeedback('ORCAMENTO ENVIADO');
+      setIsApproveConfirmationOpen(false);
+    } catch (error: any) {
+      setActionError(error?.message || 'Nao foi possivel enviar o orcamento.');
+    } finally {
+      setIsApprovingOrcamento(false);
+    }
+  };
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[2px]">
+      <button
+        type="button"
+        aria-label="Fechar visualizacao do orcamento"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+
+      <div className="relative z-10 flex h-screen w-screen flex-col overflow-hidden bg-[#F3F6FA]">
+        <div className="flex items-center justify-between gap-4 border-b border-black/5 bg-white px-6 py-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+              Visualizacao do Orcamento
+            </p>
+            <h2 className="truncate text-lg font-semibold text-gray-900">
+              {assunto || 'Cotacao sem assunto'}
+            </h2>
+            {actionFeedback ? (
+              <p className="mt-2 text-sm font-medium text-emerald-600">{actionFeedback}</p>
+            ) : null}
+            {actionError ? (
+              <p className="mt-2 text-sm font-medium text-red-600">{actionError}</p>
+            ) : null}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSaveHtml}
+              disabled={!canSaveHtml}
+              className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSavingHtml ? 'Salvando...' : 'Salvar Alteracoes'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActionError(null);
+                setActionFeedback(null);
+                setIsApproveConfirmationOpen(true);
+              }}
+              disabled={!canApproveOrcamento}
+              className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isApprovingOrcamento ? 'Aprovando...' : 'Aprovar Orcamento'}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
+              aria-label="Fechar modal do orcamento"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="min-h-0 overflow-y-auto border-b border-black/5 bg-white px-6 py-6 xl:border-b-0 xl:border-r">
+            <div className="space-y-5">
+              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+                <button
+                  type="button"
+                  onClick={() => setIsHeaderSectionExpanded((currentValue) => !currentValue)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                  aria-expanded={isHeaderSectionExpanded}
+                >
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900">Cabecalho</h3>
+                  </div>
+
+                  <div className="ml-4 flex shrink-0 items-center gap-3">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                      {headerFields.length}
+                    </span>
+                    <span className="text-gray-400">
+                      {isHeaderSectionExpanded ? (
+                        <ChevronDown size={18} />
+                      ) : (
+                        <ChevronRight size={18} />
+                      )}
+                    </span>
+                  </div>
+                </button>
+
+                {isHeaderSectionExpanded ? (
+                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                    {headerFields.map((field) => {
+                      const isExpanded = expandedHeaderFieldIds.includes(field.id);
+
+                      return (
+                        <div
+                          key={field.id}
+                          className="rounded-3xl border border-black/10 bg-white"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleHeaderFieldExpansion(field.id)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-gray-900">
+                                {field.label || 'Campo sem nome'}
+                              </p>
+                            </div>
+
+                            <span className="shrink-0 text-gray-400">
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </span>
+                          </button>
+
+                          {isExpanded ? (
+                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                              {field.isCustom ? (
+                                <input
+                                  type="text"
+                                  value={field.label}
+                                  onChange={(event) =>
+                                    handleHeaderFieldLabelChange(field.id, event.target.value)
+                                  }
+                                  placeholder="Nome do campo"
+                                  className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-black/20"
+                                />
+                              ) : null}
+
+                              <input
+                                type="text"
+                                value={field.value}
+                                onChange={(event) =>
+                                  handleHeaderFieldValueChange(field.id, event.target.value)
+                                }
+                                placeholder="Digite o valor"
+                                className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveHeaderField(field.id)}
+                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={handleAddHeaderField}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                    >
+                      Adicionar informacao
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+                <button
+                  type="button"
+                  onClick={() => setIsClientSectionExpanded((currentValue) => !currentValue)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                  aria-expanded={isClientSectionExpanded}
+                >
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900">
+                      Informacoes do Cliente
+                    </h3>
+                  </div>
+
+                  <div className="ml-4 flex shrink-0 items-center gap-3">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                      {clientFields.length}
+                    </span>
+                    <span className="text-gray-400">
+                      {isClientSectionExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </span>
+                  </div>
+                </button>
+
+                {isClientSectionExpanded ? (
+                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                    {clientFields.map((field) => {
+                      const isExpanded = expandedClientFieldIds.includes(field.id);
+
+                      return (
+                        <div
+                          key={field.id}
+                          className="rounded-3xl border border-black/10 bg-white"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleClientFieldExpansion(field.id)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-gray-900">
+                                {field.label}
+                              </p>
+                            </div>
+
+                            <span className="shrink-0 text-gray-400">
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </span>
+                          </button>
+
+                          {isExpanded ? (
+                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                              {field.isCustom ? (
+                                <input
+                                  type="text"
+                                  value={field.label}
+                                  onChange={(event) =>
+                                    handleClientFieldLabelChange(field.id, event.target.value)
+                                  }
+                                  placeholder="Nome do campo"
+                                  className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-black/20"
+                                />
+                              ) : null}
+
+                              <input
+                                type="text"
+                                value={field.value}
+                                onChange={(event) =>
+                                  handleClientFieldValueChange(field.id, event.target.value)
+                                }
+                                placeholder="Digite o valor"
+                                className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveClientField(field.id)}
+                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={handleAddClientField}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                    >
+                      Adicionar informacao
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+                <button
+                  type="button"
+                  onClick={() => setIsItemsSectionExpanded((currentValue) => !currentValue)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                  aria-expanded={isItemsSectionExpanded}
+                >
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900">Itens do Pedido</h3>
+                  </div>
+
+                  <div className="ml-4 flex shrink-0 items-center gap-3">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                      {itemsRows.length}
+                    </span>
+                    <span className="text-gray-400">
+                      {isItemsSectionExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </span>
+                  </div>
+                </button>
+
+                {isItemsSectionExpanded ? (
+                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                    {itemsRows.map((itemRow, index) => {
+                      const isExpanded = expandedItemRowIds.includes(itemRow.id);
+                      const itemLabel = itemRow.nome.trim() || `Item ${index + 1}`;
+
+                      return (
+                        <div
+                          key={itemRow.id}
+                          className="rounded-3xl border border-black/10 bg-white"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleItemRowExpansion(itemRow.id)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-gray-900">
+                                {itemLabel}
+                              </p>
+                            </div>
+
+                            <span className="shrink-0 text-gray-400">
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </span>
+                          </button>
+
+                          {isExpanded ? (
+                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                              {(Object.keys(ITEM_FIELD_LABELS) as Array<
+                                Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>
+                              >).map((fieldKey) => (
+                                <div key={fieldKey} className="space-y-1.5">
+                                  <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">
+                                    {ITEM_FIELD_LABELS[fieldKey]}
+                                  </label>
+
+                                  {fieldKey === 'disponivel' ? (
+                                    <select
+                                      value={itemRow.disponivel ? 'true' : 'false'}
+                                      onChange={(event) =>
+                                        handleItemRowChange(
+                                          itemRow.id,
+                                          fieldKey,
+                                          event.target.value === 'true',
+                                        )
+                                      }
+                                      className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                                    >
+                                      <option value="true">Disponivel</option>
+                                      <option value="false">Indisponivel</option>
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={String(itemRow[fieldKey] || '')}
+                                      onChange={(event) =>
+                                        handleItemRowChange(itemRow.id, fieldKey, event.target.value)
+                                      }
+                                      placeholder="Digite o valor"
+                                      className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                                    />
+                                  )}
+                                </div>
+                              ))}
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(itemRow.id)}
+                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
+                              >
+                                Excluir linha
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={handleAddItemRow}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                    >
+                      Adicionar linha
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+                <button
+                  type="button"
+                  onClick={() => setIsObservacaoSectionExpanded((currentValue) => !currentValue)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                  aria-expanded={isObservacaoSectionExpanded}
+                >
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900">Observacao</h3>
+                  </div>
+
+                  <div className="ml-4 flex shrink-0 items-center gap-3">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                      1
+                    </span>
+                    <span className="text-gray-400">
+                      {isObservacaoSectionExpanded ? (
+                        <ChevronDown size={18} />
+                      ) : (
+                        <ChevronRight size={18} />
+                      )}
+                    </span>
+                  </div>
+                </button>
+
+                {isObservacaoSectionExpanded ? (
+                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                    <div className="rounded-3xl border border-black/10 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setIsObservacaoFieldExpanded((currentValue) => !currentValue)}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                        aria-expanded={isObservacaoFieldExpanded}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-gray-900">Texto</p>
+                        </div>
+
+                        <span className="shrink-0 text-gray-400">
+                          {isObservacaoFieldExpanded ? (
+                            <ChevronDown size={18} />
+                          ) : (
+                            <ChevronRight size={18} />
+                          )}
+                        </span>
+                      </button>
+
+                      {isObservacaoFieldExpanded ? (
+                        <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                          <textarea
+                            value={observacaoField.texto}
+                            onChange={(event) => handleObservacaoChange(event.target.value)}
+                            rows={6}
+                            placeholder="Digite o texto da observacao"
+                            className="w-full resize-y rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </aside>
+
+          <section className="min-h-0 overflow-auto bg-[#F7F8FA] p-5 pb-8">
+            {hasOrcamentoHtml ? (
+              <div className="flex min-h-full w-full overflow-auto rounded-[24px] border border-black/10 bg-white p-6 pb-10">
+                <div className="mx-auto flex w-full min-w-[860px] max-w-[860px] justify-center pb-8">
+                  <iframe
+                    title="Visualizacao do orcamento"
+                    srcDoc={orcamentoHtml}
+                    className="h-[1160px] w-[820px] flex-none border border-black/10 bg-white"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-black/10 bg-white px-6 text-center">
+                <p className="text-sm font-medium text-gray-500">
+                  Nenhum HTML de orcamento foi encontrado para esta cotacao.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {isApproveConfirmationOpen ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 px-4">
+          <div className="w-full max-w-md rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Aprovar Orcamento</h3>
+              <p className="mt-3 text-sm leading-6 text-gray-600">
+                Tem certeza que deseja aprovar este orcamento? O e-mail sera enviado para o
+                cliente.
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsApproveConfirmationOpen(false)}
+                className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+              >
+                Nao
+              </button>
+
+              <button
+                type="button"
+                onClick={handleApproveOrcamento}
+                disabled={isApprovingOrcamento}
+                className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isApprovingOrcamento ? 'Enviando...' : 'Sim'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+export default OrcamentoEditorModal;
