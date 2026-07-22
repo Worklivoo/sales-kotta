@@ -105,6 +105,7 @@ const generalShortcutItems = [
 ] as const;
 
 const SHOW_TERMS_SHORTCUT = false;
+const SHOW_USER_PLAN_SECTION = false;
 
 const QUOTE_RULE_LEVEL_OPTIONS: QuoteRuleLevel[] = ['OBRIGATORIO', 'DESEJAVEL'];
 const SCRAPPER_TYPE_OPTIONS: ScrapperType[] = ['API', 'XML', 'HTML', 'PLANILHA', 'SITE'];
@@ -1142,7 +1143,7 @@ const GeralTab: React.FC = () => {
             </div>
           </div>
 
-          {isAdminMember ? (
+          {isAdminMember && SHOW_USER_PLAN_SECTION ? (
             <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">

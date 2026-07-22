@@ -665,7 +665,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                   type="button"
                   onClick={goBackToCotacoes}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
-                  aria-label="Voltar para cotacoes"
+                  aria-label="Voltar para cotações"
                 >
                   <ArrowLeft size={18} />
                 </button>
@@ -675,7 +675,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                     {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
                   </span>
                   <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-                    {cotacao.assunto || 'Cotacao sem assunto'}
+                    {cotacao.assunto || 'Cotação sem assunto'}
                   </h1>
                 </div>
               </div>
@@ -683,7 +683,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
               {shouldShowPdfButton ? (
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                    Aprovacao Pendente
+                    Aprovação Pendente
                   </span>
                   {hasOrcamentoHtml ? (
                     <button
@@ -746,14 +746,14 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-gray-500">Data de Criacao</p>
+                    <p className="text-xs font-medium text-gray-500">Data de Criação</p>
                     <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
                       {formatDateTime(cotacao.created_at)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-gray-500">Responsavel</p>
+                    <p className="text-xs font-medium text-gray-500">Responsável</p>
                     <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
                       {responsibleName}
                     </p>
@@ -886,7 +886,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                 ) : (
                   <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-black/10 bg-white px-4 text-center">
                     <p className="text-xs font-medium text-gray-400">
-                      Nenhuma mensagem vinculada a esta cotacao.
+                      Nenhuma mensagem vinculada a esta cotação.
                     </p>
                   </div>
                 )}

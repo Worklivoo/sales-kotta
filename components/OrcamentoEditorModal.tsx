@@ -39,28 +39,12 @@ interface ObservacaoField {
   texto: string;
 }
 
-const HEADER_FIELD_ORDER = [
-  'empresa_nome',
-  'empresa_cnpj',
-  'empresa_endereco',
-  'empresa_email',
-  'empresa_telefone',
-] as const;
-
-const HEADER_FIELD_LABELS: Record<(typeof HEADER_FIELD_ORDER)[number], string> = {
-  empresa_nome: 'Nome da empresa',
-  empresa_cnpj: 'CNPJ',
-  empresa_endereco: 'Endereco',
-  empresa_email: 'Email',
-  empresa_telefone: 'Telefone',
-};
-
 const CLIENT_FIELD_ORDER = ['razao_social', 'cnpj_cpf', 'endereco', 'email', 'telefone'] as const;
 
 const CLIENT_FIELD_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
-  razao_social: 'Razao Social',
+  razao_social: 'Razão Social',
   cnpj_cpf: 'CNPJ/CPF',
-  endereco: 'Endereco',
+  endereco: 'Endereço',
   email: 'Email',
   telefone: 'Telefone',
 };
@@ -80,11 +64,11 @@ const ITEM_FIELD_LABELS: Record<Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>
   nome: 'Nome',
   quantidade: 'Quantidade',
   sku: 'SKU',
-  descricao: 'Descricao',
+  descricao: 'Descrição',
   ncm: 'NCM',
-  valorUnitario: 'Valor Unitario',
+  valorUnitario: 'Valor Unitário',
   valorTotal: 'Valor Total',
-  disponivel: 'Disponivel',
+  disponivel: 'Disponível',
 };
 
 const normalizeEmbeddedAssetUrl = (value: string | null) => {
@@ -150,14 +134,6 @@ const serializeHtmlDocument = (documentNode: Document) => {
   return `${doctype}\n${documentNode.documentElement.outerHTML}`;
 };
 
-const buildDefaultHeaderFields = () =>
-  HEADER_FIELD_ORDER.map((key) => ({
-    id: buildFieldId(key),
-    key,
-    label: HEADER_FIELD_LABELS[key],
-    value: '',
-  })) satisfies EditorField[];
-
 const buildDefaultClientFields = () =>
   CLIENT_FIELD_ORDER.map((key) => ({
     id: buildFieldId(key),
@@ -184,68 +160,6 @@ const buildDefaultObservacaoField = () =>
     id: buildFieldId('observacao'),
     texto: '',
   }) satisfies ObservacaoField;
-
-const extractHeaderSectionFields = (value: string | null) => {
-  const defaultFields = buildDefaultHeaderFields();
-
-  if (!value) {
-    return defaultFields;
-  }
-
-  const extractedValues = new Map<string, string>();
-  const companyMatch = value.match(/<div class=["']header-empresa["'][^>]*>([\s\S]*?)<\/div>/i);
-  const companyHtml = companyMatch?.[1] || '';
-  const companyNameMatch = companyHtml.match(/<strong>([\s\S]*?)<\/strong>/i);
-  const companyName = decodeInlineHtmlText(companyNameMatch?.[1] || '');
-
-  if (companyName) {
-    extractedValues.set('empresa_nome', companyName);
-  }
-
-  const companyRemainder = companyHtml
-    .replace(/<strong>[\s\S]*?<\/strong>/i, '')
-    .replace(/^\s*<br\s*\/?>/i, '');
-  const companyLines = companyRemainder
-    .split(/<br\s*\/?>/i)
-    .map((line) => decodeInlineHtmlText(line))
-    .filter(Boolean);
-
-  if (companyLines[0]) {
-    extractedValues.set('empresa_cnpj', companyLines[0].replace(/^CNPJ:\s*/i, '').trim());
-  }
-
-  if (companyLines[1]) {
-    extractedValues.set('empresa_endereco', companyLines[1]);
-  }
-
-  if (companyLines[2]) {
-    extractedValues.set('empresa_email', companyLines[2]);
-  }
-
-  if (companyLines[3]) {
-    extractedValues.set('empresa_telefone', companyLines[3]);
-  }
-
-  const dataEmissaoMatch = value.match(
-    /<p[^>]*>\s*Data de emiss[aã]o:\s*([\s\S]*?)<\/p>/i,
-  );
-  const atendimentoIdMatch = value.match(
-    /<p[^>]*class=["']atendimento-id["'][^>]*>\s*N[ºo]\s*([\s\S]*?)<\/p>/i,
-  );
-
-  if (dataEmissaoMatch?.[1]) {
-    extractedValues.set('data_emissao', decodeInlineHtmlText(dataEmissaoMatch[1]));
-  }
-
-  if (atendimentoIdMatch?.[1]) {
-    extractedValues.set('atendimento_id', decodeInlineHtmlText(atendimentoIdMatch[1]));
-  }
-
-  return defaultFields.map((field) => ({
-    ...field,
-    value: extractedValues.get(field.key) || '',
-  }));
-};
 
 const extractClientSectionFields = (value: string | null) => {
   const defaultFields = buildDefaultClientFields();
@@ -341,88 +255,6 @@ const extractObservacaoField = (value: string | null) => {
     ...defaultField,
     texto: decodeInlineHtmlText(observacaoParagraph?.textContent || ''),
   };
-};
-
-const applyHeaderFieldsToOrcamentoHtml = (value: string | null, fields: EditorField[]) => {
-  if (!value || fields.length === 0) {
-    return value || '';
-  }
-
-  const fieldMap = new Map(fields.map((field) => [field.key, field]));
-  const customFields = fields.filter(
-    (field) => field.isCustom && (field.label.trim() || field.value.trim()),
-  );
-
-  const companyLines: string[] = [];
-  const companyName = fieldMap.get('empresa_nome')?.value.trim() || '';
-
-  if (companyName) {
-    companyLines.push(`<strong>${escapeHtmlValue(companyName)}</strong>`);
-  }
-
-  const companyFieldDefinitions = [
-    { key: 'empresa_cnpj', prefix: 'CNPJ: ' },
-    { key: 'empresa_endereco', prefix: '' },
-    { key: 'empresa_email', prefix: '' },
-    { key: 'empresa_telefone', prefix: '' },
-  ] as const;
-
-  companyFieldDefinitions.forEach(({ key, prefix }) => {
-    const fieldValue = fieldMap.get(key)?.value.trim() || '';
-
-    if (fieldValue) {
-      companyLines.push(`${prefix}${escapeHtmlValue(fieldValue)}`);
-    }
-  });
-
-  customFields.forEach((field) => {
-    const fieldValue = field.value.trim();
-
-    if (!fieldValue) {
-      return;
-    }
-
-    companyLines.push(escapeHtmlValue(fieldValue));
-  });
-
-  const [companyFirstLine, ...companyRemainingLines] = companyLines;
-  const companyContent = [
-    companyFirstLine || '',
-    companyRemainingLines.length > 0 ? companyRemainingLines.join('<br>\n       ') : '',
-  ]
-    .filter(Boolean)
-    .join('\n       ');
-  const companyBlock = `<div class="header-empresa">
-       ${companyContent}
-     </div>`;
-
-  const orcamentoLines = ['<h1>ORÇAMENTO</h1>'];
-  const dataEmissaoMatch = value.match(
-    /<p[^>]*>\s*Data de emiss[aã]o:\s*([\s\S]*?)<\/p>/i,
-  );
-  const atendimentoIdMatch = value.match(
-    /<p[^>]*class=["']atendimento-id["'][^>]*>\s*N[ºo]\s*([\s\S]*?)<\/p>/i,
-  );
-  const dataEmissao = decodeInlineHtmlText(dataEmissaoMatch?.[1] || '');
-  const atendimentoId = decodeInlineHtmlText(atendimentoIdMatch?.[1] || '');
-
-  if (dataEmissao) {
-    orcamentoLines.push(`<p>Data de emissão: ${escapeHtmlValue(dataEmissao)}</p>`);
-  }
-
-  if (atendimentoId) {
-    orcamentoLines.push(
-      `<p class="atendimento-id">Nº ${escapeHtmlValue(atendimentoId)}</p>`,
-    );
-  }
-
-  const orcamentoBlock = `<div class="header-orcamento">
-       ${orcamentoLines.join('\n       ')}
-     </div>`;
-
-  return value
-    .replace(/<div class=["']header-empresa["'][^>]*>[\s\S]*?<\/div>/i, companyBlock)
-    .replace(/<div class=["']header-orcamento["'][^>]*>[\s\S]*?<\/div>/i, orcamentoBlock);
 };
 
 const applyClientFieldsToOrcamentoHtml = (value: string | null, fields: EditorField[]) => {
@@ -565,17 +397,14 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   membroId,
   onHtmlSaved,
 }) => {
-  const [headerFields, setHeaderFields] = useState<EditorField[]>([]);
   const [clientFields, setClientFields] = useState<EditorField[]>([]);
   const [itemsRows, setItemsRows] = useState<OrcamentoItemRow[]>([]);
   const [observacaoField, setObservacaoField] = useState<ObservacaoField>(
     buildDefaultObservacaoField(),
   );
-  const [isHeaderSectionExpanded, setIsHeaderSectionExpanded] = useState(true);
   const [isClientSectionExpanded, setIsClientSectionExpanded] = useState(true);
   const [isItemsSectionExpanded, setIsItemsSectionExpanded] = useState(true);
   const [isObservacaoSectionExpanded, setIsObservacaoSectionExpanded] = useState(true);
-  const [expandedHeaderFieldIds, setExpandedHeaderFieldIds] = useState<string[]>([]);
   const [expandedClientFieldIds, setExpandedClientFieldIds] = useState<string[]>([]);
   const [expandedItemRowIds, setExpandedItemRowIds] = useState<string[]>([]);
   const [isObservacaoFieldExpanded, setIsObservacaoFieldExpanded] = useState(false);
@@ -590,15 +419,12 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       return;
     }
 
-    const extractedFields = extractHeaderSectionFields(htmlOrcamento);
     const extractedClientFields = extractClientSectionFields(htmlOrcamento);
     const extractedItemsRows = extractItemsSectionRows(htmlOrcamento);
     const extractedObservacaoField = extractObservacaoField(htmlOrcamento);
-    setHeaderFields(extractedFields);
     setClientFields(extractedClientFields);
     setItemsRows(extractedItemsRows);
     setObservacaoField(extractedObservacaoField);
-    setExpandedHeaderFieldIds([]);
     setExpandedClientFieldIds([]);
     setExpandedItemRowIds([]);
     setIsObservacaoFieldExpanded(false);
@@ -606,46 +432,6 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
     setActionFeedback(null);
     setActionError(null);
   }, [htmlOrcamento, isOpen]);
-
-  const toggleHeaderFieldExpansion = (fieldId: string) => {
-    setExpandedHeaderFieldIds((currentIds) =>
-      currentIds.includes(fieldId)
-        ? currentIds.filter((currentId) => currentId !== fieldId)
-        : [...currentIds, fieldId],
-    );
-  };
-
-  const handleHeaderFieldValueChange = (fieldId: string, value: string) => {
-    setHeaderFields((currentFields) =>
-      currentFields.map((field) => (field.id === fieldId ? { ...field, value } : field)),
-    );
-  };
-
-  const handleHeaderFieldLabelChange = (fieldId: string, label: string) => {
-    setHeaderFields((currentFields) =>
-      currentFields.map((field) => (field.id === fieldId ? { ...field, label } : field)),
-    );
-  };
-
-  const handleRemoveHeaderField = (fieldId: string) => {
-    setHeaderFields((currentFields) => currentFields.filter((field) => field.id !== fieldId));
-  };
-
-  const handleAddHeaderField = () => {
-    const newFieldId = buildFieldId('custom-header');
-
-    setHeaderFields((currentFields) => [
-      ...currentFields,
-      {
-        id: newFieldId,
-        key: `custom_${Date.now()}`,
-        label: 'Novo campo',
-        value: '',
-        isCustom: true,
-      },
-    ]);
-    setExpandedHeaderFieldIds((currentIds) => [...currentIds, newFieldId]);
-  };
 
   const toggleClientFieldExpansion = (fieldId: string) => {
     setExpandedClientFieldIds((currentIds) =>
@@ -725,15 +511,12 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
     () =>
       applyObservacaoToOrcamentoHtml(
         applyItemsToOrcamentoHtml(
-          applyClientFieldsToOrcamentoHtml(
-            applyHeaderFieldsToOrcamentoHtml(htmlOrcamento, headerFields),
-            clientFields,
-          ),
+          applyClientFieldsToOrcamentoHtml(htmlOrcamento, clientFields),
           itemsRows,
         ),
         observacaoField,
       ),
-    [clientFields, headerFields, htmlOrcamento, itemsRows, observacaoField],
+    [clientFields, htmlOrcamento, itemsRows, observacaoField],
   );
   const orcamentoHtml = useMemo(
     () => buildOrcamentoPreviewHtml(editedOrcamentoHtmlSource),
@@ -746,7 +529,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
 
   const saveHtmlToDatabase = async () => {
     if (!orcamentoId || !editedOrcamentoHtmlSource.trim()) {
-      throw new Error('Nao foi possivel identificar o HTML do orcamento para salvar.');
+      throw new Error('Não foi possível identificar o HTML do orçamento para salvar.');
     }
 
     const { error } = await supabase
@@ -768,9 +551,9 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
 
     try {
       await saveHtmlToDatabase();
-      setActionFeedback('Alteracoes salvas com sucesso.');
+      setActionFeedback('Alterações salvas com sucesso.');
     } catch (error: any) {
-      setActionError(error?.message || 'Nao foi possivel salvar as alteracoes.');
+      setActionError(error?.message || 'Não foi possível salvar as alterações.');
     } finally {
       setIsSavingHtml(false);
     }
@@ -778,11 +561,12 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
 
   const handleApproveOrcamento = async () => {
     if (!orcamentoId || !atendimentoId || !membroId) {
-      setActionError('Nao foi possivel identificar os dados necessarios para aprovar o orcamento.');
+      setActionError('Não foi possível identificar os dados necessários para aprovar o orçamento.');
       setActionFeedback(null);
       return;
     }
 
+    let shouldReloadPage = false;
     setIsApprovingOrcamento(true);
     setActionError(null);
     setActionFeedback(null);
@@ -803,15 +587,18 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error(`Falha ao enviar o orcamento. Status ${response.status}.`);
+        throw new Error(`Falha ao enviar o orçamento. Status ${response.status}.`);
       }
 
-      setActionFeedback('ORCAMENTO ENVIADO');
-      setIsApproveConfirmationOpen(false);
+      shouldReloadPage = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      window.location.reload();
     } catch (error: any) {
-      setActionError(error?.message || 'Nao foi possivel enviar o orcamento.');
+      setActionError(error?.message || 'Não foi possível enviar o orçamento.');
     } finally {
-      setIsApprovingOrcamento(false);
+      if (!shouldReloadPage) {
+        setIsApprovingOrcamento(false);
+      }
     }
   };
 
@@ -832,10 +619,10 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         <div className="flex items-center justify-between gap-4 border-b border-black/5 bg-white px-6 py-5">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-              Visualizacao do Orcamento
+              Visualização do Orçamento
             </p>
             <h2 className="truncate text-lg font-semibold text-gray-900">
-              {assunto || 'Cotacao sem assunto'}
+              {assunto || 'Cotação sem assunto'}
             </h2>
             {actionFeedback ? (
               <p className="mt-2 text-sm font-medium text-emerald-600">{actionFeedback}</p>
@@ -852,7 +639,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
               disabled={!canSaveHtml}
               className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSavingHtml ? 'Salvando...' : 'Salvar Alteracoes'}
+              {isSavingHtml ? 'Salvando...' : 'Salvar Alterações'}
             </button>
 
             <button
@@ -863,16 +650,16 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 setIsApproveConfirmationOpen(true);
               }}
               disabled={!canApproveOrcamento}
-              className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#dce86a] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isApprovingOrcamento ? 'Aprovando...' : 'Aprovar Orcamento'}
+              {isApprovingOrcamento ? 'Aprovando...' : 'Aprovar e Enviar'}
             </button>
 
             <button
               type="button"
               onClick={onClose}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
-              aria-label="Fechar modal do orcamento"
+              aria-label="Fechar modal do orçamento"
             >
               <X size={18} />
             </button>
@@ -885,113 +672,13 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
               <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
                 <button
                   type="button"
-                  onClick={() => setIsHeaderSectionExpanded((currentValue) => !currentValue)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
-                  aria-expanded={isHeaderSectionExpanded}
-                >
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900">Cabecalho</h3>
-                  </div>
-
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-                      {headerFields.length}
-                    </span>
-                    <span className="text-gray-400">
-                      {isHeaderSectionExpanded ? (
-                        <ChevronDown size={18} />
-                      ) : (
-                        <ChevronRight size={18} />
-                      )}
-                    </span>
-                  </div>
-                </button>
-
-                {isHeaderSectionExpanded ? (
-                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
-                    {headerFields.map((field) => {
-                      const isExpanded = expandedHeaderFieldIds.includes(field.id);
-
-                      return (
-                        <div
-                          key={field.id}
-                          className="rounded-3xl border border-black/10 bg-white"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => toggleHeaderFieldExpansion(field.id)}
-                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
-                            aria-expanded={isExpanded}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-gray-900">
-                                {field.label || 'Campo sem nome'}
-                              </p>
-                            </div>
-
-                            <span className="shrink-0 text-gray-400">
-                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                            </span>
-                          </button>
-
-                          {isExpanded ? (
-                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
-                              {field.isCustom ? (
-                                <input
-                                  type="text"
-                                  value={field.label}
-                                  onChange={(event) =>
-                                    handleHeaderFieldLabelChange(field.id, event.target.value)
-                                  }
-                                  placeholder="Nome do campo"
-                                  className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-black/20"
-                                />
-                              ) : null}
-
-                              <input
-                                type="text"
-                                value={field.value}
-                                onChange={(event) =>
-                                  handleHeaderFieldValueChange(field.id, event.target.value)
-                                }
-                                placeholder="Digite o valor"
-                                className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
-                              />
-
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveHeaderField(field.id)}
-                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
-                              >
-                                Excluir
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-
-                    <button
-                      type="button"
-                      onClick={handleAddHeaderField}
-                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
-                    >
-                      Adicionar informacao
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
-                <button
-                  type="button"
                   onClick={() => setIsClientSectionExpanded((currentValue) => !currentValue)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
                   aria-expanded={isClientSectionExpanded}
                 >
                   <div className="min-w-0">
                     <h3 className="text-base font-semibold text-gray-900">
-                      Informacoes do Cliente
+                      Informações do Cliente
                     </h3>
                   </div>
 
@@ -1074,7 +761,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                       onClick={handleAddClientField}
                       className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
                     >
-                      Adicionar informacao
+                      Adicionar informação
                     </button>
                   </div>
                 ) : null}
@@ -1151,8 +838,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                                       }
                                       className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
                                     >
-                                      <option value="true">Disponivel</option>
-                                      <option value="false">Indisponivel</option>
+                                      <option value="true">Disponível</option>
+                                      <option value="false">Indisponível</option>
                                     </select>
                                   ) : (
                                     <input
@@ -1200,7 +887,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                   aria-expanded={isObservacaoSectionExpanded}
                 >
                   <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900">Observacao</h3>
+                    <h3 className="text-base font-semibold text-gray-900">Observação</h3>
                   </div>
 
                   <div className="ml-4 flex shrink-0 items-center gap-3">
@@ -1245,7 +932,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                             value={observacaoField.texto}
                             onChange={(event) => handleObservacaoChange(event.target.value)}
                             rows={6}
-                            placeholder="Digite o texto da observacao"
+                            placeholder="Digite o texto da observação"
                             className="w-full resize-y rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
                           />
                         </div>
@@ -1262,7 +949,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
               <div className="flex min-h-full w-full overflow-auto rounded-[24px] border border-black/10 bg-white p-6 pb-10">
                 <div className="mx-auto flex w-full min-w-[860px] max-w-[860px] justify-center pb-8">
                   <iframe
-                    title="Visualizacao do orcamento"
+                    title="Visualização do orçamento"
                     srcDoc={orcamentoHtml}
                     className="h-[1160px] w-[820px] flex-none border border-black/10 bg-white"
                     referrerPolicy="no-referrer"
@@ -1272,7 +959,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             ) : (
               <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-black/10 bg-white px-6 text-center">
                 <p className="text-sm font-medium text-gray-500">
-                  Nenhum HTML de orcamento foi encontrado para esta cotacao.
+                  Nenhum HTML de orçamento foi encontrado para esta cotação.
                 </p>
               </div>
             )}
@@ -1281,34 +968,47 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       </div>
 
       {isApproveConfirmationOpen ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 px-4">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/45 px-4">
           <div className="w-full max-w-md rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Aprovar Orcamento</h3>
-              <p className="mt-3 text-sm leading-6 text-gray-600">
-                Tem certeza que deseja aprovar este orcamento? O e-mail sera enviado para o
-                cliente.
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900">Aprovar Orçamento</h3>
+              {isApprovingOrcamento ? (
+                <div className="mt-4 space-y-3">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
+                    <div className="h-full w-1/3 animate-pulse rounded-full bg-[#EBF57D]" />
+                  </div>
+                  <p className="text-sm leading-6 text-gray-600">
+                    Enviando o orçamento. Aguarde alguns segundos enquanto finalizamos o envio.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-gray-600">
+                  Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o
+                  cliente.
+                </p>
+              )}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setIsApproveConfirmationOpen(false)}
-                className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
-              >
-                Nao
-              </button>
+            {!isApprovingOrcamento ? (
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsApproveConfirmationOpen(false)}
+                  className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                >
+                  Não
+                </button>
 
-              <button
-                type="button"
-                onClick={handleApproveOrcamento}
-                disabled={isApprovingOrcamento}
-                className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isApprovingOrcamento ? 'Enviando...' : 'Sim'}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={handleApproveOrcamento}
+                  disabled={isApprovingOrcamento}
+                  className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Sim
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
