@@ -84,6 +84,35 @@ const normalizeEmbeddedAssetUrl = (value: string | null) => {
   return normalizedValue || null;
 };
 
+const normalizeHtmlSource = (value: string | null) => {
+  if (!value) {
+    return '';
+  }
+
+  const normalizedValue = value.replace(/^\uFEFF/, '').trim();
+
+  if (!normalizedValue) {
+    return '';
+  }
+
+  try {
+    const parsedValue = JSON.parse(normalizedValue);
+
+    if (typeof parsedValue === 'string') {
+      return parsedValue.replace(/^\uFEFF/, '').trim();
+    }
+
+    if (Array.isArray(parsedValue)) {
+      const firstHtmlEntry = parsedValue.find((item): item is string => typeof item === 'string');
+      return firstHtmlEntry ? firstHtmlEntry.replace(/^\uFEFF/, '').trim() : normalizedValue;
+    }
+  } catch {
+    // Mantem o valor original quando nao for JSON valido.
+  }
+
+  return normalizedValue;
+};
+
 const buildFieldId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 
 const escapeHtmlValue = (value: string) =>
@@ -124,6 +153,64 @@ const decodeInlineHtmlText = (value: string) => {
   return (documentNode.body.textContent || '').replace(/\u00a0/g, ' ').trim();
 };
 
+const isDashLikeValue = (value: string) => /^[-—–\s]*$/.test(value.replace(/\u00a0/g, ' ').trim());
+
+const ensureCellCount = (documentNode: Document, rowElement: HTMLTableRowElement, count: number) => {
+  const cells = Array.from(rowElement.querySelectorAll('td')) as HTMLTableCellElement[];
+
+  while (cells.length < count) {
+    const newCell = documentNode.createElement('td');
+    rowElement.append(newCell);
+    cells.push(newCell);
+  }
+
+  return cells.slice(0, count);
+};
+
+const setFieldElementContent = (
+  documentNode: Document,
+  fieldElement: HTMLElement,
+  label: string,
+  value: string,
+) => {
+  fieldElement.innerHTML = '';
+
+  const strongElement = documentNode.createElement('strong');
+  strongElement.textContent = label;
+  fieldElement.append(strongElement);
+
+  if (value.trim()) {
+    fieldElement.append(documentNode.createTextNode(` ${value.trim()}`));
+  }
+};
+
+const parseCurrencyValue = (value: string) => {
+  const normalizedValue = value.replace(/\u00a0/g, ' ').trim();
+
+  if (!normalizedValue || isDashLikeValue(normalizedValue)) {
+    return null;
+  }
+
+  const digitsOnlyValue = normalizedValue.replace(/[^\d,.-]/g, '').trim();
+
+  if (!digitsOnlyValue) {
+    return null;
+  }
+
+  const normalizedNumber = digitsOnlyValue.includes(',')
+    ? digitsOnlyValue.replace(/\./g, '').replace(',', '.')
+    : digitsOnlyValue;
+  const parsedValue = Number(normalizedNumber);
+
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+};
+
+const formatCurrencyValue = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+
 const serializeHtmlDocument = (documentNode: Document) => {
   const doctype = documentNode.doctype
     ? `<!DOCTYPE ${documentNode.doctype.name}${
@@ -163,13 +250,15 @@ const buildDefaultObservacaoField = () =>
 
 const extractClientSectionFields = (value: string | null) => {
   const defaultFields = buildDefaultClientFields();
+  const htmlSource = normalizeHtmlSource(value);
 
-  if (!value || typeof DOMParser === 'undefined') {
+  if (!htmlSource || typeof DOMParser === 'undefined') {
     return defaultFields;
   }
 
   const extractedValues = new Map<string, string>();
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const customFields: EditorField[] = [];
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const clientSection = documentNode.querySelector('.info-cliente');
 
   if (!clientSection) {
@@ -197,58 +286,89 @@ const extractClientSectionFields = (value: string | null) => {
       extractedValues.set('email', valueOnly);
     } else if (normalizedLabel === 'telefone') {
       extractedValues.set('telefone', valueOnly);
+    } else if (label || valueOnly) {
+      customFields.push({
+        id: buildFieldId('custom-client'),
+        key: `custom_${customFields.length + 1}`,
+        label: label || 'Novo campo',
+        value: valueOnly,
+        isCustom: true,
+      });
     }
   });
 
-  return defaultFields.map((field) => ({
-    ...field,
-    value: extractedValues.get(field.key) || '',
-  }));
+  return [
+    ...defaultFields.map((field) => ({
+      ...field,
+      value: extractedValues.get(field.key) || '',
+    })),
+    ...customFields,
+  ];
 };
 
 const extractItemsSectionRows = (value: string | null) => {
-  if (!value || typeof DOMParser === 'undefined') {
+  const htmlSource = normalizeHtmlSource(value);
+
+  if (!htmlSource || typeof DOMParser === 'undefined') {
     return [] as OrcamentoItemRow[];
   }
 
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const rowElements = Array.from(documentNode.querySelectorAll('table.itens-pedido tbody tr'));
 
   return rowElements.map((rowElement, index) => {
     const cells = Array.from(rowElement.querySelectorAll('td'));
     const descricaoHtml = cells[3]?.innerHTML || '';
     const descricaoText = decodeInlineHtmlText(descricaoHtml || cells[3]?.textContent || '');
-    const nomeText = decodeInlineHtmlText(cells[0]?.innerHTML || cells[0]?.textContent || '');
+    const primeiroCampoHtml = cells[0]?.innerHTML || cells[0]?.textContent || '';
+    const primeiroCampoPartes = primeiroCampoHtml
+      .split(/<br\s*\/?>/i)
+      .map((part) => decodeInlineHtmlText(part))
+      .filter(Boolean);
     const itemId =
       rowElement.getAttribute('data-item-id') ||
       rowElement.getAttribute('data-itemid') ||
       String(index + 1);
+    const skuDaPrimeiraColuna = primeiroCampoPartes
+      .map((part) => {
+        const match = part.match(/^SKU:\s*(.*)$/i);
+        return match ? match[1].trim() : null;
+      })
+      .find((part): part is string => Boolean(part));
+    const isLinhaIndisponivel =
+      rowElement.classList.contains('indisponivel-row') || /indispon/i.test(descricaoText);
+    const nomeText =
+      primeiroCampoPartes.find((part) => !/^SKU:\s*/i.test(part)) ||
+      decodeInlineHtmlText(primeiroCampoHtml);
+    const skuText = decodeInlineHtmlText(cells[2]?.textContent || '');
 
     return {
       id: buildFieldId(`item-row-${index}`),
       itemId,
       nome: nomeText,
       quantidade: decodeInlineHtmlText(cells[1]?.textContent || ''),
-      sku: decodeInlineHtmlText(cells[2]?.textContent || ''),
+      sku:
+        isLinhaIndisponivel && skuDaPrimeiraColuna && isDashLikeValue(skuText)
+          ? skuDaPrimeiraColuna
+          : skuText,
       descricao: descricaoText,
       ncm: decodeInlineHtmlText(cells[4]?.textContent || ''),
       valorUnitario: decodeInlineHtmlText(cells[5]?.textContent || ''),
       valorTotal: decodeInlineHtmlText(cells[6]?.textContent || ''),
-      disponivel:
-        !rowElement.classList.contains('indisponivel-row') &&
-        !/indispon/i.test(descricaoText),
+      disponivel: !isLinhaIndisponivel,
     };
   });
 };
 
 const extractObservacaoField = (value: string | null) => {
   const defaultField = buildDefaultObservacaoField();
+  const htmlSource = normalizeHtmlSource(value);
 
-  if (!value || typeof DOMParser === 'undefined') {
+  if (!htmlSource || typeof DOMParser === 'undefined') {
     return defaultField;
   }
 
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const observacaoParagraph = documentNode.querySelector('.observacoes p');
 
   return {
@@ -258,99 +378,164 @@ const extractObservacaoField = (value: string | null) => {
 };
 
 const applyClientFieldsToOrcamentoHtml = (value: string | null, fields: EditorField[]) => {
-  if (!value || fields.length === 0 || typeof DOMParser === 'undefined') {
-    return value || '';
+  const htmlSource = normalizeHtmlSource(value);
+
+  if (!htmlSource || fields.length === 0 || typeof DOMParser === 'undefined') {
+    return htmlSource;
   }
 
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const clientSection = documentNode.querySelector('.info-cliente');
 
   if (!clientSection) {
-    return value;
+    return htmlSource;
   }
 
+  const existingFieldElements = Array.from(clientSection.querySelectorAll('.campo')) as HTMLElement[];
+  const templateFieldElement = existingFieldElements[0] || documentNode.createElement('div');
   const titleElement = clientSection.querySelector('h3');
-  const rowsHtml = fields
-    .filter((field) => field.label.trim() || field.value.trim())
-    .map((field) => {
-      const fieldValue = field.value.trim();
-      const htmlLabel = field.isCustom
-        ? `${field.label.trim() || 'Novo campo'}:`
-        : CLIENT_HTML_LABELS[field.key as keyof typeof CLIENT_HTML_LABELS] || `${field.label.trim()}:`;
+  const desiredFields = fields.filter((field) => field.label.trim() || field.value.trim());
+  let insertionAnchor: ChildNode | null = titleElement;
 
-      return `<div class="campo"><strong>${escapeHtmlValue(htmlLabel)}</strong>${fieldValue ? ` ${escapeHtmlValue(fieldValue)}` : ''}</div>`;
-    })
-    .join('');
+  existingFieldElements.forEach((fieldElement) => fieldElement.remove());
 
-  clientSection.innerHTML = `${titleElement ? titleElement.outerHTML : '<h3>Informações do cliente:</h3>'}${rowsHtml}`;
+  desiredFields.forEach((field, index) => {
+    const fieldElement = (
+      existingFieldElements[index]?.cloneNode(true) ||
+      templateFieldElement.cloneNode(true)
+    ) as HTMLElement;
+
+    fieldElement.className = fieldElement.className || 'campo';
+
+    const htmlLabel = field.isCustom
+      ? `${field.label.trim() || 'Novo campo'}:`
+      : CLIENT_HTML_LABELS[field.key as keyof typeof CLIENT_HTML_LABELS] || `${field.label.trim()}:`;
+
+    setFieldElementContent(documentNode, fieldElement, htmlLabel, field.value);
+
+    if (insertionAnchor?.parentNode === clientSection) {
+      const spacingNode = documentNode.createTextNode('\n    ');
+      insertionAnchor.parentNode.insertBefore(spacingNode, insertionAnchor.nextSibling);
+      insertionAnchor.parentNode.insertBefore(fieldElement, spacingNode.nextSibling);
+      insertionAnchor = fieldElement;
+    } else {
+      clientSection.append(fieldElement);
+      insertionAnchor = fieldElement;
+    }
+  });
 
   return serializeHtmlDocument(documentNode);
 };
 
 const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow[]) => {
-  if (!value || typeof DOMParser === 'undefined') {
-    return value || '';
+  const htmlSource = normalizeHtmlSource(value);
+
+  if (!htmlSource || typeof DOMParser === 'undefined') {
+    return htmlSource;
   }
 
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const tbodyElement = documentNode.querySelector('table.itens-pedido tbody');
 
   if (!tbodyElement) {
-    return value;
+    return htmlSource;
   }
 
-  const rowsHtml = items
-    .map((item) => {
-      const isDisponivel = item.disponivel;
-      const descricaoCell = isDisponivel
-        ? escapeHtmlValue(item.descricao)
-        : `<span class="badge-indisponivel">${escapeHtmlValue(item.descricao || 'Indisponível')}</span>`;
+  const existingRows = Array.from(tbodyElement.querySelectorAll('tr')) as HTMLTableRowElement[];
+  const fallbackRowTemplate =
+    existingRows[0] || (documentNode.createElement('tr') as HTMLTableRowElement);
+  const newRowsFragment = documentNode.createDocumentFragment();
 
-      return `<tr${isDisponivel ? '' : ' class="indisponivel-row"'} data-item-id="${escapeHtmlValue(
-        item.itemId,
-      )}">
-         <td>${escapeHtmlValue(item.nome)}</td>
-         <td>${escapeHtmlValue(item.quantidade)}</td>
-         <td>${escapeHtmlValue(item.sku)}</td>
-         <td>${descricaoCell}</td>
-         <td>${escapeHtmlValue(item.ncm)}</td>
-         <td style="text-align: right;">${escapeHtmlValue(item.valorUnitario)}</td>
-         <td style="text-align: right; font-weight: bold;">${escapeHtmlValue(item.valorTotal)}</td>
-       </tr>`;
-    })
-    .join('');
+  items.forEach((item, index) => {
+    const sourceRow =
+      existingRows[index] ||
+      existingRows.find((row) =>
+        item.disponivel ? !row.classList.contains('indisponivel-row') : row.classList.contains('indisponivel-row'),
+      ) ||
+      fallbackRowTemplate;
+    const rowElement = sourceRow.cloneNode(true) as HTMLTableRowElement;
+    const cells = ensureCellCount(documentNode, rowElement, 7);
 
-  tbodyElement.innerHTML = rowsHtml;
+    rowElement.setAttribute('data-item-id', item.itemId);
+    rowElement.classList.toggle('indisponivel-row', !item.disponivel);
+
+    if (item.disponivel) {
+      cells[0].innerHTML = escapeHtmlValue(item.nome);
+      cells[2].textContent = item.sku;
+      cells[3].textContent = item.descricao;
+    } else {
+      const nomeBase = item.nome.trim() || 'Item';
+      const skuBase = item.sku.trim() || '—';
+      cells[0].innerHTML = `${escapeHtmlValue(nomeBase)}<br>SKU: ${escapeHtmlValue(skuBase)}`;
+      cells[2].textContent = '—';
+      cells[3].innerHTML = `<span class="badge-indisponivel">${escapeHtmlValue(
+        item.descricao.trim() || 'Indisponível',
+      )}</span>`;
+    }
+
+    cells[1].textContent = item.quantidade;
+    cells[4].textContent = item.ncm;
+    cells[5].textContent = item.valorUnitario;
+    cells[6].textContent = item.valorTotal;
+
+    newRowsFragment.append(rowElement);
+  });
+
+  tbodyElement.innerHTML = '';
+  tbodyElement.append(newRowsFragment);
+
+  const totalCell = documentNode.querySelector('table.itens-pedido tfoot td:last-child');
+  const totalValue = items.reduce<number | null>((currentTotal, item) => {
+    const parsedValue = parseCurrencyValue(item.valorTotal);
+
+    if (parsedValue === null) {
+      return currentTotal;
+    }
+
+    return (currentTotal || 0) + parsedValue;
+  }, null);
+
+  if (totalCell && totalValue !== null) {
+    totalCell.textContent = formatCurrencyValue(totalValue);
+  }
 
   return serializeHtmlDocument(documentNode);
 };
 
 const applyObservacaoToOrcamentoHtml = (value: string | null, observacao: ObservacaoField) => {
-  if (!value || typeof DOMParser === 'undefined') {
-    return value || '';
+  const htmlSource = normalizeHtmlSource(value);
+
+  if (!htmlSource || typeof DOMParser === 'undefined') {
+    return htmlSource;
   }
 
-  const documentNode = new DOMParser().parseFromString(value, 'text/html');
+  const documentNode = new DOMParser().parseFromString(htmlSource, 'text/html');
   const observacoesSection = documentNode.querySelector('.observacoes');
 
   if (!observacoesSection) {
-    return value;
+    return htmlSource;
   }
 
-  const titleElement = observacoesSection.querySelector('h3');
-  observacoesSection.innerHTML = `${
-    titleElement ? titleElement.outerHTML : '<h3>Observações</h3>'
-  }<p>${escapeHtmlValue(observacao.texto.trim())}</p>`;
+  const observacaoParagraph =
+    observacoesSection.querySelector('p') || documentNode.createElement('p');
+
+  observacaoParagraph.textContent = observacao.texto.trim();
+
+  if (!observacaoParagraph.parentElement) {
+    observacoesSection.append(observacaoParagraph);
+  }
 
   return serializeHtmlDocument(documentNode);
 };
 
 const buildOrcamentoPreviewHtml = (value: string | null) => {
-  if (!value) {
+  const htmlSource = normalizeHtmlSource(value);
+
+  if (!htmlSource) {
     return '';
   }
 
-  const normalizedSource = value.replace(/\u0000/g, '').trim();
+  const normalizedSource = htmlSource.replace(/\u0000/g, '').trim();
 
   if (!normalizedSource) {
     return '';

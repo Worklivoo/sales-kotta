@@ -636,8 +636,11 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     );
   }
 
-  const shouldShowPdfButton = cotacao.status === 'AGUARDANDO_APROVACAO';
+  const shouldShowOrcamentoApprovalAction = cotacao.status === 'AGUARDANDO_APROVACAO';
   const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
+  const latestIaMessageId = [...orderedConversationItems]
+    .reverse()
+    .find((message) => message.origem === 'IA')?.id;
 
   return (
     <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
@@ -680,30 +683,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                 </div>
               </div>
 
-              {shouldShowPdfButton ? (
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                    Aprovação Pendente
-                  </span>
-                  {hasOrcamentoHtml ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsOrcamentoModalOpen(true)}
-                      className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-                    >
-                      Visualizar Orçamento
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
-                    >
-                      Visualizar Orçamento
-                    </button>
-                  )}
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -794,14 +773,18 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                 {orderedConversationItems.length > 0 ? (
                   orderedConversationItems.map((message) => {
                     const isExpanded = expandedMessageIds.includes(message.id);
+                    const shouldShowMessageOrcamentoAction =
+                      shouldShowOrcamentoApprovalAction && latestIaMessageId === message.id;
 
                     return (
                       <div
                         key={message.id}
-                        className={`w-full rounded-2xl border border-black/5 bg-white text-left transition-all ${
-                          isExpanded
-                            ? 'px-4 py-4 sm:px-5 sm:py-5'
-                            : 'px-4 py-4 hover:border-black/10 hover:bg-[#FCFCFC]'
+                        className={`w-full rounded-2xl text-left transition-all ${
+                          shouldShowMessageOrcamentoAction
+                            ? 'animate-pulse border border-[#EBF57D] bg-[#EBF57D]/55 px-4 py-4 sm:px-5 sm:py-5'
+                            : isExpanded
+                              ? 'border border-black/5 bg-white px-4 py-4 sm:px-5 sm:py-5'
+                              : 'border border-black/5 bg-white px-4 py-4 hover:border-black/10 hover:bg-[#FCFCFC]'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-4">
@@ -853,7 +836,31 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                                       className={messageHtmlClassName}
                                       dangerouslySetInnerHTML={{ __html: message.corpoHtml }}
                                     />
-                                    {message.anexos.length > 0 ? (
+                                    {shouldShowMessageOrcamentoAction ? (
+                                      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+                                        {hasOrcamentoHtml ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setIsOrcamentoModalOpen(true)}
+                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+                                          >
+                                            Visualizar Orçamento
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
+                                          >
+                                            Visualizar Orçamento
+                                          </button>
+                                        )}
+                                        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+                                          Aprovação Pendente
+                                        </span>
+                                      </div>
+                                    ) : null}
+                                    {!shouldShowMessageOrcamentoAction && message.anexos.length > 0 ? (
                                       <div className="flex flex-wrap gap-2 pt-1">
                                         {message.anexos.map((attachment) => (
                                           <a
@@ -872,9 +879,35 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                                     ) : null}
                                   </div>
                                 ) : (
-                                  <p className="mt-3 line-clamp-1 text-sm leading-6 text-gray-500">
-                                    {buildSummary(message.corpoTexto)}
-                                  </p>
+                                  <div className="mt-3 space-y-3">
+                                    <p className="line-clamp-1 text-sm leading-6 text-gray-500">
+                                      {buildSummary(message.corpoTexto)}
+                                    </p>
+                                    {shouldShowMessageOrcamentoAction ? (
+                                      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+                                        {hasOrcamentoHtml ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setIsOrcamentoModalOpen(true)}
+                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+                                          >
+                                            Visualizar Orçamento
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
+                                          >
+                                            Visualizar Orçamento
+                                          </button>
+                                        )}
+                                        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+                                          Aprovação Pendente
+                                        </span>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 )}
                               </div>
                             </div>
