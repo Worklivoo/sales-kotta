@@ -278,8 +278,8 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
   }, [cotacoes, endDate, search, selectedMember, startDate]);
 
   return (
-    <div className="h-full w-full overflow-hidden">
-      <div className="flex h-full flex-col gap-4">
+    <div className="h-full min-h-0 w-full">
+      <div className="flex h-full min-h-0 flex-col gap-4">
         <section className="rounded-2xl border border-black/5 bg-white px-5 py-4 shadow-[0_6px_24px_rgba(15,23,42,0.04)] lg:px-6">
           <div className="space-y-1">
             <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
@@ -346,15 +346,15 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           </div>
         </section>
 
-        <section className="min-h-0 flex-1 overflow-hidden">
+        <section className="min-h-0 flex flex-1 flex-col overflow-hidden">
           {loadError ? (
-            <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+            <div className="mb-4 shrink-0 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
               {loadError}
             </div>
           ) : null}
 
-          <div className="h-full overflow-x-auto overflow-y-hidden pb-2">
-            <div className="grid h-full min-w-[1920px] grid-cols-6 gap-4">
+          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-2">
+            <div className="grid h-full min-h-0 min-w-max grid-flow-col auto-cols-[280px] gap-4 pr-2 md:auto-cols-[320px] xl:auto-cols-[340px]">
               {KANBAN_COLUMNS.map((column) => {
                 const columnItems = filteredCotacoes.filter(
                   (cotacao) => cotacao.status === column.key,
@@ -363,9 +363,9 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                 return (
                   <div
                     key={column.key}
-                    className="flex h-full min-h-[560px] min-w-[300px] flex-col rounded-2xl border border-black/5 bg-[#F3F3F3] p-3"
+                    className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-black/5 bg-[#F3F3F3] p-3"
                   >
-                    <div className="mb-3 flex items-center justify-between gap-3 px-1 py-1">
+                    <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1 py-1">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-gray-700">
@@ -384,7 +384,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                       </span>
                     </div>
 
-                    <div className="flex-1 space-y-2 overflow-y-auto">
+                    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-3 pr-1">
                       {isLoading ? (
                         Array.from({ length: 2 }).map((_, index) => (
                           <div

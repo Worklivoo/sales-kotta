@@ -180,11 +180,11 @@ function App() {
       />
       
       <main 
-        className={`flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-3 lg:py-5 transition-all duration-300 ease-in-out w-full ${
+        className={`min-h-0 flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-3 lg:py-5 transition-all duration-300 ease-in-out w-full ${
           isSidebarCollapsed ? 'pl-[120px]' : 'pl-[320px]'
         }`}
       >
-        <div className="h-full w-full transition-all duration-300 ease-in-out">
+        <div className="h-full min-h-0 w-full transition-all duration-300 ease-in-out">
           {currentPath === '/cotacoes' ? (
             <CotacoesPage
               onOpenCotacao={(empresaId, numeroTicket) =>

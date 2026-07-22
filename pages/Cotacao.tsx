@@ -366,6 +366,8 @@ const getAttachmentLabel = (attachment: string) => {
 };
 
 const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
+const APPROVE_ORCAMENTO_WEBHOOK_URL =
+  'https://primary-systec.up.railway.app/webhook/c0b437a3-92f2-4e07-8017-33534099784b';
 
 const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
@@ -377,6 +379,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [isOrcamentoModalOpen, setIsOrcamentoModalOpen] = useState(false);
+  const [isDirectApproveConfirmationOpen, setIsDirectApproveConfirmationOpen] = useState(false);
+  const [isDirectApproving, setIsDirectApproving] = useState(false);
+  const [directApproveError, setDirectApproveError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -570,6 +575,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
         setIsOrcamentoModalOpen(false);
+        setIsDirectApproveConfirmationOpen(false);
+        setIsDirectApproving(false);
+        setDirectApproveError(null);
       } catch (error: any) {
         console.error('Erro ao carregar cotacao:', error);
 
@@ -586,6 +594,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrderedConversationItems([]);
         setExpandedMessageIds([]);
         setIsOrcamentoModalOpen(false);
+        setIsDirectApproveConfirmationOpen(false);
+        setIsDirectApproving(false);
+        setDirectApproveError(null);
         setLoadError(error?.message || 'Nao foi possivel carregar a cotacao.');
       } finally {
         if (isMounted) {
@@ -618,6 +629,40 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     });
   }, [orderedConversationItems]);
 
+  const handleDirectApprove = async () => {
+    if (!orcamentoData?.orcamento_id || !cotacao?.atendimento_id || !cotacao?.membro_id) {
+      setDirectApproveError('Não foi possível identificar os dados necessários para aprovar o orçamento.');
+      return;
+    }
+
+    setIsDirectApproving(true);
+    setDirectApproveError(null);
+
+    try {
+      const response = await fetch(APPROVE_ORCAMENTO_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orcamento_id: orcamentoData.orcamento_id,
+          atendimento_id: cotacao.atendimento_id,
+          membro_id: cotacao.membro_id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Não foi possível enviar o orçamento.');
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      window.location.reload();
+    } catch (error: any) {
+      setDirectApproveError(error?.message || 'Não foi possível aprovar o orçamento.');
+      setIsDirectApproving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -638,12 +683,67 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
   const shouldShowOrcamentoApprovalAction = cotacao.status === 'AGUARDANDO_APROVACAO';
   const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
-  const latestIaMessageId = [...orderedConversationItems]
+  const latestIaMessage = [...orderedConversationItems]
     .reverse()
-    .find((message) => message.origem === 'IA')?.id;
+    .find((message) => message.origem === 'IA');
+  const latestIaMessageId = latestIaMessage?.id;
 
   return (
     <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
+      {isDirectApproveConfirmationOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-[0_28px_80px_rgba(15,23,42,0.24)]">
+            <div className="space-y-3">
+              <h3 className="text-xl font-semibold tracking-tight text-gray-900">
+                Aprovar e enviar
+              </h3>
+              <p className="text-sm leading-6 text-gray-600">
+                Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o cliente.
+              </p>
+              {directApproveError ? (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                  {directApproveError}
+                </div>
+              ) : null}
+            </div>
+
+            {isDirectApproving ? (
+              <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-[24px] border border-black/5 bg-[#FAFAFA] px-6 py-10 text-center">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-black/10 border-t-black" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold tracking-[0.08em] text-gray-900">
+                    ORÇAMENTO ENVIADO
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Aguarde enquanto recarregamos a página.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDirectApproveConfirmationOpen(false);
+                    setDirectApproveError(null);
+                  }}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 bg-white px-5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Não
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDirectApprove}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 bg-[#EBF57D] px-5 text-sm font-semibold text-gray-900 transition-colors hover:bg-[#E3EE61]"
+                >
+                  Sim
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <OrcamentoEditorModal
         isOpen={isOrcamentoModalOpen}
         onClose={() => setIsOrcamentoModalOpen(false)}
@@ -775,6 +875,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                     const isExpanded = expandedMessageIds.includes(message.id);
                     const shouldShowMessageOrcamentoAction =
                       shouldShowOrcamentoApprovalAction && latestIaMessageId === message.id;
+                    const shouldOpenOrcamentoModal =
+                      shouldShowMessageOrcamentoAction && message.anexos.length > 0 && hasOrcamentoHtml;
+                    const shouldShowDirectApproveAction =
+                      shouldShowMessageOrcamentoAction && message.anexos.length === 0;
 
                     return (
                       <div
@@ -838,13 +942,24 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                                     />
                                     {shouldShowMessageOrcamentoAction ? (
                                       <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-                                        {hasOrcamentoHtml ? (
+                                        {shouldOpenOrcamentoModal ? (
                                           <button
                                             type="button"
                                             onClick={() => setIsOrcamentoModalOpen(true)}
                                             className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
                                           >
                                             Visualizar Orçamento
+                                          </button>
+                                        ) : shouldShowDirectApproveAction ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDirectApproveError(null);
+                                              setIsDirectApproveConfirmationOpen(true);
+                                            }}
+                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+                                          >
+                                            Aprovar
                                           </button>
                                         ) : (
                                           <button
@@ -885,13 +1000,24 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                                     </p>
                                     {shouldShowMessageOrcamentoAction ? (
                                       <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-                                        {hasOrcamentoHtml ? (
+                                        {shouldOpenOrcamentoModal ? (
                                           <button
                                             type="button"
                                             onClick={() => setIsOrcamentoModalOpen(true)}
                                             className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
                                           >
                                             Visualizar Orçamento
+                                          </button>
+                                        ) : shouldShowDirectApproveAction ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDirectApproveError(null);
+                                              setIsDirectApproveConfirmationOpen(true);
+                                            }}
+                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+                                          >
+                                            Aprovar
                                           </button>
                                         ) : (
                                           <button
