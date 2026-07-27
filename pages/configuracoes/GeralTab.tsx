@@ -89,6 +89,10 @@ interface CompanyPlanRecord {
   scrapper_body: unknown;
   scrapper_query: unknown;
   scrapper_headers: unknown;
+  cliente_api_link: string | null;
+  cliente_api_body: unknown;
+  cliente_api_query: unknown;
+  cliente_api_header: unknown;
 }
 
 const generalShortcutItems = [
@@ -158,6 +162,14 @@ const createSourceDataForm = (companyData?: CompanyPlanRecord | null): SourceDat
   scrapper_body: formatJsonEditorValue(companyData?.scrapper_body),
   scrapper_query: formatJsonEditorValue(companyData?.scrapper_query),
   scrapper_headers: formatJsonEditorValue(companyData?.scrapper_headers),
+});
+
+const createClientSourceDataForm = (companyData?: CompanyPlanRecord | null): SourceDataFormState => ({
+  scrapper_tipo: 'API',
+  scrapper_link: companyData?.cliente_api_link ?? '',
+  scrapper_body: formatJsonEditorValue(companyData?.cliente_api_body),
+  scrapper_query: formatJsonEditorValue(companyData?.cliente_api_query),
+  scrapper_headers: formatJsonEditorValue(companyData?.cliente_api_header),
 });
 
 const formatMemberStatusLabel = (value: string | null) => {
@@ -353,6 +365,11 @@ const GeralTab: React.FC = () => {
   const [sourceDataForm, setSourceDataForm] = useState<SourceDataFormState>(createSourceDataForm());
   const [sourceDataError, setSourceDataError] = useState<string | null>(null);
   const [isSavingSourceData, setIsSavingSourceData] = useState(false);
+  const [isClientSourceDataModalOpen, setIsClientSourceDataModalOpen] = useState(false);
+  const [clientSourceDataForm, setClientSourceDataForm] =
+    useState<SourceDataFormState>(createClientSourceDataForm());
+  const [clientSourceDataError, setClientSourceDataError] = useState<string | null>(null);
+  const [isSavingClientSourceData, setIsSavingClientSourceData] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -451,7 +468,7 @@ const GeralTab: React.FC = () => {
         const { data, error } = await supabase
           .from('sales_empresa')
           .select(
-            'plano, plano_ciclo, valor_mensal, plano_status, regras_cotacao, scrapper_tipo, scrapper_link, scrapper_body, scrapper_query, scrapper_headers',
+            'plano, plano_ciclo, valor_mensal, plano_status, regras_cotacao, scrapper_tipo, scrapper_link, scrapper_body, scrapper_query, scrapper_headers, cliente_api_link, cliente_api_body, cliente_api_query, cliente_api_header',
           )
           .eq('empresa_id', memberAccount.empresa_id)
           .maybeSingle();
@@ -507,15 +524,19 @@ const GeralTab: React.FC = () => {
   const companySourceType = companyPlan?.scrapper_tipo ?? null;
   const companySourceLink = companyPlan?.scrapper_link?.trim() || '';
   const companySourceStatusLabel = companySourceType ? formatEnumLabel(companySourceType) : '-';
-  const companySourceBody = formatJsonEditorValue(companyPlan?.scrapper_body);
-  const companySourceQuery = formatJsonEditorValue(companyPlan?.scrapper_query);
-  const companySourceHeaders = formatJsonEditorValue(companyPlan?.scrapper_headers);
   const hasCompanySourceConfigured =
     Boolean(companySourceType) ||
     Boolean(companySourceLink) ||
     Boolean(companyPlan?.scrapper_body) ||
     Boolean(companyPlan?.scrapper_query) ||
     Boolean(companyPlan?.scrapper_headers);
+  const companyClientSourceLink = companyPlan?.cliente_api_link?.trim() || '';
+  const hasCompanyClientSourceConfigured =
+    Boolean(companyClientSourceLink) ||
+    Boolean(companyPlan?.cliente_api_body) ||
+    Boolean(companyPlan?.cliente_api_query) ||
+    Boolean(companyPlan?.cliente_api_header);
+  const companyClientSourceStatusLabel = hasCompanyClientSourceConfigured ? 'API' : '-';
   const companyQuoteRules = useMemo(
     () => parseQuoteRules(companyPlan?.regras_cotacao),
     [companyPlan?.regras_cotacao],
@@ -849,6 +870,16 @@ const GeralTab: React.FC = () => {
     setIsSourceDataModalOpen(false);
   };
 
+  const handleOpenClientSourceDataModal = () => {
+    setClientSourceDataForm(createClientSourceDataForm(companyPlan));
+    setClientSourceDataError(null);
+    setIsClientSourceDataModalOpen(true);
+  };
+
+  const handleCloseClientSourceDataModal = () => {
+    setIsClientSourceDataModalOpen(false);
+  };
+
   const handleSelectScrapperType = (type: ScrapperType) => {
     if (type !== 'API') {
       return;
@@ -876,6 +907,23 @@ const GeralTab: React.FC = () => {
         [field]: nextValue,
       }));
       setSourceDataError(null);
+    };
+
+  const handleClientSourceDataInputChange =
+    (
+      field: keyof Pick<
+        SourceDataFormState,
+        'scrapper_link' | 'scrapper_body' | 'scrapper_query' | 'scrapper_headers'
+      >,
+    ) =>
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const nextValue = event.target.value;
+
+      setClientSourceDataForm((current) => ({
+        ...current,
+        [field]: nextValue,
+      }));
+      setClientSourceDataError(null);
     };
 
   const handleSaveSourceData = async () => {
@@ -928,6 +976,60 @@ const GeralTab: React.FC = () => {
       }
     } finally {
       setIsSavingSourceData(false);
+    }
+  };
+
+  const handleSaveClientSourceData = async () => {
+    if (!memberAccount?.empresa_id) {
+      setClientSourceDataError(
+        'Nao foi possivel identificar a empresa para salvar a fonte de dados.',
+      );
+      return;
+    }
+
+    if (clientSourceDataForm.scrapper_tipo !== 'API') {
+      setClientSourceDataError('Selecione a integracao API para configurar a fonte de dados.');
+      return;
+    }
+
+    setIsSavingClientSourceData(true);
+    setClientSourceDataError(null);
+
+    try {
+      const payload = {
+        cliente_api_link: clientSourceDataForm.scrapper_link.trim() || null,
+        cliente_api_body: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_body),
+        cliente_api_query: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_query),
+        cliente_api_header: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_headers),
+      };
+
+      const { error } = await supabase
+        .from('sales_empresa')
+        .update(payload)
+        .eq('empresa_id', memberAccount.empresa_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setCompanyPlan((current) =>
+        current
+          ? {
+              ...current,
+              ...payload,
+            }
+          : current,
+      );
+      setIsClientSourceDataModalOpen(false);
+    } catch (error: any) {
+      console.error('Erro ao salvar fonte de dados de clientes:', error);
+      if (error instanceof SyntaxError) {
+        setClientSourceDataError('Body, Query e Header devem estar em JSON valido.');
+      } else {
+        setClientSourceDataError(error?.message || 'Nao foi possivel salvar a fonte de dados.');
+      }
+    } finally {
+      setIsSavingClientSourceData(false);
     }
   };
 
@@ -1366,7 +1468,7 @@ const GeralTab: React.FC = () => {
                     <Database size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Produtos</h3>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
                       Configure de onde os itens da empresa serao coletados.
                     </p>
@@ -1401,26 +1503,53 @@ const GeralTab: React.FC = () => {
                       {companySourceLink || '-'}
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
+          {isAdminMember ? (
+            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                    <Database size={16} />
+                  </div>
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">Body</p>
-                    <pre className="mt-1 overflow-x-auto rounded-xl bg-[#FAFAFA] px-3 py-2 text-xs leading-5 text-gray-500">
-                      {companySourceBody || '-'}
-                    </pre>
+                    <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Clientes</h3>
+                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                      Configure de onde os itens da empresa serao coletados.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenClientSourceDataModal}
+                  className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                >
+                  Editar
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Configuracao atual</p>
+                    <p className="mt-2 text-sm font-semibold text-gray-900">
+                      {isCompanyPlanLoading
+                        ? 'Carregando...'
+                        : hasCompanyClientSourceConfigured
+                          ? companyClientSourceStatusLabel
+                          : 'Nenhuma fonte configurada'}
+                    </p>
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">Query</p>
-                    <pre className="mt-1 overflow-x-auto rounded-xl bg-[#FAFAFA] px-3 py-2 text-xs leading-5 text-gray-500">
-                      {companySourceQuery || '-'}
-                    </pre>
-                  </div>
-
-                  <div>
-                    <p className="text-[11px] font-medium text-gray-400">Header</p>
-                    <pre className="mt-1 overflow-x-auto rounded-xl bg-[#FAFAFA] px-3 py-2 text-xs leading-5 text-gray-500">
-                      {companySourceHeaders || '-'}
-                    </pre>
+                    <p className="text-[11px] font-medium text-gray-400">URL</p>
+                    <p className="mt-1 break-all text-xs leading-5 text-gray-500">
+                      {companyClientSourceLink || '-'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1449,7 +1578,7 @@ const GeralTab: React.FC = () => {
                     id="fonte-dados-modal-title"
                     className="text-base font-semibold tracking-tight text-gray-900"
                   >
-                    Fonte de Dados
+                    Fonte de Dados - Produtos
                   </h2>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
                     Escolha como os itens da empresa serao coletados. Neste momento, apenas a
@@ -1595,6 +1724,197 @@ const GeralTab: React.FC = () => {
                         value={sourceDataForm.scrapper_headers}
                         onChange={handleSourceDataInputChange('scrapper_headers')}
                         disabled={sourceDataForm.scrapper_tipo !== 'API'}
+                        rows={5}
+                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
+                        placeholder='{"Authorization":"Bearer ..."}'
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isClientSourceDataModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
+          <div
+            className="absolute inset-0"
+            aria-hidden="true"
+            onClick={handleCloseClientSourceDataModal}
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fonte-dados-clientes-modal-title"
+            className="relative z-10 flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-black/5 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/5 px-6 py-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-600">
+                  <Database size={18} />
+                </div>
+                <div>
+                  <h2
+                    id="fonte-dados-clientes-modal-title"
+                    className="text-base font-semibold tracking-tight text-gray-900"
+                  >
+                    Fonte de Dados - Clientes
+                  </h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                    Escolha como os clientes da empresa serao coletados. Neste momento, apenas a
+                    integracao via API esta disponivel para configuracao.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseClientSourceDataModal}
+                  className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveClientSourceData}
+                  disabled={
+                    isSavingClientSourceData || clientSourceDataForm.scrapper_tipo !== 'API'
+                  }
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {isSavingClientSourceData ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
+              <div className="border-b border-black/5 bg-[#FCFCFC] px-6 py-5 lg:border-b-0 lg:border-r">
+                <p className="text-sm font-semibold text-gray-900">Integracoes</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Selecione o formato de coleta disponivel.
+                </p>
+
+                <div className="mt-5 space-y-2">
+                  {SCRAPPER_TYPE_OPTIONS.map((option) => {
+                    const isActive = clientSourceDataForm.scrapper_tipo === option;
+                    const isEnabled = option === 'API';
+
+                    return (
+                      <button
+                        key={`clientes-${option}`}
+                        type="button"
+                        onClick={() =>
+                          isEnabled &&
+                          setClientSourceDataForm((current) => ({
+                            ...current,
+                            scrapper_tipo: option,
+                          }))
+                        }
+                        disabled={!isEnabled}
+                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                          isActive
+                            ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-900'
+                            : 'border-black/5 bg-white text-gray-600'
+                        } ${!isEnabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-[#FAFAFA]'}`}
+                      >
+                        <span>{option}</span>
+                        {!isEnabled ? (
+                          <span className="text-[11px] font-medium text-gray-400">Em breve</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="min-h-0 overflow-y-auto px-6 py-5">
+                <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Configuracao da API</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                      URL, Body, Query e Header sao opcionais. Os campos JSON serao salvos como JSONB
+                      no banco.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    {clientSourceDataError ? (
+                      <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                        {clientSourceDataError}
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <label
+                        htmlFor="cliente-api-link"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                      >
+                        URL
+                      </label>
+                      <input
+                        id="cliente-api-link"
+                        type="text"
+                        value={clientSourceDataForm.scrapper_link}
+                        onChange={handleClientSourceDataInputChange('scrapper_link')}
+                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
+                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
+                        placeholder="https://api.exemplo.com/clientes"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="cliente-api-body"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                      >
+                        Body
+                      </label>
+                      <textarea
+                        id="cliente-api-body"
+                        value={clientSourceDataForm.scrapper_body}
+                        onChange={handleClientSourceDataInputChange('scrapper_body')}
+                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
+                        rows={5}
+                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
+                        placeholder='{"token":"abc"}'
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="cliente-api-query"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                      >
+                        Query
+                      </label>
+                      <textarea
+                        id="cliente-api-query"
+                        value={clientSourceDataForm.scrapper_query}
+                        onChange={handleClientSourceDataInputChange('scrapper_query')}
+                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
+                        rows={5}
+                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
+                        placeholder='{"page":1}'
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="cliente-api-headers"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                      >
+                        Header
+                      </label>
+                      <textarea
+                        id="cliente-api-headers"
+                        value={clientSourceDataForm.scrapper_headers}
+                        onChange={handleClientSourceDataInputChange('scrapper_headers')}
+                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
                         rows={5}
                         className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
                         placeholder='{"Authorization":"Bearer ..."}'
