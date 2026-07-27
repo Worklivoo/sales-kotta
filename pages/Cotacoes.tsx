@@ -15,6 +15,7 @@ interface MockCotacao {
   atendimentoId: string;
   empresaId: string;
   numeroTicket: string;
+  isNovoCliente: boolean;
   nome: string;
   membro: string;
   membroId: string;
@@ -223,6 +224,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             atendimentoId: item.atendimento_id,
             empresaId: item.empresa_id,
             numeroTicket: item.numero_ticket ? String(item.numero_ticket) : '',
+            isNovoCliente: !item.cliente_id,
             nome: item.assunto || 'Cotacao sem assunto',
             membro: memberName,
             membroId: item.membro_id || '',
@@ -413,11 +415,17 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                             >
                               <div className="space-y-3">
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-                                    Ticket
-                                  </span>
+                                  {cotacao.isNovoCliente ? (
+                                    <span className="rounded-md bg-[#EBF57D] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-800">
+                                      Novo Cliente
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-600">
+                                      Cliente
+                                    </span>
+                                  )}
 
-                                  <div className="flex items-center gap-2">
+                                  <div className="ml-auto flex items-center gap-2">
                                     {unreadNotificationCount > 0 ? (
                                       <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
                                         {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}

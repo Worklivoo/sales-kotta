@@ -34,6 +34,7 @@ interface MemberAccountRecord {
   status: string | null;
   cargo: string | null;
   modo_orcamento: BudgetMode | null;
+  orcamento_novos_clientes: boolean | null;
 }
 
 interface AccountFormState {
@@ -361,6 +362,8 @@ const GeralTab: React.FC = () => {
   const [quoteRulesError, setQuoteRulesError] = useState<string | null>(null);
   const [isSavingBudgetMode, setIsSavingBudgetMode] = useState(false);
   const [budgetModeError, setBudgetModeError] = useState<string | null>(null);
+  const [isSavingNewClientsBudget, setIsSavingNewClientsBudget] = useState(false);
+  const [newClientsBudgetError, setNewClientsBudgetError] = useState<string | null>(null);
   const [isSourceDataModalOpen, setIsSourceDataModalOpen] = useState(false);
   const [sourceDataForm, setSourceDataForm] = useState<SourceDataFormState>(createSourceDataForm());
   const [sourceDataError, setSourceDataError] = useState<string | null>(null);
@@ -414,7 +417,9 @@ const GeralTab: React.FC = () => {
 
         const { data, error } = await supabase
           .from('sales_membros_empresa')
-          .select('membro_id, empresa_id, nome, email, telefone, status, cargo, modo_orcamento')
+          .select(
+            'membro_id, empresa_id, nome, email, telefone, status, cargo, modo_orcamento, orcamento_novos_clientes',
+          )
           .eq('membro_id', session.user.id)
           .maybeSingle();
 
@@ -517,6 +522,11 @@ const GeralTab: React.FC = () => {
   const memberBudgetMode = memberAccount?.modo_orcamento ?? null;
   const isAutomaticBudgetMode = memberBudgetMode === 'AUTO';
   const budgetModeLabel = formatBudgetModeLabel(memberBudgetMode);
+  const allowBudgetForNewClients = memberAccount?.orcamento_novos_clientes === true;
+  const newClientsBudgetLabel = allowBudgetForNewClients ? 'Ativado' : 'Desativado';
+  const newClientsBudgetStatusClassName = allowBudgetForNewClients
+    ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
+    : 'border-black/10 bg-[#FAFAFA] text-gray-600';
   const companyPlanName = companyPlan?.plano?.trim() || '-';
   const companyPlanCycle = formatEnumLabel(companyPlan?.plano_ciclo || null);
   const companyPlanPrice = formatCurrency(companyPlan?.valor_mensal ?? null);
@@ -666,6 +676,47 @@ const GeralTab: React.FC = () => {
       setBudgetModeError(error?.message || 'Nao foi possivel atualizar o modo do orcamento.');
     } finally {
       setIsSavingBudgetMode(false);
+    }
+  };
+
+  const handleToggleNewClientsBudget = async () => {
+    if (!memberAccount?.membro_id) {
+      setNewClientsBudgetError('Nao foi possivel identificar o usuario para atualizar a configuracao.');
+      return;
+    }
+
+    const nextValue = !(memberAccount.orcamento_novos_clientes === true);
+
+    setIsSavingNewClientsBudget(true);
+    setNewClientsBudgetError(null);
+
+    try {
+      const { error } = await supabase
+        .from('sales_membros_empresa')
+        .update({
+          orcamento_novos_clientes: nextValue,
+        })
+        .eq('membro_id', memberAccount.membro_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setMemberAccount((current) =>
+        current
+          ? {
+              ...current,
+              orcamento_novos_clientes: nextValue,
+            }
+          : current,
+      );
+    } catch (error: any) {
+      console.error('Erro ao atualizar orcamento para novos clientes:', error);
+      setNewClientsBudgetError(
+        error?.message || 'Nao foi possivel atualizar o orcamento para novos clientes.',
+      );
+    } finally {
+      setIsSavingNewClientsBudget(false);
     }
   };
 
@@ -1454,6 +1505,62 @@ const GeralTab: React.FC = () => {
                 <div
                   className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
                     isAutomaticBudgetMode ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                <Sparkles size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Orcamento para Novos Clientes</h3>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
+                  Defina se a IA pode montar orcamentos para clientes que ainda nao existem na base.
+                </p>
+              </div>
+            </div>
+
+            {newClientsBudgetError ? (
+              <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                {newClientsBudgetError}
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
+              <div>
+                <p className="text-xs font-medium text-gray-400">Status atual</p>
+                <span
+                  className={`mt-2 inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${newClientsBudgetStatusClassName}`}
+                >
+                  {isAccountLoading ? 'Carregando...' : newClientsBudgetLabel}
+                </span>
+                <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
+                  {isAccountLoading
+                    ? 'Carregando configuracao de orcamento para novos clientes.'
+                    : allowBudgetForNewClients
+                      ? 'Quando ativado, a IA pode montar o orcamento para clientes novos mesmo sem cadastro previo na base.'
+                      : 'Quando desativado, a IA nao realiza o orcamento para clientes novos e direciona o atendimento para aprovacao humana.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allowBudgetForNewClients}
+                aria-label="Alternar orcamento para novos clientes"
+                onClick={handleToggleNewClientsBudget}
+                disabled={isAccountLoading || isSavingNewClientsBudget || Boolean(accountError)}
+                className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
+                  allowBudgetForNewClients ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <div
+                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                    allowBudgetForNewClients ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
               </button>
