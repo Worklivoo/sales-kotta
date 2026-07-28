@@ -2,14 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import EmailTab from './configuracoes/EmailTab';
 import GeralTab from './configuracoes/GeralTab';
 import MembrosTab from './configuracoes/MembrosTab';
+import NotificacoesTab from './configuracoes/NotificacoesTab';
 import { supabase } from '../lib/supabase';
 
-type ConfigTabKey = 'geral' | 'membros' | 'email';
+type ConfigTabKey = 'geral' | 'membros' | 'email' | 'notificacoes';
 
 const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
   { key: 'membros', label: 'Membros' },
   { key: 'email', label: 'Email' },
+  { key: 'notificacoes', label: 'Notificacoes' },
 ];
 
 const ConfiguracoesPage: React.FC = () => {
@@ -141,6 +143,7 @@ const ConfiguracoesPage: React.FC = () => {
             {activeTab === 'geral' ? <GeralTab /> : null}
             {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}
             {activeTab === 'email' ? <EmailTab /> : null}
+            {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
           </div>
         </section>
       </div>

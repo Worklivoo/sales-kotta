@@ -405,6 +405,9 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                         columnItems.map((cotacao) => {
                           const unreadNotificationCount =
                             unreadNotificationsByAtendimento[cotacao.atendimentoId] ?? 0;
+                          const showClientBadge =
+                            cotacao.status !== 'TRIAGEM' &&
+                            cotacao.status !== 'COLETANDO_DADOS';
 
                           return (
                             <button
@@ -414,35 +417,57 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                               className="w-full rounded-xl border border-black/5 bg-white p-3 text-left shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-black/10 hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
                             >
                               <div className="space-y-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  {cotacao.isNovoCliente ? (
-                                    <span className="rounded-md bg-[#EBF57D] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-800">
-                                      Novo Cliente
-                                    </span>
-                                  ) : (
-                                    <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-600">
-                                      Cliente
-                                    </span>
-                                  )}
+                                {showClientBadge ? (
+                                  <>
+                                    <div className="flex items-center justify-between gap-3">
+                                      {cotacao.isNovoCliente ? (
+                                        <span className="rounded-md bg-[#EBF57D] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-800">
+                                          Novo Cliente
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-600">
+                                          Cliente
+                                        </span>
+                                      )}
 
-                                  <div className="ml-auto flex items-center gap-2">
-                                    {unreadNotificationCount > 0 ? (
-                                      <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
-                                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                                      <div className="ml-auto flex items-center gap-2">
+                                        {unreadNotificationCount > 0 ? (
+                                          <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
+                                            {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                                          </span>
+                                        ) : null}
+
+                                        <span className="text-[12px] font-semibold text-gray-700">
+                                          {cotacao.valor}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <h4 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
+                                        {cotacao.nome}
+                                      </h4>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-start justify-between gap-3">
+                                    <h4 className="line-clamp-2 flex-1 text-[13px] font-semibold leading-5 text-gray-800">
+                                      {cotacao.nome}
+                                    </h4>
+
+                                    <div className="flex shrink-0 items-center gap-2 pl-2">
+                                      {unreadNotificationCount > 0 ? (
+                                        <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
+                                          {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                                        </span>
+                                      ) : null}
+
+                                      <span className="text-[12px] font-semibold text-gray-700">
+                                        {cotacao.valor}
                                       </span>
-                                    ) : null}
-
-                                    <span className="text-[12px] font-semibold text-gray-700">
-                                      {cotacao.valor}
-                                    </span>
+                                    </div>
                                   </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <h4 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
-                                    {cotacao.nome}
-                                  </h4>
-                                </div>
+                                )}
 
                                 <div className="space-y-2 border-t border-gray-100 pt-3 text-[11px] text-gray-500">
                                   <div className="flex items-center justify-between gap-3">

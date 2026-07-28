@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
+const SMTP_VALIDATION_WEBHOOK_URL =
+  'https://primary-systec.up.railway.app/webhook/f76854a9-c075-4945-820e-b5bcb92ddafd';
+
 interface MemberEmailConfigRecord {
   membro_id: string;
   nome: string | null;
@@ -47,6 +50,32 @@ const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) =>
       memberConfig?.smtp_ssl,
   );
 
+const extractWebhookResultado = (responseBody: unknown) => {
+  if (Array.isArray(responseBody)) {
+    const firstItem = responseBody[0];
+
+    if (
+      firstItem &&
+      typeof firstItem === 'object' &&
+      'resultado' in firstItem &&
+      typeof firstItem.resultado === 'string'
+    ) {
+      return firstItem.resultado;
+    }
+  }
+
+  if (
+    responseBody &&
+    typeof responseBody === 'object' &&
+    'resultado' in responseBody &&
+    typeof responseBody.resultado === 'string'
+  ) {
+    return responseBody.resultado;
+  }
+
+  return '';
+};
+
 const EmailTab: React.FC = () => {
   const [memberConfig, setMemberConfig] = useState<MemberEmailConfigRecord | null>(null);
   const [emailConfigForm, setEmailConfigForm] = useState<EmailConfigFormState>(
@@ -59,23 +88,6 @@ const EmailTab: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-  const getSessionAccessToken = async () => {
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      throw sessionError;
-    }
-
-    if (!session?.access_token) {
-      throw new Error('Nao foi possivel identificar a sessao atual do usuario.');
-    }
-
-    return session.access_token;
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -189,10 +201,17 @@ const EmailTab: React.FC = () => {
       return;
     }
 
+    const memberName = memberConfig.nome?.trim() || '';
+
     const smtpEmail = emailConfigForm.smtp_email.trim();
     const smtpSenha = emailConfigForm.smtp_senha.trim();
     const smtpHost = emailConfigForm.smtp_host.trim();
     const smtpPort = emailConfigForm.smtp_port.trim();
+
+    if (!memberName) {
+      setSaveError('Nao foi possivel identificar o nome do usuario autenticado.');
+      return;
+    }
 
     if (!smtpEmail) {
       setSaveError('Informe o e-mail SMTP.');
@@ -227,25 +246,37 @@ const EmailTab: React.FC = () => {
         smtp_ssl: emailConfigForm.smtp_ssl,
       };
 
-      const accessToken = await getSessionAccessToken();
-      const validationResponse = await fetch('/api/validate-smtp', {
+      const validationResponse = await fetch(SMTP_VALIDATION_WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          nome: memberName,
+          ...payload,
+        }),
       });
 
-      const validationBody = await validationResponse.json().catch(() => null);
+      const validationText = await validationResponse.text();
+      let validationBody: unknown = null;
 
-      if (!validationResponse.ok) {
-        throw new Error(validationBody?.error || 'Nao foi possivel validar as configuracoes SMTP.');
+      try {
+        validationBody = validationText ? JSON.parse(validationText) : null;
+      } catch {
+        validationBody = null;
       }
 
-      if (!validationBody?.validated) {
+      const validationResultado = extractWebhookResultado(validationBody);
+
+      if (!validationResponse.ok) {
+        throw new Error(
+          validationResultado || 'Nao foi possivel validar as configuracoes SMTP.',
+        );
+      }
+
+      if (validationResultado !== 'VALIDADO') {
         setSaveError(
-          validationBody?.resultado ||
+          validationResultado ||
             'Nao foi possivel validar as configuracoes SMTP. Revise os dados e tente novamente.',
         );
         return;
