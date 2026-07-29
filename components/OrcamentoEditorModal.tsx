@@ -29,6 +29,7 @@ interface OrcamentoItemRow {
   sku: string;
   descricao: string;
   ncm: string;
+  previsaoEntrega: string;
   valorUnitario: string;
   valorTotal: string;
   disponivel: boolean;
@@ -66,6 +67,7 @@ const ITEM_FIELD_LABELS: Record<Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>
   sku: 'SKU',
   descricao: 'Descrição',
   ncm: 'NCM',
+  previsaoEntrega: 'Previsão de Entrega',
   valorUnitario: 'Valor Unitário',
   valorTotal: 'Valor Total',
   disponivel: 'Disponível',
@@ -153,7 +155,13 @@ const decodeInlineHtmlText = (value: string) => {
   return (documentNode.body.textContent || '').replace(/\u00a0/g, ' ').trim();
 };
 
+const decodeInlineHtmlMultilineText = (value: string) =>
+  decodeInlineHtmlText(value.replace(/<br\s*\/?>/gi, '\n')).replace(/\n{3,}/g, '\n\n');
+
 const isDashLikeValue = (value: string) => /^[-—–\s]*$/.test(value.replace(/\u00a0/g, ' ').trim());
+
+const formatMultilineHtmlValue = (value: string) =>
+  escapeHtmlValue(value.trim()).replace(/\r?\n/g, '<br>');
 
 const ensureCellCount = (documentNode: Document, rowElement: HTMLTableRowElement, count: number) => {
   const cells = Array.from(rowElement.querySelectorAll('td')) as HTMLTableCellElement[];
@@ -205,11 +213,25 @@ const parseCurrencyValue = (value: string) => {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 };
 
-const formatCurrencyValue = (value: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
+const extractCurrencyMarker = (value: string) => {
+  const normalizedValue = value.replace(/\u00a0/g, ' ').trim();
+
+  if (!normalizedValue || isDashLikeValue(normalizedValue)) {
+    return null;
+  }
+
+  const match = normalizedValue.match(/^[^\d-]+/);
+  return match ? match[0].trim() : null;
+};
+
+const formatMonetaryValue = (value: number, currencyMarker: string) => {
+  const formattedNumber = value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `${currencyMarker}\u00a0${formattedNumber}`;
+};
 
 const serializeHtmlDocument = (documentNode: Document) => {
   const doctype = documentNode.doctype
@@ -237,6 +259,7 @@ const buildDefaultItemRow = () => ({
   sku: '',
   descricao: '',
   ncm: '',
+  previsaoEntrega: '',
   valorUnitario: '',
   valorTotal: '',
   disponivel: true,
@@ -341,6 +364,7 @@ const extractItemsSectionRows = (value: string | null) => {
       primeiroCampoPartes.find((part) => !/^SKU:\s*/i.test(part)) ||
       decodeInlineHtmlText(primeiroCampoHtml);
     const skuText = decodeInlineHtmlText(cells[2]?.textContent || '');
+    const hasNewItemsLayout = cells.length >= 8;
 
     return {
       id: buildFieldId(`item-row-${index}`),
@@ -353,8 +377,13 @@ const extractItemsSectionRows = (value: string | null) => {
           : skuText,
       descricao: descricaoText,
       ncm: decodeInlineHtmlText(cells[4]?.textContent || ''),
-      valorUnitario: decodeInlineHtmlText(cells[5]?.textContent || ''),
-      valorTotal: decodeInlineHtmlText(cells[6]?.textContent || ''),
+      previsaoEntrega: hasNewItemsLayout
+        ? decodeInlineHtmlMultilineText(cells[5]?.innerHTML || cells[5]?.textContent || '')
+        : '',
+      valorUnitario: decodeInlineHtmlText(
+        cells[hasNewItemsLayout ? 6 : 5]?.textContent || '',
+      ),
+      valorTotal: decodeInlineHtmlText(cells[hasNewItemsLayout ? 7 : 6]?.textContent || ''),
       disponivel: !isLinhaIndisponivel,
     };
   });
@@ -454,7 +483,7 @@ const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow
       ) ||
       fallbackRowTemplate;
     const rowElement = sourceRow.cloneNode(true) as HTMLTableRowElement;
-    const cells = ensureCellCount(documentNode, rowElement, 7);
+    const cells = ensureCellCount(documentNode, rowElement, 8);
 
     rowElement.setAttribute('data-item-id', item.itemId);
     rowElement.classList.toggle('indisponivel-row', !item.disponivel);
@@ -474,9 +503,15 @@ const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow
     }
 
     cells[1].textContent = item.quantidade;
+    cells[1].style.textAlign = 'center';
     cells[4].textContent = item.ncm;
-    cells[5].textContent = item.valorUnitario;
-    cells[6].textContent = item.valorTotal;
+    cells[5].innerHTML = formatMultilineHtmlValue(item.previsaoEntrega);
+    cells[5].classList.add('col-previsao');
+    cells[6].style.textAlign = 'right';
+    cells[6].textContent = item.valorUnitario;
+    cells[7].style.textAlign = 'right';
+    cells[7].style.fontWeight = 'bold';
+    cells[7].textContent = item.valorTotal;
 
     newRowsFragment.append(rowElement);
   });
@@ -485,18 +520,22 @@ const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow
   tbodyElement.append(newRowsFragment);
 
   const totalCell = documentNode.querySelector('table.itens-pedido tfoot td:last-child');
-  const totalValue = items.reduce<number | null>((currentTotal, item) => {
-    const parsedValue = parseCurrencyValue(item.valorTotal);
+  const totalValues = items
+    .map((item) => ({
+      parsedValue: parseCurrencyValue(item.valorTotal),
+      currencyMarker: extractCurrencyMarker(item.valorTotal),
+    }))
+    .filter(
+      (item): item is { parsedValue: number; currencyMarker: string } =>
+        item.parsedValue !== null && Boolean(item.currencyMarker),
+    );
 
-    if (parsedValue === null) {
-      return currentTotal;
-    }
+  const uniqueCurrencyMarkers = new Set(totalValues.map((item) => item.currencyMarker));
 
-    return (currentTotal || 0) + parsedValue;
-  }, null);
-
-  if (totalCell && totalValue !== null) {
-    totalCell.textContent = formatCurrencyValue(totalValue);
+  if (totalCell && totalValues.length > 0 && uniqueCurrencyMarkers.size === 1) {
+    const currencyMarker = totalValues[0].currencyMarker;
+    const totalValue = totalValues.reduce((currentTotal, item) => currentTotal + item.parsedValue, 0);
+    totalCell.textContent = formatMonetaryValue(totalValue, currencyMarker);
   }
 
   return serializeHtmlDocument(documentNode);
