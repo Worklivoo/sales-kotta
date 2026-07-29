@@ -55,7 +55,7 @@ interface MemberCardAction {
 
 const MEMBER_CARD_ACTIONS: MemberCardAction[] = [
   { key: 'reset-password', label: 'Redefinir Senha' },
-  { key: 'edit-info', label: 'Editar Informacoes' },
+  { key: 'edit-info', label: 'Editar Informações' },
   { key: 'deactivate', label: 'Desativar Membro' },
   { key: 'delete', label: 'Excluir Membro' },
 ];
@@ -77,7 +77,7 @@ const sortMembersByName = (memberList: TeamMemberRecord[]) =>
 
 const formatEnumLabel = (value: string | null) => {
   if (!value) {
-    return 'Usuario';
+    return 'Usuário';
   }
 
   return value
@@ -209,7 +209,7 @@ const MembrosTab: React.FC = () => {
         }
 
         if (!session?.user?.id) {
-          throw new Error('Nao foi possivel identificar o usuario autenticado.');
+          throw new Error('Não foi possível identificar o usuário autenticado.');
         }
 
         const { data: currentMember, error: currentMemberError } = await supabase
@@ -223,7 +223,7 @@ const MembrosTab: React.FC = () => {
         }
 
         if (!currentMember?.empresa_id) {
-          throw new Error('Nao foi possivel identificar a empresa vinculada ao usuario.');
+          throw new Error('Não foi possível identificar a empresa vinculada ao usuário.');
         }
 
         if (!isMounted) {
@@ -256,7 +256,7 @@ const MembrosTab: React.FC = () => {
 
         setMembers([]);
         setCompanyId(null);
-        setMembersError(error?.message || 'Nao foi possivel carregar os membros da equipe.');
+        setMembersError(error?.message || 'Não foi possível carregar os membros da equipe.');
       } finally {
         if (isMounted) {
           setIsLoadingMembers(false);
@@ -347,7 +347,7 @@ const MembrosTab: React.FC = () => {
     if (!selectedMember) {
       setMemberActionFeedback({
         type: 'error',
-        message: 'Nao foi possivel localizar o membro selecionado.',
+        message: 'Não foi possível localizar o membro selecionado.',
       });
       return;
     }
@@ -419,7 +419,7 @@ const MembrosTab: React.FC = () => {
 
     if (!session?.access_token) {
       console.error('[MembrosTab][CreateMember][session:missing-access-token]');
-      throw new Error('Nao foi possivel identificar a sessao atual do usuario.');
+      throw new Error('Não foi possível identificar a sessão atual do usuário.');
     }
 
     return session.access_token;
@@ -439,7 +439,7 @@ const MembrosTab: React.FC = () => {
     const responseBody = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(responseBody?.error || 'Nao foi possivel executar a acao para o membro.');
+      throw new Error(responseBody?.error || 'Não foi possível executar a ação para o membro.');
     }
 
     return responseBody;
@@ -459,7 +459,7 @@ const MembrosTab: React.FC = () => {
     if (!selectedMember) {
       setMemberActionFeedback({
         type: 'error',
-        message: 'Nao foi possivel localizar o membro selecionado.',
+        message: 'Não foi possível localizar o membro selecionado.',
       });
       return;
     }
@@ -478,7 +478,7 @@ const MembrosTab: React.FC = () => {
 
     if (actionKey === 'delete') {
       const shouldDelete = window.confirm(
-        `Deseja excluir o membro ${selectedMember.nome?.trim() || 'selecionado'}? Essa acao tambem removera o usuario do Auth.`,
+        `Deseja excluir o membro ${selectedMember.nome?.trim() || 'selecionado'}? Essa ação também removerá o usuário do Auth.`,
       );
 
       if (!shouldDelete) {
@@ -498,7 +498,7 @@ const MembrosTab: React.FC = () => {
 
         setMemberActionFeedback({
           type: 'success',
-          message: result?.message || 'Link de redefinicao enviado com sucesso.',
+          message: result?.message || 'Link de redefinição enviado com sucesso.',
         });
         return;
       }
@@ -543,14 +543,14 @@ const MembrosTab: React.FC = () => {
         );
         setMemberActionFeedback({
           type: 'success',
-          message: result?.message || 'Membro excluido com sucesso.',
+          message: result?.message || 'Membro excluído com sucesso.',
         });
       }
     } catch (error: any) {
-      console.error('Erro ao executar acao do membro:', error);
+      console.error('Erro ao executar ação do membro:', error);
       setMemberActionFeedback({
         type: 'error',
-        message: error?.message || 'Nao foi possivel executar a acao para o membro.',
+        message: error?.message || 'Não foi possível executar a ação para o membro.',
       });
     } finally {
       setMemberActionInProgressId(null);
@@ -560,7 +560,7 @@ const MembrosTab: React.FC = () => {
 
   const handleSaveMemberEdit = async () => {
     if (!editingMember?.membro_id) {
-      setEditMemberError('Nao foi possivel identificar o membro selecionado.');
+      setEditMemberError('Não foi possível identificar o membro selecionado.');
       return;
     }
 
@@ -573,7 +573,7 @@ const MembrosTab: React.FC = () => {
     }
 
     if (telefoneDigits.length < 10 || telefoneDigits.length > 11) {
-      setEditMemberError('Informe um telefone valido com DDD.');
+      setEditMemberError('Informe um telefone válido com DDD.');
       return;
     }
 
@@ -592,7 +592,7 @@ const MembrosTab: React.FC = () => {
       const updatedMember = result?.member as TeamMemberRecord | undefined;
 
       if (!updatedMember?.membro_id) {
-        throw new Error('Nao foi possivel obter os dados atualizados do membro.');
+        throw new Error('Não foi possível obter os dados atualizados do membro.');
       }
 
       setMembers((current) =>
@@ -605,11 +605,11 @@ const MembrosTab: React.FC = () => {
       handleCloseEditMemberModal();
       setMemberActionFeedback({
         type: 'success',
-        message: result?.message || 'Informacoes do membro atualizadas com sucesso.',
+        message: result?.message || 'Informações do membro atualizadas com sucesso.',
       });
     } catch (error: any) {
       console.error('Erro ao editar membro:', error);
-      setEditMemberError(error?.message || 'Nao foi possivel salvar as informacoes do membro.');
+      setEditMemberError(error?.message || 'Não foi possível salvar as informações do membro.');
     } finally {
       setIsSavingMemberEdit(false);
     }
@@ -622,7 +622,7 @@ const MembrosTab: React.FC = () => {
     const senha = createMemberForm.senha;
 
     if (!companyId) {
-      setCreateMemberError('Nao foi possivel identificar a empresa do membro.');
+      setCreateMemberError('Não foi possível identificar a empresa do membro.');
       return;
     }
 
@@ -637,7 +637,7 @@ const MembrosTab: React.FC = () => {
     }
 
     if (telefoneDigits.length < 10 || telefoneDigits.length > 11) {
-      setCreateMemberError('Informe um telefone valido com DDD.');
+      setCreateMemberError('Informe um telefone válido com DDD.');
       return;
     }
 
@@ -694,13 +694,13 @@ const MembrosTab: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(responseBody?.error || 'Nao foi possivel criar o membro.');
+        throw new Error(responseBody?.error || 'Não foi possível criar o membro.');
       }
 
       const createdMember = responseBody?.member as TeamMemberRecord | undefined;
 
       if (!createdMember?.membro_id) {
-        throw new Error('Nao foi possivel obter os dados do membro criado.');
+        throw new Error('Não foi possível obter os dados do membro criado.');
       }
 
       setMembers((current) => sortMembersByName([...current, createdMember]));
@@ -721,7 +721,7 @@ const MembrosTab: React.FC = () => {
         name: error?.name || null,
         error,
       });
-      setCreateMemberError(error?.message || 'Nao foi possivel criar o membro.');
+      setCreateMemberError(error?.message || 'Não foi possível criar o membro.');
     } finally {
       setIsCreatingMember(false);
     }
@@ -795,7 +795,7 @@ const MembrosTab: React.FC = () => {
                     {openMemberMenuId === member.id ? (
                       <div
                         role="menu"
-                        aria-label={`Acoes do membro ${member.name}`}
+                        aria-label={`Ações do membro ${member.name}`}
                         className="absolute right-0 top-9 z-20 min-w-[190px] rounded-2xl border border-black/5 bg-white p-1.5 shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
                       >
                         {getMemberCardActions(member.status).map((action) => (
@@ -844,7 +844,7 @@ const MembrosTab: React.FC = () => {
           <div className="rounded-2xl border border-dashed border-black/10 bg-[#FCFCFC] px-5 py-8 text-center">
             <p className="text-sm font-semibold text-gray-900">Nenhum membro encontrado</p>
             <p className="mt-1 text-sm text-gray-500">
-              Quando houver membros cadastrados na empresa, eles aparecerao aqui.
+              Quando houver membros cadastrados na empresa, eles aparecerão aqui.
             </p>
           </div>
         )}
@@ -1024,7 +1024,7 @@ const MembrosTab: React.FC = () => {
                   id="editar-membro-modal-title"
                   className="text-base font-semibold tracking-tight text-gray-900"
                 >
-                  Editar Informacoes
+                  Editar Informações
                 </h2>
                 <p className="mt-1 text-sm leading-5 text-gray-500">
                   Atualize apenas o nome e o telefone do membro selecionado.
@@ -1098,7 +1098,7 @@ const MembrosTab: React.FC = () => {
                 disabled={isSavingMemberEdit}
                 className="rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingMemberEdit ? 'Salvando...' : 'Salvar Alteracoes'}
+                {isSavingMemberEdit ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
           </div>

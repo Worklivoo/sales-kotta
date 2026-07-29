@@ -117,11 +117,11 @@ const SCRAPPER_TYPE_OPTIONS: ScrapperType[] = ['API', 'XML', 'HTML', 'PLANILHA',
 
 const formatBudgetModeLabel = (value: BudgetMode | null) => {
   if (value === 'SEMI') {
-    return 'Semi-automatico';
+    return 'Semi-automático';
   }
 
   if (value === 'AUTO') {
-    return 'Automatico';
+    return 'Automático';
   }
 
   return '-';
@@ -412,7 +412,7 @@ const GeralTab: React.FC = () => {
         }
 
         if (!session?.user?.id) {
-          throw new Error('Nao foi possivel identificar o usuario autenticado.');
+          throw new Error('Não foi possível identificar o usuário autenticado.');
         }
 
         const { data, error } = await supabase
@@ -440,7 +440,7 @@ const GeralTab: React.FC = () => {
         }
 
         setMemberAccount(null);
-        setAccountError(error?.message || 'Nao foi possivel carregar os dados da conta.');
+        setAccountError(error?.message || 'Não foi possível carregar os dados da conta.');
       } finally {
         if (isMounted) {
           setIsAccountLoading(false);
@@ -495,7 +495,7 @@ const GeralTab: React.FC = () => {
         }
 
         setCompanyPlan(null);
-        setCompanyPlanError(error?.message || 'Nao foi possivel carregar os dados do plano.');
+        setCompanyPlanError(error?.message || 'Não foi possível carregar os dados do plano.');
       } finally {
         if (isMounted) {
           setIsCompanyPlanLoading(false);
@@ -586,7 +586,7 @@ const GeralTab: React.FC = () => {
 
   const handleSaveAccount = async () => {
     if (!memberAccount?.membro_id) {
-      setAccountSaveError('Nao foi possivel identificar o usuario para salvar.');
+      setAccountSaveError('Não foi possível identificar o usuário para salvar.');
       return;
     }
 
@@ -594,12 +594,12 @@ const GeralTab: React.FC = () => {
     const normalizedPhoneDigits = normalizePhoneDigits(accountForm.telefone);
 
     if (!normalizedName) {
-      setAccountSaveError('Informe o nome do usuario.');
+      setAccountSaveError('Informe o nome do usuário.');
       return;
     }
 
     if (normalizedPhoneDigits.length < 10 || normalizedPhoneDigits.length > 11) {
-      setAccountSaveError('Informe um telefone valido com DDD.');
+      setAccountSaveError('Informe um telefone válido com DDD.');
       return;
     }
 
@@ -634,7 +634,7 @@ const GeralTab: React.FC = () => {
       setAccountSaveSuccess('Dados da conta atualizados com sucesso.');
     } catch (error: any) {
       console.error('Erro ao salvar dados da conta:', error);
-      setAccountSaveError(error?.message || 'Nao foi possivel salvar os dados da conta.');
+      setAccountSaveError(error?.message || 'Não foi possível salvar os dados da conta.');
     } finally {
       setIsSavingAccount(false);
     }
@@ -642,7 +642,7 @@ const GeralTab: React.FC = () => {
 
   const handleToggleBudgetMode = async () => {
     if (!memberAccount?.membro_id) {
-      setBudgetModeError('Nao foi possivel identificar o usuario para atualizar o modo.');
+      setBudgetModeError('Não foi possível identificar o usuário para atualizar o modo.');
       return;
     }
 
@@ -672,8 +672,8 @@ const GeralTab: React.FC = () => {
           : current,
       );
     } catch (error: any) {
-      console.error('Erro ao atualizar modo do orcamento:', error);
-      setBudgetModeError(error?.message || 'Nao foi possivel atualizar o modo do orcamento.');
+      console.error('Erro ao atualizar modo do orçamento:', error);
+      setBudgetModeError(error?.message || 'Não foi possível atualizar o modo do orçamento.');
     } finally {
       setIsSavingBudgetMode(false);
     }
@@ -681,7 +681,7 @@ const GeralTab: React.FC = () => {
 
   const handleToggleNewClientsBudget = async () => {
     if (!memberAccount?.membro_id) {
-      setNewClientsBudgetError('Nao foi possivel identificar o usuario para atualizar a configuracao.');
+      setNewClientsBudgetError('Não foi possível identificar o usuário para atualizar a configuração.');
       return;
     }
 
@@ -711,9 +711,9 @@ const GeralTab: React.FC = () => {
           : current,
       );
     } catch (error: any) {
-      console.error('Erro ao atualizar orcamento para novos clientes:', error);
+      console.error('Erro ao atualizar orçamento para novos clientes:', error);
       setNewClientsBudgetError(
-        error?.message || 'Nao foi possivel atualizar o orcamento para novos clientes.',
+        error?.message || 'Não foi possível atualizar o orçamento para novos clientes.',
       );
     } finally {
       setIsSavingNewClientsBudget(false);
@@ -873,7 +873,7 @@ const GeralTab: React.FC = () => {
 
   const handleSaveQuoteRules = async () => {
     if (!memberAccount?.empresa_id) {
-      setQuoteRulesError('Nao foi possivel identificar a empresa para salvar as regras.');
+      setQuoteRulesError('Não foi possível identificar a empresa para salvar as regras.');
       return;
     }
 
@@ -904,8 +904,8 @@ const GeralTab: React.FC = () => {
       setIsQuoteRulesModalOpen(false);
       setQuoteRuleForm(createEmptyQuoteRuleForm());
     } catch (error: any) {
-      console.error('Erro ao salvar regras de cotacao:', error);
-      setQuoteRulesError(error?.message || 'Nao foi possivel salvar as regras de cotacao.');
+      console.error('Erro ao salvar regras de cotação:', error);
+      setQuoteRulesError(error?.message || 'Não foi possível salvar as regras de cotação.');
     } finally {
       setIsSavingQuoteRules(false);
     }
@@ -979,7 +979,7 @@ const GeralTab: React.FC = () => {
 
   const handleSaveSourceData = async () => {
     if (!memberAccount?.empresa_id) {
-      setSourceDataError('Nao foi possivel identificar a empresa para salvar a fonte de dados.');
+      setSourceDataError('Não foi possível identificar a empresa para salvar a fonte de dados.');
       return;
     }
 
@@ -1021,9 +1021,9 @@ const GeralTab: React.FC = () => {
     } catch (error: any) {
       console.error('Erro ao salvar fonte de dados:', error);
       if (error instanceof SyntaxError) {
-        setSourceDataError('Body, Query e Header devem estar em JSON valido.');
+        setSourceDataError('Body, Query e Header devem estar em JSON válido.');
       } else {
-        setSourceDataError(error?.message || 'Nao foi possivel salvar a fonte de dados.');
+        setSourceDataError(error?.message || 'Não foi possível salvar a fonte de dados.');
       }
     } finally {
       setIsSavingSourceData(false);
@@ -1033,7 +1033,7 @@ const GeralTab: React.FC = () => {
   const handleSaveClientSourceData = async () => {
     if (!memberAccount?.empresa_id) {
       setClientSourceDataError(
-        'Nao foi possivel identificar a empresa para salvar a fonte de dados.',
+        'Não foi possível identificar a empresa para salvar a fonte de dados.',
       );
       return;
     }
@@ -1075,9 +1075,9 @@ const GeralTab: React.FC = () => {
     } catch (error: any) {
       console.error('Erro ao salvar fonte de dados de clientes:', error);
       if (error instanceof SyntaxError) {
-        setClientSourceDataError('Body, Query e Header devem estar em JSON valido.');
+        setClientSourceDataError('Body, Query e Header devem estar em JSON válido.');
       } else {
-        setClientSourceDataError(error?.message || 'Nao foi possivel salvar a fonte de dados.');
+        setClientSourceDataError(error?.message || 'Não foi possível salvar a fonte de dados.');
       }
     } finally {
       setIsSavingClientSourceData(false);
@@ -1115,7 +1115,7 @@ const GeralTab: React.FC = () => {
     }
 
     if (newPassword !== confirmNewPassword) {
-      setPasswordSaveError('A confirmacao da nova senha nao confere.');
+      setPasswordSaveError('A confirmação da nova senha não confere.');
       setPasswordSaveSuccess(null);
       return;
     }
@@ -1135,7 +1135,7 @@ const GeralTab: React.FC = () => {
       }
 
       if (!user?.email) {
-        throw new Error('Nao foi possivel identificar o e-mail do usuario autenticado.');
+        throw new Error('Não foi possível identificar o e-mail do usuário autenticado.');
       }
 
       const { error: reauthError } = await supabase.auth.signInWithPassword({
@@ -1144,7 +1144,7 @@ const GeralTab: React.FC = () => {
       });
 
       if (reauthError) {
-        throw new Error('A senha atual informada esta incorreta.');
+        throw new Error('A senha atual informada está incorreta.');
       }
 
       const { error: updatePasswordError } = await supabase.auth.updateUser({
@@ -1171,7 +1171,7 @@ const GeralTab: React.FC = () => {
       window.location.href = '/';
     } catch (error: any) {
       console.error('Erro ao atualizar senha:', error);
-      setPasswordSaveError(error?.message || 'Nao foi possivel atualizar a senha.');
+      setPasswordSaveError(error?.message || 'Não foi possível atualizar a senha.');
     } finally {
       setIsSavingPassword(false);
     }
@@ -1189,7 +1189,7 @@ const GeralTab: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Conta</h2>
-                  <p className="mt-1 text-xs leading-5 text-gray-500">Informacoes do seu usuario</p>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">Informações do seu usuário</p>
                 </div>
               </div>
 
@@ -1233,14 +1233,14 @@ const GeralTab: React.FC = () => {
               ) : null}
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">Nome do usuario</p>
+                <p className="text-[11px] font-medium text-gray-400">Nome do usuário</p>
                 {isEditingAccount ? (
                   <input
                     type="text"
                     value={accountForm.nome}
                     onChange={handleAccountInputChange('nome')}
                     className="mt-2 w-full rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2.5 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
-                    placeholder="Digite o nome do usuario"
+                    placeholder="Digite o nome do usuário"
                   />
                 ) : (
                   <p className="mt-1 text-lg font-semibold text-gray-900">
@@ -1250,7 +1250,7 @@ const GeralTab: React.FC = () => {
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">E-mail do usuario</p>
+                <p className="text-[11px] font-medium text-gray-400">E-mail do usuário</p>
                 <p className="mt-1 text-sm font-semibold text-gray-900">
                   {isAccountLoading ? 'Carregando...' : memberEmail}
                 </p>
@@ -1274,7 +1274,7 @@ const GeralTab: React.FC = () => {
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">ID do usuario</p>
+                <p className="text-[11px] font-medium text-gray-400">ID do usuário</p>
                 <p className="mt-1 break-all text-[11px] font-medium text-gray-400">
                   {isAccountLoading ? 'Carregando...' : memberId}
                 </p>
@@ -1304,7 +1304,7 @@ const GeralTab: React.FC = () => {
                     <Crown size={16} />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-900">Plano do usuario</h2>
+                    <h2 className="text-sm font-semibold text-gray-900">Plano do usuário</h2>
                   </div>
                 </div>
 
@@ -1384,9 +1384,9 @@ const GeralTab: React.FC = () => {
                     <ClipboardCheck size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Regras de Cotacao</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">Regras de Cotação</h3>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Defina as orientacoes que a IA deve seguir ao validar a cotacao do cliente.
+                      Defina as orientações que a IA deve seguir ao validar a cotação do cliente.
                     </p>
                   </div>
                 </div>
@@ -1442,7 +1442,7 @@ const GeralTab: React.FC = () => {
                   <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAFAFA] px-4 py-6 text-center">
                     <p className="text-sm font-medium text-gray-500">Nenhuma regra configurada ainda.</p>
                     <p className="mt-1 text-xs text-gray-400">
-                      Crie regras para orientar a IA sobre quais informacoes solicitar.
+                      Crie regras para orientar a IA sobre quais informações solicitar.
                     </p>
                   </div>
                 )}
@@ -1456,10 +1456,10 @@ const GeralTab: React.FC = () => {
                 <Split size={16} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Modo do Orcamento</h3>
+                <h3 className="text-sm font-semibold text-gray-900">Modo do Orçamento</h3>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
-                  Defina se a IA pode enviar o orcamento automaticamente ao cliente ou se ele sempre
-                  deve passar por aprovacao humana.
+                  Defina se a IA pode enviar o orçamento automaticamente ao cliente ou se ele sempre
+                  deve passar por aprovação humana.
                 </p>
               </div>
             </div>
@@ -1484,10 +1484,10 @@ const GeralTab: React.FC = () => {
                 </span>
                 <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
                   {isAccountLoading
-                    ? 'Carregando configuracao do modo de orcamento.'
+                    ? 'Carregando configuração do modo de orçamento.'
                     : isAutomaticBudgetMode
-                      ? 'No modo automatico, a IA monta e envia o orcamento ao cliente sem aprovacao humana, salvo quando houver alguma duvida.'
-                      : 'No modo semi-automatico, a IA monta o orcamento e sempre direciona para um humano realizar a aprovacao.'}
+                      ? 'No modo automático, a IA monta e envia o orçamento ao cliente sem aprovação humana, salvo quando houver alguma dúvida.'
+                      : 'No modo semi-automático, a IA monta o orçamento e sempre direciona para um humano realizar a aprovação.'}
                 </p>
               </div>
 
@@ -1495,7 +1495,7 @@ const GeralTab: React.FC = () => {
                 type="button"
                 role="switch"
                 aria-checked={isAutomaticBudgetMode}
-                aria-label="Alternar modo do orcamento"
+                aria-label="Alternar modo do orçamento"
                 onClick={handleToggleBudgetMode}
                 disabled={isAccountLoading || isSavingBudgetMode || Boolean(accountError)}
                 className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
@@ -1517,9 +1517,9 @@ const GeralTab: React.FC = () => {
                 <Sparkles size={16} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Orcamento para Novos Clientes</h3>
+                <h3 className="text-sm font-semibold text-gray-900">Orçamento para Novos Clientes</h3>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
-                  Defina se a IA pode montar orcamentos para clientes que ainda nao existem na base.
+                  Defina se a IA pode montar orçamentos para clientes que ainda não existem na base.
                 </p>
               </div>
             </div>
@@ -1540,10 +1540,10 @@ const GeralTab: React.FC = () => {
                 </span>
                 <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
                   {isAccountLoading
-                    ? 'Carregando configuracao de orcamento para novos clientes.'
+                    ? 'Carregando configuração de orçamento para novos clientes.'
                     : allowBudgetForNewClients
-                      ? 'Quando ativado, a IA pode montar o orcamento para clientes novos mesmo sem cadastro previo na base.'
-                      : 'Quando desativado, a IA nao realiza o orcamento para clientes novos e direciona o atendimento para aprovacao humana.'}
+                      ? 'Quando ativado, a IA pode montar o orçamento para clientes novos mesmo sem cadastro prévio na base.'
+                      : 'Quando desativado, a IA não realiza o orçamento para clientes novos e direciona o atendimento para aprovação humana.'}
                 </p>
               </div>
 
@@ -1551,7 +1551,7 @@ const GeralTab: React.FC = () => {
                 type="button"
                 role="switch"
                 aria-checked={allowBudgetForNewClients}
-                aria-label="Alternar orcamento para novos clientes"
+                aria-label="Alternar orçamento para novos clientes"
                 onClick={handleToggleNewClientsBudget}
                 disabled={isAccountLoading || isSavingNewClientsBudget || Boolean(accountError)}
                 className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
@@ -1577,7 +1577,7 @@ const GeralTab: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Produtos</h3>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Configure de onde os itens da empresa serao coletados.
+                      Configure de onde os itens da empresa serão coletados.
                     </p>
                   </div>
                 </div>
@@ -1594,7 +1594,7 @@ const GeralTab: React.FC = () => {
               <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-400">Configuracao atual</p>
+                    <p className="text-xs font-medium text-gray-400">Configuração atual</p>
                     <p className="mt-2 text-sm font-semibold text-gray-900">
                       {isCompanyPlanLoading
                         ? 'Carregando...'
@@ -1625,7 +1625,7 @@ const GeralTab: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Clientes</h3>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Configure de onde os itens da empresa serao coletados.
+                      Configure de onde os clientes da empresa serão coletados.
                     </p>
                   </div>
                 </div>
@@ -1642,7 +1642,7 @@ const GeralTab: React.FC = () => {
               <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-400">Configuracao atual</p>
+                    <p className="text-xs font-medium text-gray-400">Configuração atual</p>
                     <p className="mt-2 text-sm font-semibold text-gray-900">
                       {isCompanyPlanLoading
                         ? 'Carregando...'
@@ -1688,8 +1688,8 @@ const GeralTab: React.FC = () => {
                     Fonte de Dados - Produtos
                   </h2>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                    Escolha como os itens da empresa serao coletados. Neste momento, apenas a
-                    integracao via API esta disponivel para configuracao.
+                    Escolha como os itens da empresa serão coletados. Neste momento, apenas a
+                    integração via API está disponível para configuração.
                   </p>
                 </div>
               </div>
@@ -1716,9 +1716,9 @@ const GeralTab: React.FC = () => {
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
               <div className="border-b border-black/5 bg-[#FCFCFC] px-6 py-5 lg:border-b-0 lg:border-r">
-                <p className="text-sm font-semibold text-gray-900">Integracoes</p>
+                <p className="text-sm font-semibold text-gray-900">Integrações</p>
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Selecione o formato de coleta disponivel.
+                  Selecione o formato de coleta disponível.
                 </p>
 
                 <div className="mt-5 space-y-2">
@@ -1751,9 +1751,9 @@ const GeralTab: React.FC = () => {
               <div className="min-h-0 overflow-y-auto px-6 py-5">
                 <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Configuracao da API</p>
+                    <p className="text-sm font-semibold text-gray-900">Configuração da API</p>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                      URL, Body, Query e Header sao opcionais. Os campos JSON serao salvos como JSONB
+                      URL, Body, Query e Header são opcionais. Os campos JSON serão salvos como JSONB
                       no banco.
                     </p>
                   </div>
@@ -1871,8 +1871,8 @@ const GeralTab: React.FC = () => {
                     Fonte de Dados - Clientes
                   </h2>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                    Escolha como os clientes da empresa serao coletados. Neste momento, apenas a
-                    integracao via API esta disponivel para configuracao.
+                    Escolha como os clientes da empresa serão coletados. Neste momento, apenas a
+                    integração via API está disponível para configuração.
                   </p>
                 </div>
               </div>
@@ -1901,9 +1901,9 @@ const GeralTab: React.FC = () => {
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
               <div className="border-b border-black/5 bg-[#FCFCFC] px-6 py-5 lg:border-b-0 lg:border-r">
-                <p className="text-sm font-semibold text-gray-900">Integracoes</p>
+                <p className="text-sm font-semibold text-gray-900">Integrações</p>
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Selecione o formato de coleta disponivel.
+                  Selecione o formato de coleta disponível.
                 </p>
 
                 <div className="mt-5 space-y-2">
@@ -1942,9 +1942,9 @@ const GeralTab: React.FC = () => {
               <div className="min-h-0 overflow-y-auto px-6 py-5">
                 <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Configuracao da API</p>
+                    <p className="text-sm font-semibold text-gray-900">Configuração da API</p>
                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                      URL, Body, Query e Header sao opcionais. Os campos JSON serao salvos como JSONB
+                      URL, Body, Query e Header são opcionais. Os campos JSON serão salvos como JSONB
                       no banco.
                     </p>
                   </div>
@@ -2055,11 +2055,11 @@ const GeralTab: React.FC = () => {
                     id="regras-cotacao-modal-title"
                     className="text-base font-semibold tracking-tight text-gray-900"
                   >
-                    Regras de Cotacao
+                    Regras de Cotação
                   </h2>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                    Configure quais informacoes a IA deve solicitar ao cliente para validar uma cotacao
-                    antes de avancar no atendimento.
+                    Configure quais informações a IA deve solicitar ao cliente para validar uma cotação
+                    antes de avançar no atendimento.
                   </p>
                 </div>
               </div>
@@ -2080,7 +2080,7 @@ const GeralTab: React.FC = () => {
                     className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Save size={16} />
-                    {isSavingQuoteRules ? 'Salvando...' : 'Salvar alteracoes'}
+                    {isSavingQuoteRules ? 'Salvando...' : 'Salvar alterações'}
                   </button>
                 ) : null}
               </div>
@@ -2173,7 +2173,7 @@ const GeralTab: React.FC = () => {
                       <p className="text-sm font-semibold text-gray-900">Nenhuma regra cadastrada</p>
                       <p className="mt-2 text-sm leading-6 text-gray-500">
                         Crie a primeira regra para orientar a IA sobre o que deve ser solicitado ao
-                        cliente na etapa de cotacao.
+                        cliente na etapa de cotação.
                       </p>
                     </div>
                   )}
@@ -2430,8 +2430,8 @@ const GeralTab: React.FC = () => {
                     className="absolute inset-y-0 right-3 flex items-center text-gray-400 transition-colors hover:text-gray-700"
                     aria-label={
                       passwordVisibility.confirmNewPassword
-                        ? 'Ocultar confirmacao da nova senha'
-                        : 'Mostrar confirmacao da nova senha'
+                        ? 'Ocultar confirmação da nova senha'
+                        : 'Mostrar confirmação da nova senha'
                     }
                   >
                     {passwordVisibility.confirmNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}

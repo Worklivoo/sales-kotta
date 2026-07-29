@@ -32,32 +32,30 @@ interface NotificationToggleDefinition {
     | 'notificacao_nenhum_item'
   >;
   title: string;
-  description: string;
+  description: React.ReactNode;
 }
 
 const NOTIFICATION_TOGGLES: NotificationToggleDefinition[] = [
   {
-    key: 'notificacao_nova_mensagem',
-    title: 'Nova mensagem',
-    description: 'Receber notificacoes quando receber novas mensagens no e-mail apos orcamento enviado.',
-  },
-  {
     key: 'notificacao_modo_semi',
-    title: 'Modo semi-automatico',
+    title: 'Modo semi-automático',
     description:
-      'Receber notificacoes quando estiver com um orcamento aguardando aprovacao no modo semi-automatico.',
+      'Receber notificações de atendimentos que entrarem etapa de "Aguardando Aprovação"',
   },
   {
     key: 'notificacao_novo_cliente',
     title: 'Novo cliente',
     description:
-      'Receber notificacoes quando um novo cliente que nao tem na base de clientes solicita um orcamento.',
+      <>
+        Receber notificações de atendimentos de <strong>novos clientes</strong> que entrarem
+        etapa de "Aguardando Aprovação"
+      </>,
   },
   {
     key: 'notificacao_nenhum_item',
     title: 'Nenhum item encontrado',
     description:
-      'Receber notificacao quando um cliente solicitar um orcamento e a IA nao encontrar nenhum item para aquela proposta.',
+      'Receber notificação quando um cliente solicitar um orçamento e a IA não encontrar nenhum item para aquela proposta.',
   },
 ];
 
@@ -175,7 +173,7 @@ const NotificacoesTab: React.FC = () => {
         }
 
         if (!session?.user?.id) {
-          throw new Error('Nao foi possivel identificar o usuario autenticado.');
+          throw new Error('Não foi possível identificar o usuário autenticado.');
         }
 
         const { data, error } = await supabase
@@ -199,7 +197,7 @@ const NotificacoesTab: React.FC = () => {
         setNotificationForm(createNotificationForm(nextConfig));
         setIsEditingConfig(!hasAnyNotificationConfig(nextConfig));
       } catch (error: any) {
-        console.error('Erro ao carregar configuracoes de notificacoes:', error);
+        console.error('Erro ao carregar configurações de notificações:', error);
 
         if (!isMounted) {
           return;
@@ -207,7 +205,7 @@ const NotificacoesTab: React.FC = () => {
 
         setMemberConfig(null);
         setNotificationForm(EMPTY_NOTIFICATION_FORM);
-        setLoadError(error?.message || 'Nao foi possivel carregar as configuracoes de notificacoes.');
+        setLoadError(error?.message || 'Não foi possível carregar as configurações de notificações.');
       } finally {
         if (isMounted) {
           setIsLoadingConfig(false);
@@ -269,14 +267,14 @@ const NotificacoesTab: React.FC = () => {
 
   const handleSaveConfig = async () => {
     if (!memberConfig?.membro_id) {
-      setSaveError('Nao foi possivel identificar o usuario para salvar.');
+      setSaveError('Não foi possível identificar o usuário para salvar.');
       return;
     }
 
     const whatsappDigits = normalizeWhatsappDigits(notificationForm.notificacao_whatsapp);
 
     if (notificationForm.notificacao_whatsapp.trim() && !isValidWhatsappDigits(notificationForm.notificacao_whatsapp)) {
-      setSaveError('Informe um WhatsApp valido no padrao +55 (DD) 99999-9999.');
+      setSaveError('Informe um WhatsApp válido no padrão +55 (DD) 99999-9999.');
       return;
     }
 
@@ -316,10 +314,10 @@ const NotificacoesTab: React.FC = () => {
             },
       );
       setIsEditingConfig(false);
-      setSaveSuccess('Configuracoes de notificacoes salvas com sucesso.');
+      setSaveSuccess('Configurações de notificações salvas com sucesso.');
     } catch (error: any) {
-      console.error('Erro ao salvar configuracoes de notificacoes:', error);
-      setSaveError(error?.message || 'Nao foi possivel salvar as configuracoes de notificacoes.');
+      console.error('Erro ao salvar configurações de notificações:', error);
+      setSaveError(error?.message || 'Não foi possível salvar as configurações de notificações.');
     } finally {
       setIsSavingConfig(false);
     }
@@ -337,10 +335,10 @@ const NotificacoesTab: React.FC = () => {
 
               <div className="space-y-1">
                 <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
-                  Configuracao de Notificacoes
+                  Configuração de Notificações
                 </h2>
                 <p className="max-w-2xl text-sm leading-6 text-gray-500">
-                  Configure como e onde voce deseja receber os alertas mais importantes da operacao.
+                  Configure como e onde você deseja receber os alertas mais importantes da operação.
                 </p>
               </div>
             </div>
@@ -379,9 +377,9 @@ const NotificacoesTab: React.FC = () => {
             <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-gray-900">Notificacoes gerais</p>
+                  <p className="text-sm font-semibold text-gray-900">Notificações gerais</p>
                   <p className="text-sm leading-6 text-gray-500">
-                    Ative ou desative o recebimento de notificacoes da plataforma.
+                    Ative ou desative o recebimento de notificações da plataforma.
                   </p>
                 </div>
 
@@ -410,7 +408,7 @@ const NotificacoesTab: React.FC = () => {
                   htmlFor="notificacao-email"
                   className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
                 >
-                  E-mail para notificacoes
+                  E-mail para notificações
                 </label>
                 <input
                   id="notificacao-email"
@@ -428,7 +426,7 @@ const NotificacoesTab: React.FC = () => {
                   htmlFor="notificacao-whatsapp"
                   className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
                 >
-                  WhatsApp para notificacoes
+                  WhatsApp para notificações
                 </label>
                 <input
                   id="notificacao-whatsapp"
@@ -444,9 +442,9 @@ const NotificacoesTab: React.FC = () => {
 
             <div className="rounded-2xl border border-black/5 bg-white p-4">
               <div className="mb-4">
-                <p className="text-sm font-semibold text-gray-900">Tipos de notificacao</p>
+                <p className="text-sm font-semibold text-gray-900">Tipos de notificação</p>
                 <p className="mt-1 text-sm leading-6 text-gray-500">
-                  Escolha quais eventos devem gerar notificacoes para voce.
+                  Escolha quais eventos devem gerar notificações para você.
                 </p>
               </div>
 
@@ -502,7 +500,7 @@ const NotificacoesTab: React.FC = () => {
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={16} />
-                  {isSavingConfig ? 'Salvando...' : 'Salvar configuracoes'}
+                  {isSavingConfig ? 'Salvando...' : 'Salvar configurações'}
                 </button>
               </div>
             ) : null}

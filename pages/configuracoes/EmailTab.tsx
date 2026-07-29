@@ -107,7 +107,7 @@ const EmailTab: React.FC = () => {
         }
 
         if (!session?.user?.id) {
-          throw new Error('Nao foi possivel identificar o usuario autenticado.');
+          throw new Error('Não foi possível identificar o usuário autenticado.');
         }
 
         const { data, error } = await supabase
@@ -129,7 +129,7 @@ const EmailTab: React.FC = () => {
         setEmailConfigForm(createEmailConfigForm(nextConfig));
         setIsEditingConfig(!hasAnyEmailConfig(nextConfig));
       } catch (error: any) {
-        console.error('Erro ao carregar configuracoes de email:', error);
+        console.error('Erro ao carregar configurações de email:', error);
 
         if (!isMounted) {
           return;
@@ -137,7 +137,7 @@ const EmailTab: React.FC = () => {
 
         setMemberConfig(null);
         setEmailConfigForm(EMPTY_EMAIL_CONFIG_FORM);
-        setLoadError(error?.message || 'Nao foi possivel carregar as configuracoes de email.');
+        setLoadError(error?.message || 'Não foi possível carregar as configurações de email.');
       } finally {
         if (isMounted) {
           setIsLoadingConfig(false);
@@ -197,7 +197,7 @@ const EmailTab: React.FC = () => {
 
   const handleSaveConfig = async () => {
     if (!memberConfig?.membro_id) {
-      setSaveError('Nao foi possivel identificar o usuario para salvar.');
+      setSaveError('Não foi possível identificar o usuário para salvar.');
       return;
     }
 
@@ -209,7 +209,7 @@ const EmailTab: React.FC = () => {
     const smtpPort = emailConfigForm.smtp_port.trim();
 
     if (!memberName) {
-      setSaveError('Nao foi possivel identificar o nome do usuario autenticado.');
+      setSaveError('Não foi possível identificar o nome do usuário autenticado.');
       return;
     }
 
@@ -270,14 +270,14 @@ const EmailTab: React.FC = () => {
 
       if (!validationResponse.ok) {
         throw new Error(
-          validationResultado || 'Nao foi possivel validar as configuracoes SMTP.',
+          validationResultado || 'Não foi possível validar as configurações SMTP.',
         );
       }
 
       if (validationResultado !== 'VALIDADO') {
         setSaveError(
           validationResultado ||
-            'Nao foi possivel validar as configuracoes SMTP. Revise os dados e tente novamente.',
+            'Não foi possível validar as configurações SMTP. Revise os dados e tente novamente.',
         );
         return;
       }
@@ -305,10 +305,10 @@ const EmailTab: React.FC = () => {
       );
       setIsEditingConfig(false);
       setIsPasswordVisible(false);
-      setSaveSuccess('Configuracoes de email salvas com sucesso.');
+      setSaveSuccess('Configurações de email salvas com sucesso.');
     } catch (error: any) {
-      console.error('Erro ao salvar configuracoes de email:', error);
-      setSaveError(error?.message || 'Nao foi possivel salvar as configuracoes de email.');
+      console.error('Erro ao salvar configurações de email:', error);
+      setSaveError(error?.message || 'Não foi possível salvar as configurações de email.');
     } finally {
       setIsSavingConfig(false);
     }
@@ -326,11 +326,11 @@ const EmailTab: React.FC = () => {
 
               <div className="space-y-1">
                 <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
-                  Configuracao de Email
+                  Configuração de Email
                 </h2>
                 <p className="max-w-2xl text-sm leading-6 text-gray-500">
-                  Configure os dados SMTP que serao usados para receber e responder as cotacoes pelo
-                  seu proprio e-mail.
+                  Configure os dados SMTP que serão usados para receber e responder as cotações pelo
+                  seu próprio e-mail.
                 </p>
               </div>
             </div>
@@ -456,7 +456,7 @@ const EmailTab: React.FC = () => {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-gray-900">SSL do servidor</p>
                   <p className="text-sm leading-6 text-gray-500">
-                    Ative esta opcao quando o seu provedor SMTP exigir conexao segura via SSL.
+                    Ative esta opção quando o seu provedor SMTP exigir conexão segura via SSL.
                   </p>
                 </div>
 
@@ -499,7 +499,7 @@ const EmailTab: React.FC = () => {
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={16} />
-                  {isSavingConfig ? 'Salvando...' : 'Salvar configuracoes'}
+                  {isSavingConfig ? 'Salvando...' : 'Salvar configurações'}
                 </button>
               </div>
             ) : null}
@@ -517,28 +517,28 @@ const EmailTab: React.FC = () => {
                   Status atual
                 </h3>
                 <p className="text-sm leading-6 text-gray-500">
-                  Visualize rapidamente se o seu email SMTP ja foi configurado.
+                  Visualize rapidamente se o seu email SMTP já foi configurado.
                 </p>
               </div>
             </div>
 
             <div className="mt-5 rounded-2xl border border-black/5 bg-white p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                Configuracao
+                Configuração
               </p>
               <p className="mt-2 text-sm font-semibold text-gray-900">
                 {isLoadingConfig
                   ? 'Carregando...'
                   : hasSavedConfig
                     ? 'SMTP configurado'
-                    : 'SMTP ainda nao configurado'}
+                    : 'SMTP ainda não configurado'}
               </p>
             </div>
 
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-black/5 bg-white p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                  Email atual
+                  E-mail atual
                 </p>
                 <p className="mt-2 break-all text-sm font-semibold text-gray-900">
                   {isLoadingConfig ? 'Carregando...' : memberConfig?.smtp_email?.trim() || '-'}

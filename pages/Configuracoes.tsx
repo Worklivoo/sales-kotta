@@ -11,7 +11,7 @@ const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
   { key: 'membros', label: 'Membros' },
   { key: 'email', label: 'Email' },
-  { key: 'notificacoes', label: 'Notificacoes' },
+  { key: 'notificacoes', label: 'Notificações' },
 ];
 
 const ConfiguracoesPage: React.FC = () => {
