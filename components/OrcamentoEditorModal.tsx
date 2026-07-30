@@ -40,6 +40,11 @@ interface ObservacaoField {
   texto: string;
 }
 
+interface CurrencySignature {
+  marker: string;
+  position: 'prefix' | 'suffix';
+}
+
 const CLIENT_FIELD_ORDER = ['razao_social', 'cnpj_cpf', 'endereco', 'email', 'telefone'] as const;
 
 const CLIENT_FIELD_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
@@ -213,24 +218,43 @@ const parseCurrencyValue = (value: string) => {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 };
 
-const extractCurrencyMarker = (value: string) => {
+const extractCurrencySignature = (value: string): CurrencySignature | null => {
   const normalizedValue = value.replace(/\u00a0/g, ' ').trim();
 
   if (!normalizedValue || isDashLikeValue(normalizedValue)) {
     return null;
   }
 
-  const match = normalizedValue.match(/^[^\d-]+/);
-  return match ? match[0].trim() : null;
+  const prefixMatch = normalizedValue.match(/^[^\d-]+/);
+
+  if (prefixMatch?.[0]?.trim()) {
+    return {
+      marker: prefixMatch[0].trim(),
+      position: 'prefix',
+    };
+  }
+
+  const suffixMatch = normalizedValue.match(/[^\d.,-]+$/);
+
+  if (suffixMatch?.[0]?.trim()) {
+    return {
+      marker: suffixMatch[0].trim(),
+      position: 'suffix',
+    };
+  }
+
+  return null;
 };
 
-const formatMonetaryValue = (value: number, currencyMarker: string) => {
+const formatMonetaryValue = (value: number, currencySignature: CurrencySignature) => {
   const formattedNumber = value.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 
-  return `${currencyMarker}\u00a0${formattedNumber}`;
+  return currencySignature.position === 'suffix'
+    ? `${formattedNumber}\u00a0${currencySignature.marker}`
+    : `${currencySignature.marker}\u00a0${formattedNumber}`;
 };
 
 const serializeHtmlDocument = (documentNode: Document) => {
@@ -523,19 +547,25 @@ const applyItemsToOrcamentoHtml = (value: string | null, items: OrcamentoItemRow
   const totalValues = items
     .map((item) => ({
       parsedValue: parseCurrencyValue(item.valorTotal),
-      currencyMarker: extractCurrencyMarker(item.valorTotal),
+      currencySignature: extractCurrencySignature(item.valorTotal),
     }))
     .filter(
-      (item): item is { parsedValue: number; currencyMarker: string } =>
-        item.parsedValue !== null && Boolean(item.currencyMarker),
+      (item): item is { parsedValue: number; currencySignature: CurrencySignature } =>
+        item.parsedValue !== null && Boolean(item.currencySignature),
     );
 
-  const uniqueCurrencyMarkers = new Set(totalValues.map((item) => item.currencyMarker));
+  const uniqueCurrencySignatures = new Set(
+    totalValues.map(
+      (item) => `${item.currencySignature.position}:${item.currencySignature.marker}`,
+    ),
+  );
 
-  if (totalCell && totalValues.length > 0 && uniqueCurrencyMarkers.size === 1) {
-    const currencyMarker = totalValues[0].currencyMarker;
+  if (totalCell && totalValues.length > 0 && uniqueCurrencySignatures.size === 1) {
+    const currencySignature = totalValues[0].currencySignature;
     const totalValue = totalValues.reduce((currentTotal, item) => currentTotal + item.parsedValue, 0);
-    totalCell.textContent = formatMonetaryValue(totalValue, currencyMarker);
+    totalCell.textContent = formatMonetaryValue(totalValue, currencySignature);
+  } else if (totalCell && totalValues.length > 0) {
+    totalCell.textContent = '—';
   }
 
   return serializeHtmlDocument(documentNode);
