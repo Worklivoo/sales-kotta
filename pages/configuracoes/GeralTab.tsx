@@ -10,8 +10,6 @@ import {
   KeyRound,
   Pencil,
   Plus,
-  Power,
-  PowerOff,
   Save,
   Settings2,
   Sparkles,
@@ -30,6 +28,7 @@ interface MemberAccountRecord {
   empresa_id: string | null;
   nome: string | null;
   email: string | null;
+  email_integracao: string | null;
   telefone: string | null;
   status: string | null;
   cargo: string | null;
@@ -58,10 +57,12 @@ interface QuoteRuleValue {
   ativo: boolean;
   nivel: QuoteRuleLevel;
   descricao: string;
+  created_at?: string | null;
 }
 
 interface QuoteRuleItem extends QuoteRuleValue {
   name: string;
+  createdAt: string;
 }
 
 interface QuoteRuleFormState {
@@ -84,6 +85,7 @@ interface CompanyPlanRecord {
   plano_ciclo: string | null;
   valor_mensal: number | string | null;
   plano_status: string | null;
+  enviar_proposta: boolean | null;
   regras_cotacao: unknown;
   scrapper_tipo: ScrapperType | null;
   scrapper_link: string | null;
@@ -278,10 +280,15 @@ const createEmptyQuoteRuleForm = (): QuoteRuleFormState => ({
 const isQuoteRuleLevel = (value: unknown): value is QuoteRuleLevel =>
   value === 'OBRIGATORIO' || value === 'DESEJAVEL';
 
+const createFallbackQuoteRuleCreatedAt = (index: number) => new Date(index).toISOString();
+
 const sortQuoteRules = (rules: QuoteRuleItem[]) =>
   [...rules].sort((left, right) => {
-    if (left.ativo !== right.ativo) {
-      return left.ativo ? -1 : 1;
+    const leftTimestamp = Date.parse(left.createdAt);
+    const rightTimestamp = Date.parse(right.createdAt);
+
+    if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp) && leftTimestamp !== rightTimestamp) {
+      return leftTimestamp - rightTimestamp;
     }
 
     return left.name.localeCompare(right.name, 'pt-BR');
@@ -307,12 +314,16 @@ const parseQuoteRules = (value: unknown): QuoteRuleItem[] => {
   }
 
   const mappedRules = Object.entries(rawValue as Record<string, unknown>)
-    .map(([name, ruleConfig]) => {
+    .map(([name, ruleConfig], index) => {
       if (!ruleConfig || typeof ruleConfig !== 'object' || Array.isArray(ruleConfig)) {
         return null;
       }
 
       const typedRuleConfig = ruleConfig as Record<string, unknown>;
+      const createdAt =
+        typeof typedRuleConfig.created_at === 'string' && !Number.isNaN(Date.parse(typedRuleConfig.created_at))
+          ? typedRuleConfig.created_at
+          : createFallbackQuoteRuleCreatedAt(index);
 
       return {
         name,
@@ -320,6 +331,7 @@ const parseQuoteRules = (value: unknown): QuoteRuleItem[] => {
         nivel: isQuoteRuleLevel(typedRuleConfig.nivel) ? typedRuleConfig.nivel : 'OBRIGATORIO',
         descricao:
           typeof typedRuleConfig.descricao === 'string' ? typedRuleConfig.descricao : '',
+        createdAt,
       } satisfies QuoteRuleItem;
     })
     .filter((rule): rule is QuoteRuleItem => Boolean(rule));
@@ -339,6 +351,7 @@ const serializeQuoteRules = (rules: QuoteRuleItem[]) =>
       ativo: rule.ativo,
       nivel: rule.nivel,
       descricao: rule.descricao.trim(),
+      created_at: rule.createdAt,
     };
 
     return accumulator;
@@ -356,6 +369,7 @@ const GeralTab: React.FC = () => {
   const [isCompanyPlanLoading, setIsCompanyPlanLoading] = useState(false);
   const [companyPlanError, setCompanyPlanError] = useState<string | null>(null);
   const [isQuoteRulesModalOpen, setIsQuoteRulesModalOpen] = useState(false);
+  const [isQuoteRuleEditorModalOpen, setIsQuoteRuleEditorModalOpen] = useState(false);
   const [quoteRulesDraft, setQuoteRulesDraft] = useState<QuoteRuleItem[]>([]);
   const [quoteRuleForm, setQuoteRuleForm] = useState<QuoteRuleFormState>(createEmptyQuoteRuleForm());
   const [isSavingQuoteRules, setIsSavingQuoteRules] = useState(false);
@@ -364,6 +378,8 @@ const GeralTab: React.FC = () => {
   const [budgetModeError, setBudgetModeError] = useState<string | null>(null);
   const [isSavingNewClientsBudget, setIsSavingNewClientsBudget] = useState(false);
   const [newClientsBudgetError, setNewClientsBudgetError] = useState<string | null>(null);
+  const [isSavingSendProposal, setIsSavingSendProposal] = useState(false);
+  const [sendProposalError, setSendProposalError] = useState<string | null>(null);
   const [isSourceDataModalOpen, setIsSourceDataModalOpen] = useState(false);
   const [sourceDataForm, setSourceDataForm] = useState<SourceDataFormState>(createSourceDataForm());
   const [sourceDataError, setSourceDataError] = useState<string | null>(null);
@@ -418,7 +434,7 @@ const GeralTab: React.FC = () => {
         const { data, error } = await supabase
           .from('sales_membros_empresa')
           .select(
-            'membro_id, empresa_id, nome, email, telefone, status, cargo, modo_orcamento, orcamento_novos_clientes',
+            'membro_id, empresa_id, nome, email, email_integracao, telefone, status, cargo, modo_orcamento, orcamento_novos_clientes',
           )
           .eq('membro_id', session.user.id)
           .maybeSingle();
@@ -473,7 +489,7 @@ const GeralTab: React.FC = () => {
         const { data, error } = await supabase
           .from('sales_empresa')
           .select(
-            'plano, plano_ciclo, valor_mensal, plano_status, regras_cotacao, scrapper_tipo, scrapper_link, scrapper_body, scrapper_query, scrapper_headers, cliente_api_link, cliente_api_body, cliente_api_query, cliente_api_header',
+            'plano, plano_ciclo, valor_mensal, plano_status, enviar_proposta, regras_cotacao, scrapper_tipo, scrapper_link, scrapper_body, scrapper_query, scrapper_headers, cliente_api_link, cliente_api_body, cliente_api_query, cliente_api_header',
           )
           .eq('empresa_id', memberAccount.empresa_id)
           .maybeSingle();
@@ -519,12 +535,18 @@ const GeralTab: React.FC = () => {
   const memberEmail = memberAccount?.email?.trim() || '-';
   const memberPhone = formatPhone(memberAccount?.telefone || null);
   const memberId = memberAccount?.membro_id?.trim() || '-';
+  const memberIntegrationEmail = memberAccount?.email_integracao?.trim() || '-';
   const memberBudgetMode = memberAccount?.modo_orcamento ?? null;
   const isAutomaticBudgetMode = memberBudgetMode === 'AUTO';
   const budgetModeLabel = formatBudgetModeLabel(memberBudgetMode);
   const allowBudgetForNewClients = memberAccount?.orcamento_novos_clientes === true;
   const newClientsBudgetLabel = allowBudgetForNewClients ? 'Ativado' : 'Desativado';
   const newClientsBudgetStatusClassName = allowBudgetForNewClients
+    ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
+    : 'border-black/10 bg-[#FAFAFA] text-gray-600';
+  const isSendProposalEnabled = companyPlan?.enviar_proposta === true;
+  const sendProposalLabel = isSendProposalEnabled ? 'Ativado' : 'Desativado';
+  const sendProposalStatusClassName = isSendProposalEnabled
     ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
     : 'border-black/10 bg-[#FAFAFA] text-gray-600';
   const companyPlanName = companyPlan?.plano?.trim() || '-';
@@ -720,6 +742,45 @@ const GeralTab: React.FC = () => {
     }
   };
 
+  const handleToggleSendProposal = async () => {
+    if (!memberAccount?.empresa_id) {
+      setSendProposalError('Não foi possível identificar a empresa para atualizar a configuração.');
+      return;
+    }
+
+    const nextValue = !(companyPlan?.enviar_proposta === true);
+
+    setIsSavingSendProposal(true);
+    setSendProposalError(null);
+
+    try {
+      const { error } = await supabase
+        .from('sales_empresa')
+        .update({
+          enviar_proposta: nextValue,
+        })
+        .eq('empresa_id', memberAccount.empresa_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setCompanyPlan((current) =>
+        current
+          ? {
+              ...current,
+              enviar_proposta: nextValue,
+            }
+          : current,
+      );
+    } catch (error: any) {
+      console.error('Erro ao atualizar envio da proposta:', error);
+      setSendProposalError(error?.message || 'Não foi possível atualizar o envio da proposta.');
+    } finally {
+      setIsSavingSendProposal(false);
+    }
+  };
+
   const handleOpenChangePasswordModal = () => {
     setPasswordForm({
       currentPassword: '',
@@ -762,11 +823,24 @@ const GeralTab: React.FC = () => {
     setQuoteRulesDraft(companyQuoteRules);
     setQuoteRuleForm(createEmptyQuoteRuleForm());
     setQuoteRulesError(null);
+    setIsQuoteRuleEditorModalOpen(false);
     setIsQuoteRulesModalOpen(true);
   };
 
   const handleCloseQuoteRulesModal = () => {
+    setIsQuoteRuleEditorModalOpen(false);
     setIsQuoteRulesModalOpen(false);
+  };
+
+  const handleOpenQuoteRuleEditorModal = () => {
+    setQuoteRulesError(null);
+    setIsQuoteRuleEditorModalOpen(true);
+  };
+
+  const handleCloseQuoteRuleEditorModal = () => {
+    setQuoteRuleForm(createEmptyQuoteRuleForm());
+    setQuoteRulesError(null);
+    setIsQuoteRuleEditorModalOpen(false);
   };
 
   const handleQuoteRuleFormChange =
@@ -794,6 +868,7 @@ const GeralTab: React.FC = () => {
       descricao: rule.descricao,
     });
     setQuoteRulesError(null);
+    setIsQuoteRuleEditorModalOpen(true);
   };
 
   const handleUpsertQuoteRule = () => {
@@ -832,6 +907,7 @@ const GeralTab: React.FC = () => {
       nivel: quoteRuleForm.nivel,
       descricao: trimmedDescription,
       ativo: currentRule?.ativo ?? true,
+      createdAt: currentRule?.createdAt ?? new Date().toISOString(),
     };
 
     const nextRules = currentRule
@@ -841,6 +917,7 @@ const GeralTab: React.FC = () => {
     setQuoteRulesDraft(sortQuoteRules(nextRules));
     setQuoteRuleForm(createEmptyQuoteRuleForm());
     setQuoteRulesError(null);
+    setIsQuoteRuleEditorModalOpen(false);
   };
 
   const handleToggleQuoteRuleActive = (ruleName: string) => {
@@ -866,6 +943,7 @@ const GeralTab: React.FC = () => {
 
     if (quoteRuleForm.originalName === ruleName) {
       setQuoteRuleForm(createEmptyQuoteRuleForm());
+      setIsQuoteRuleEditorModalOpen(false);
     }
 
     setQuoteRulesError(null);
@@ -1280,6 +1358,13 @@ const GeralTab: React.FC = () => {
                 </p>
               </div>
 
+              <div>
+                <p className="text-[11px] font-medium text-gray-400">E-mail de integração</p>
+                <p className="mt-1 break-all text-[11px] font-medium text-gray-400">
+                  {isAccountLoading ? 'Carregando...' : memberIntegrationEmail}
+                </p>
+              </div>
+
               {isEditingAccount ? (
                 <div className="pt-1">
                   <button
@@ -1566,6 +1651,69 @@ const GeralTab: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {isAdminMember ? (
+            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Enviar a Proposta</h3>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
+                    Defina se o sistema deve enviar a proposta ao cliente usando o modelo padrão.
+                  </p>
+                </div>
+              </div>
+
+              {sendProposalError ? (
+                <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                  {sendProposalError}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Status atual</p>
+                  <span
+                    className={`mt-2 inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${sendProposalStatusClassName}`}
+                  >
+                    {isCompanyPlanLoading ? 'Carregando...' : sendProposalLabel}
+                  </span>
+                  <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
+                    {isCompanyPlanLoading
+                      ? 'Carregando configuração de envio da proposta.'
+                      : isSendProposalEnabled
+                        ? 'Quando ativado, o sistema envia a proposta para o cliente usando o modelo padrão.'
+                        : 'Quando desativado, o sistema não envia a proposta para o cliente por e-mail.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isSendProposalEnabled}
+                  aria-label="Alternar envio da proposta"
+                  onClick={handleToggleSendProposal}
+                  disabled={
+                    isCompanyPlanLoading ||
+                    isSavingSendProposal ||
+                    Boolean(companyPlanError) ||
+                    !memberAccount?.empresa_id
+                  }
+                  className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
+                    isSendProposalEnabled ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div
+                    className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                      isSendProposalEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {isAdminMember ? (
             <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
@@ -2086,8 +2234,14 @@ const GeralTab: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1.2fr)_380px]">
-              <div className="min-h-0 overflow-y-auto border-b border-black/5 bg-[#FCFCFC] px-6 py-5 xl:border-b-0 xl:border-r">
+            {quoteRulesError && !isQuoteRuleEditorModalOpen ? (
+              <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm font-medium text-red-600">
+                {quoteRulesError}
+              </div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#FCFCFC] px-6 py-5">
+              <div className="mx-auto w-full max-w-4xl">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">Regras atuais</p>
@@ -2099,7 +2253,10 @@ const GeralTab: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={handleResetQuoteRuleForm}
+                    onClick={() => {
+                      handleResetQuoteRuleForm();
+                      handleOpenQuoteRuleEditorModal();
+                    }}
                     className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
                   >
                     <Plus size={15} />
@@ -2114,47 +2271,60 @@ const GeralTab: React.FC = () => {
                         key={rule.name}
                         className="rounded-3xl border border-black/5 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold text-gray-900">{rule.name}</p>
-                              <span
-                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                  rule.nivel === 'OBRIGATORIO'
-                                    ? 'bg-[#EBF57D] text-gray-900'
-                                    : 'bg-[#FAFAFA] text-gray-500'
-                                }`}
-                              >
-                                {formatEnumLabel(rule.nivel)}
-                              </span>
-                              <span
-                                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                                  rule.ativo
-                                    ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-                                    : 'border-black/10 bg-white text-gray-500'
-                                }`}
-                              >
-                                {rule.ativo ? 'Ativa' : 'Desativada'}
-                              </span>
+                        <div className="flex flex-col gap-4">
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-gray-900">{rule.name}</p>
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                    rule.nivel === 'OBRIGATORIO'
+                                      ? 'bg-[#EBF57D] text-gray-900'
+                                      : 'bg-[#FAFAFA] text-gray-500'
+                                  }`}
+                                >
+                                  {formatEnumLabel(rule.nivel)}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm leading-6 text-gray-500">{rule.descricao}</p>
                             </div>
-                            <p className="mt-2 text-sm leading-6 text-gray-500">{rule.descricao}</p>
+
+                            <div className="flex min-w-[140px] items-center justify-between gap-3 rounded-2xl border border-black/5 bg-[#FCFCFC] px-3 py-2">
+                              <div>
+                                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
+                                  Status
+                                </p>
+                                <p className="mt-1 text-xs font-semibold text-gray-900">
+                                  {rule.ativo ? 'Ativa' : 'Desativada'}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={rule.ativo}
+                                aria-label={`Alternar status da regra ${rule.name}`}
+                                onClick={() => handleToggleQuoteRuleActive(rule.name)}
+                                className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
+                                  rule.ativo ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                                }`}
+                              >
+                                <div
+                                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                                    rule.ativo ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-black/5 pt-4">
                             <button
                               type="button"
                               onClick={() => handleSelectQuoteRuleForEdit(rule)}
                               className="rounded-2xl bg-[#FAFAFA] px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
                             >
                               Editar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleQuoteRuleActive(rule.name)}
-                              className="inline-flex items-center gap-2 rounded-2xl bg-[#FAFAFA] px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-                            >
-                              {rule.ativo ? <PowerOff size={14} /> : <Power size={14} />}
-                              {rule.ativo ? 'Desativar' : 'Ativar'}
                             </button>
                             <button
                               type="button"
@@ -2179,30 +2349,36 @@ const GeralTab: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
 
-              <div className="min-h-0 overflow-y-auto px-6 py-5">
-                <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
+            {isQuoteRuleEditorModalOpen ? (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25 px-4 py-6">
+                <div
+                  className="absolute inset-0"
+                  aria-hidden="true"
+                  onClick={handleCloseQuoteRuleEditorModal}
+                />
+
+                <div className="relative z-10 w-full max-w-lg rounded-3xl border border-black/5 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">
                         {isEditingQuoteRule ? 'Editar regra' : 'Nova regra'}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-gray-500">
-                        Toda nova regra comeca como ativa e passa a orientar a IA apos salvar as
-                        alteracoes.
+                        Toda nova regra começa como ativa e passa a orientar a IA após salvar as
+                        alterações.
                       </p>
                     </div>
 
-                    {isEditingQuoteRule ? (
-                      <button
-                        type="button"
-                        onClick={handleResetQuoteRuleForm}
-                        className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-800"
-                        aria-label="Cancelar edicao da regra"
-                      >
-                        <X size={16} />
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleCloseQuoteRuleEditorModal}
+                      className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                      aria-label="Fechar edição da regra"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
 
                   <div className="mt-5 space-y-4">
@@ -2225,7 +2401,7 @@ const GeralTab: React.FC = () => {
                         value={quoteRuleForm.name}
                         onChange={handleQuoteRuleFormChange('name')}
                         className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
-                        placeholder="Ex.: CNPJ, CEP de entrega, Industria"
+                        placeholder="Ex.: CNPJ, CEP de entrega, Indústria"
                       />
                     </div>
 
@@ -2234,7 +2410,7 @@ const GeralTab: React.FC = () => {
                         htmlFor="quote-rule-level"
                         className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
                       >
-                        Nivel
+                        Nível
                       </label>
                       <select
                         id="quote-rule-level"
@@ -2255,7 +2431,7 @@ const GeralTab: React.FC = () => {
                         htmlFor="quote-rule-description"
                         className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
                       >
-                        Descricao
+                        Descrição
                       </label>
                       <textarea
                         id="quote-rule-description"
@@ -2264,7 +2440,7 @@ const GeralTab: React.FC = () => {
                         rows={5}
                         maxLength={100}
                         className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
-                        placeholder="Explique para a IA qual informacao ela deve solicitar ao cliente e por que isso e necessario."
+                        placeholder="Explique para a IA qual informação ela deve solicitar ao cliente e por que isso é necessário."
                       />
                       <div className="mt-2 text-right text-[11px] font-medium text-gray-400">
                         {quoteRuleForm.descricao.length}/100
@@ -2274,10 +2450,10 @@ const GeralTab: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
                       <button
                         type="button"
-                        onClick={handleResetQuoteRuleForm}
+                        onClick={handleCloseQuoteRuleEditorModal}
                         className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
                       >
-                        Limpar
+                        Cancelar
                       </button>
                       <button
                         type="button"
@@ -2291,7 +2467,7 @@ const GeralTab: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       ) : null}

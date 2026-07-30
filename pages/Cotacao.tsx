@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Paperclip } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  Paperclip,
+} from 'lucide-react';
 import OrcamentoEditorModal from '../components/OrcamentoEditorModal';
 import {
   messageHtmlClassName,
@@ -58,6 +65,9 @@ interface OrcamentoRecord {
   validade: string | null;
   valor_total: string | null;
   status: string | null;
+  aprovado_por: string | null;
+  data_aprovacao: string | null;
+  updated_at: string | null;
   pdf_url: string | null;
   html_orcamento: string | null;
 }
@@ -375,6 +385,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
   const [clientData, setClientData] = useState<ClientRecord | null>(null);
   const [orcamentoData, setOrcamentoData] = useState<OrcamentoRecord | null>(null);
+  const [approvedByName, setApprovedByName] = useState('Não aprovado');
   const [orcamentoItems, setOrcamentoItems] = useState<OrcamentoItemRecord[]>([]);
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
@@ -485,9 +496,12 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from('sales_orcamentos')
-            .select('orcamento_id, data_emissao, validade, valor_total, status, pdf_url, html_orcamento')
+            .select(
+              'orcamento_id, data_emissao, validade, valor_total, status, aprovado_por, data_aprovacao, updated_at, pdf_url, html_orcamento',
+            )
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
+            .order('updated_at', { ascending: false })
             .limit(1),
           markNotificationsAsReadPromise,
         ]);
@@ -518,6 +532,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         const resolvedClientData = getFirstRow(clientResponse.data as ClientRecord[] | null) ?? null;
         const resolvedOrcamentoData =
           getFirstRow(orcamentoResponse.data as OrcamentoRecord[] | null) ?? null;
+        let resolvedApprovedByName = 'Não aprovado';
         const cotacaoAssunto = atendimento.assunto || 'Cotacao sem assunto';
         const rawMessages = (messagesResponse.data ?? []) as MensagemRecord[];
         let resolvedOrcamentoItems: OrcamentoItemRecord[] = [];
@@ -533,6 +548,22 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           }
 
           resolvedOrcamentoItems = (itemsData ?? []) as OrcamentoItemRecord[];
+        }
+
+        if (resolvedOrcamentoData?.aprovado_por) {
+          const { data: approvedByRows, error: approvedByError } = await supabase
+            .from('sales_membros_empresa')
+            .select('nome')
+            .eq('empresa_id', currentMember.empresa_id)
+            .eq('membro_id', resolvedOrcamentoData.aprovado_por)
+            .limit(1);
+
+          if (approvedByError) {
+            throw approvedByError;
+          }
+
+          resolvedApprovedByName =
+            getFirstRow(approvedByRows as ResponsibleMemberRecord[] | null)?.nome || 'Não identificado';
         }
 
         const mappedMessages = rawMessages.map((message) => {
@@ -572,6 +603,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setLinkedEmails(resolvedLinkedEmails);
         setClientData(resolvedClientData);
         setOrcamentoData(resolvedOrcamentoData);
+        setApprovedByName(resolvedApprovedByName);
         setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
         setIsOrcamentoModalOpen(false);
@@ -590,6 +622,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setLinkedEmails([]);
         setClientData(null);
         setOrcamentoData(null);
+        setApprovedByName('Não aprovado');
         setOrcamentoItems([]);
         setOrderedConversationItems([]);
         setExpandedMessageIds([]);
@@ -857,6 +890,63 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                   </div>
                 </div>
               </div>
+              </section>
+
+              <section className="border-b border-black/5 pb-6">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
+                      <FileText size={20} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                        Dados do Orçamento
+                      </h2>
+                    </div>
+                  </div>
+
+                  {orcamentoData ? (
+                    <div className="space-y-4 pl-1">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Status</p>
+                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                          {formatEnumLabel(orcamentoData.status)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Data de Emissão</p>
+                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                          {formatDateOnly(orcamentoData.data_emissao)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Quem aprovou o orçamento</p>
+                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                          {approvedByName}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Data da aprovação do orçamento</p>
+                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
+                          {orcamentoData.data_aprovacao
+                            ? formatDateTime(orcamentoData.data_aprovacao)
+                            : '-'}
+                        </p>
+                      </div>
+
+                    </div>
+                  ) : (
+                    <div className="pl-1">
+                      <p className="text-sm font-medium text-gray-500">
+                        Nenhum orçamento vinculado a este atendimento.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </section>
 
             </aside>

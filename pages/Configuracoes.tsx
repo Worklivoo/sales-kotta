@@ -1,17 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import ClientesTab from './configuracoes/ClientesTab';
 import EmailTab from './configuracoes/EmailTab';
 import GeralTab from './configuracoes/GeralTab';
 import MembrosTab from './configuracoes/MembrosTab';
 import NotificacoesTab from './configuracoes/NotificacoesTab';
+import ProdutosTab from './configuracoes/ProdutosTab';
 import { supabase } from '../lib/supabase';
 
-type ConfigTabKey = 'geral' | 'membros' | 'email' | 'notificacoes';
+type ConfigTabKey =
+  | 'geral'
+  | 'membros'
+  | 'email'
+  | 'notificacoes'
+  | 'produtos'
+  | 'clientes';
 
 const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
   { key: 'membros', label: 'Membros' },
   { key: 'email', label: 'Email' },
   { key: 'notificacoes', label: 'Notificações' },
+  { key: 'produtos', label: 'Produtos' },
+  { key: 'clientes', label: 'Clientes' },
 ];
 
 const ConfiguracoesPage: React.FC = () => {
@@ -96,9 +106,9 @@ const ConfiguracoesPage: React.FC = () => {
         <section className="rounded-2xl border border-black/5 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
           <div className="border-b border-black/5 px-5 py-5 sm:px-6">
             <div className="space-y-1">
-              <h1 className="text-lg font-semibold tracking-tight text-gray-900">Configuracoes</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-gray-900">Configurações</h1>
               <p className="text-sm text-gray-500">
-                Gerencie as configuracoes gerais da sua conta e operacao.
+                Gerencie as configurações gerais da sua conta e operação.
               </p>
             </div>
           </div>
@@ -107,7 +117,7 @@ const ConfiguracoesPage: React.FC = () => {
             <div
               className="flex flex-wrap items-center gap-2"
               role="tablist"
-              aria-label="Abas de configuracoes"
+              aria-label="Abas de configurações"
             >
               {visibleTabs.map((tab) => {
                 const isActive = activeTab === tab.key;
@@ -144,6 +154,8 @@ const ConfiguracoesPage: React.FC = () => {
             {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}
             {activeTab === 'email' ? <EmailTab /> : null}
             {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
+            {activeTab === 'produtos' ? <ProdutosTab /> : null}
+            {activeTab === 'clientes' ? <ClientesTab /> : null}
           </div>
         </section>
       </div>

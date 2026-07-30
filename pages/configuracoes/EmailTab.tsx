@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Mail, Pencil, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const SMTP_VALIDATION_WEBHOOK_URL =
@@ -8,6 +8,7 @@ const SMTP_VALIDATION_WEBHOOK_URL =
 interface MemberEmailConfigRecord {
   membro_id: string;
   nome: string | null;
+  email_integracao: string | null;
   smtp_email: string | null;
   smtp_senha: string | null;
   smtp_host: string | null;
@@ -112,7 +113,9 @@ const EmailTab: React.FC = () => {
 
         const { data, error } = await supabase
           .from('sales_membros_empresa')
-          .select('membro_id, nome, smtp_email, smtp_senha, smtp_host, smtp_port, smtp_ssl')
+          .select(
+            'membro_id, nome, email_integracao, smtp_email, smtp_senha, smtp_host, smtp_port, smtp_ssl',
+          )
           .eq('membro_id', session.user.id)
           .maybeSingle();
 
@@ -316,7 +319,33 @@ const EmailTab: React.FC = () => {
 
   return (
     <div className="min-h-[520px]">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+      <div className="space-y-5">
+        <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F6] text-gray-700">
+              <Mail size={20} />
+            </div>
+
+            <div className="space-y-1">
+              <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
+                Envio de E-mails
+              </h2>
+              <p className="max-w-2xl text-sm leading-6 text-gray-500">
+                Este é o e-mail de integração usado para o envio das mensagens da sua operação.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-black/5 bg-white px-4 py-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
+              E-mail de integração
+            </p>
+            <p className="mt-2 break-all text-sm font-semibold text-gray-900">
+              {isLoadingConfig ? 'Carregando...' : memberConfig?.email_integracao?.trim() || '-'}
+            </p>
+          </div>
+        </section>
+
         <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
@@ -326,7 +355,7 @@ const EmailTab: React.FC = () => {
 
               <div className="space-y-1">
                 <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
-                  Configuração de Email
+                  Recebimento de E-mails
                 </h2>
                 <p className="max-w-2xl text-sm leading-6 text-gray-500">
                   Configure os dados SMTP que serão usados para receber e responder as cotações pelo
@@ -505,70 +534,6 @@ const EmailTab: React.FC = () => {
             ) : null}
           </div>
         </section>
-
-        <aside className="space-y-4">
-          <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-gray-700 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                <ShieldCheck size={18} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-semibold tracking-tight text-gray-900">
-                  Status atual
-                </h3>
-                <p className="text-sm leading-6 text-gray-500">
-                  Visualize rapidamente se o seu email SMTP já foi configurado.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-black/5 bg-white p-4">
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                Configuração
-              </p>
-              <p className="mt-2 text-sm font-semibold text-gray-900">
-                {isLoadingConfig
-                  ? 'Carregando...'
-                  : hasSavedConfig
-                    ? 'SMTP configurado'
-                    : 'SMTP ainda não configurado'}
-              </p>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl border border-black/5 bg-white p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                  E-mail atual
-                </p>
-                <p className="mt-2 break-all text-sm font-semibold text-gray-900">
-                  {isLoadingConfig ? 'Carregando...' : memberConfig?.smtp_email?.trim() || '-'}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-white p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                  Host / Porta
-                </p>
-                <p className="mt-2 text-sm font-semibold text-gray-900">
-                  {isLoadingConfig
-                    ? 'Carregando...'
-                    : memberConfig?.smtp_host?.trim() && memberConfig?.smtp_port?.trim()
-                      ? `${memberConfig.smtp_host}:${memberConfig.smtp_port}`
-                      : '-'}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-white p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
-                  SSL
-                </p>
-                <p className="mt-2 text-sm font-semibold text-gray-900">
-                  {isLoadingConfig ? 'Carregando...' : memberConfig?.smtp_ssl ? 'Ativo' : 'Inativo'}
-                </p>
-              </div>
-            </div>
-          </section>
-        </aside>
       </div>
     </div>
   );
