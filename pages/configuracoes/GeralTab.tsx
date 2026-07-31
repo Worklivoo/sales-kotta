@@ -573,7 +573,11 @@ const GeralTab: React.FC = () => {
     () => parseQuoteRules(companyPlan?.regras_cotacao),
     [companyPlan?.regras_cotacao],
   );
-  const quoteRulesPreview = companyQuoteRules.slice(0, 3);
+  const activeCompanyQuoteRules = useMemo(
+    () => companyQuoteRules.filter((rule) => rule.ativo),
+    [companyQuoteRules],
+  );
+  const quoteRulesPreview = activeCompanyQuoteRules.slice(0, 3);
   const isEditingQuoteRule = Boolean(quoteRuleForm.originalName);
   const hasQuoteRulesChanges =
     JSON.stringify(serializeQuoteRules(sortQuoteRules(companyQuoteRules))) !==
@@ -1651,69 +1655,6 @@ const GeralTab: React.FC = () => {
               </button>
             </div>
           </div>
-
-          {isAdminMember ? (
-            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
-              <div className="mb-4 flex items-start gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
-                  <FileText size={16} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Enviar a Proposta</h3>
-                  <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
-                    Defina se o sistema deve enviar a proposta ao cliente usando o modelo padrão.
-                  </p>
-                </div>
-              </div>
-
-              {sendProposalError ? (
-                <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                  {sendProposalError}
-                </div>
-              ) : null}
-
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
-                <div>
-                  <p className="text-xs font-medium text-gray-400">Status atual</p>
-                  <span
-                    className={`mt-2 inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${sendProposalStatusClassName}`}
-                  >
-                    {isCompanyPlanLoading ? 'Carregando...' : sendProposalLabel}
-                  </span>
-                  <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
-                    {isCompanyPlanLoading
-                      ? 'Carregando configuração de envio da proposta.'
-                      : isSendProposalEnabled
-                        ? 'Quando ativado, o sistema envia a proposta para o cliente usando o modelo padrão.'
-                        : 'Quando desativado, o sistema não envia a proposta para o cliente por e-mail.'}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isSendProposalEnabled}
-                  aria-label="Alternar envio da proposta"
-                  onClick={handleToggleSendProposal}
-                  disabled={
-                    isCompanyPlanLoading ||
-                    isSavingSendProposal ||
-                    Boolean(companyPlanError) ||
-                    !memberAccount?.empresa_id
-                  }
-                  className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
-                    isSendProposalEnabled ? 'bg-[#EBF57D]' : 'bg-gray-200'
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  <div
-                    className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                      isSendProposalEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          ) : null}
 
           {isAdminMember ? (
             <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">

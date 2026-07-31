@@ -564,6 +564,8 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
           resolvedApprovedByName =
             getFirstRow(approvedByRows as ResponsibleMemberRecord[] | null)?.nome || 'Não identificado';
+        } else if (resolvedOrcamentoData?.data_aprovacao) {
+          resolvedApprovedByName = 'IA';
         }
 
         const mappedMessages = rawMessages.map((message) => {
@@ -923,7 +925,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                       </div>
 
                       <div>
-                        <p className="text-xs font-medium text-gray-500">Quem aprovou o orçamento</p>
+                        <p className="text-xs font-medium text-gray-500">Aprovado por:</p>
                         <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
                           {approvedByName}
                         </p>
