@@ -211,9 +211,9 @@ export const stripHtmlToText = (value: string) => {
 };
 
 export const messageHtmlClassName =
-  'overflow-hidden break-words text-sm leading-7 text-gray-600 ' +
+  'overflow-hidden break-words text-sm leading-7 text-gray-900 ' +
   '[&_a]:font-medium [&_a]:text-gray-900 [&_a]:underline [&_a]:underline-offset-4 ' +
-  '[&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-4 [&_blockquote]:text-gray-500 ' +
+  '[&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-4 [&_blockquote]:text-gray-900 ' +
   '[&_code]:rounded [&_code]:bg-black/[0.04] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[13px] ' +
   '[&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-gray-900 ' +
   '[&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-gray-900 ' +

@@ -1061,6 +1061,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                   }}
                   messages={chatMessages}
                   renderActionsForMessageId={renderActionsForMessageId}
+                  highlightedMessageId={shouldShowOrcamentoApprovalAction ? latestIaMessageId : undefined}
                 />
             ) : (
               <div className="flex min-h-0 h-full flex-col">

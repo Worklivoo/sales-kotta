@@ -21,6 +21,7 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
   header,
   messages,
   renderActionsForMessageId,
+  highlightedMessageId,
 }) => {
   const avatarInitials = header.phoneFormatted
     .replace(/\D/g, '')
@@ -29,13 +30,6 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
 
   return (
     <section className="min-h-0 flex flex-col bg-[#efeae2]">
-      <div
-        className="pointer-events-none absolute inset-0 z-0 opacity-[0.15]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%2325d366' fill-opacity='0.18' d='M30 30c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10-10-4.5-10-10zM10 10c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 15.5 10 10zm0 40c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 55.5 10 50z'/%3E%3C/svg%3E\")",
-        }}
-      />
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <header className="flex items-center justify-between border-b border-black/5 bg-[#f0f2f5] px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -85,6 +79,7 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                 const dayLabel = shouldShowDaySeparator ? formatDayLabel(message.createdAt) : '';
                 const isIncoming = message.author === 'CLIENTE';
                 const isIABubble = message.author === 'IA';
+                const isHighlighted = highlightedMessageId && message.id === highlightedMessageId;
                 const bubbleBackground = isIncoming
                   ? 'bg-white'
                   : isIABubble
@@ -114,7 +109,7 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                       </div>
                     ) : null}
                     <div
-                      className={`relative flex max-w-[82%] flex-col ${bubbleAlign}`}
+                      className={`relative flex max-w-[82%] flex-col ${bubbleAlign} ${isHighlighted ? 'animate-pulse' : ''}`}
                     >
                       {message.author !== 'CLIENTE' ? (
                         isIABubble ? (
@@ -130,11 +125,11 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                       ) : null}
 
                       <div
-                        className={`relative ${bubbleBackground} rounded-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${tailClass}`}
+                        className={`relative ${bubbleBackground} rounded-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${tailClass} ${isHighlighted ? 'ring-2 ring-[#EBF57D] shadow-[0_0_0_3px_rgba(235,245,125,0.3)]' : ''}`}
                       >
                         <div className="space-y-2 text-left">
                           <div
-                            className={`text-[14px] leading-[20px] text-gray-800 ${messageHtmlClassName}`}
+                            className={`text-[14px] leading-[20px] text-gray-900 ${messageHtmlClassName}`}
                             dangerouslySetInnerHTML={{ __html: message.contentHtml }}
                           />
                         </div>

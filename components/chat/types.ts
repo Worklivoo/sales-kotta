@@ -27,4 +27,5 @@ export interface WhatsAppChatViewProps {
   header: WhatsAppChatHeader;
   messages: ChatMessage[];
   renderActionsForMessageId?: (messageId: string) => ReactNode;
+  highlightedMessageId?: string;
 }
