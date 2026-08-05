@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Search, UserRound, Zap } from 'lucide-react';
+import { CalendarRange, Mail, MessageCircle, Search, UserRound, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type KanbanStatus =
@@ -23,6 +23,7 @@ interface MockCotacao {
   status: KanbanStatus;
   cliente: string;
   valor: string;
+  atendimentoOrigem: 'WhatsApp' | 'Email' | null;
 }
 
 const KANBAN_COLUMNS: Array<{
@@ -79,6 +80,7 @@ interface AtendimentoRow {
   numero_ticket: number | null;
   membro_id: string | null;
   cliente_id: string | null;
+  atendimento_origem: 'WhatsApp' | 'Email' | null;
 }
 
 interface NotificationUnreadRow {
@@ -153,7 +155,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         const cotacoesQuery = supabase
           .from('sales_atendimento')
           .select(
-            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id',
+            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id, atendimento_origem',
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('categoria', 'COTACAO')
@@ -218,6 +220,10 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         const mappedCotacoes: MockCotacao[] = ((cotacoesResponse.data ?? []) as AtendimentoRow[]).map((item) => {
           const ticketNumber = item.numero_ticket ? `#${item.numero_ticket}` : 'Sem ticket';
           const memberName = memberNameById.get(item.membro_id) || 'Membro nao identificado';
+          const atendimentoOrigem =
+            item.atendimento_origem === 'WhatsApp' || item.atendimento_origem === 'Email'
+              ? item.atendimento_origem
+              : null;
 
           return {
             id: ticketNumber,
@@ -232,6 +238,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             status: item.status as KanbanStatus,
             cliente: item.cliente_id ? `Cliente ${item.cliente_id}` : 'Cliente nao vinculado',
             valor: ticketNumber,
+            atendimentoOrigem,
           };
         });
 
@@ -408,6 +415,12 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                           const showClientBadge =
                             cotacao.status !== 'TRIAGEM' &&
                             cotacao.status !== 'COLETANDO_DADOS';
+                          const origemIcon =
+                            cotacao.atendimentoOrigem === 'WhatsApp' ? (
+                              <MessageCircle size={13} className="text-gray-500" />
+                            ) : (
+                              <Mail size={13} className="text-gray-500" />
+                            );
 
                           return (
                             <button
@@ -437,9 +450,12 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                                           </span>
                                         ) : null}
 
-                                        <span className="text-[12px] font-semibold text-gray-700">
-                                          {cotacao.valor}
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          {origemIcon}
+                                          <span className="text-[12px] font-semibold text-gray-700">
+                                            {cotacao.valor}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
 
@@ -462,9 +478,12 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                                         </span>
                                       ) : null}
 
-                                      <span className="text-[12px] font-semibold text-gray-700">
-                                        {cotacao.valor}
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        {origemIcon}
+                                        <span className="text-[12px] font-semibold text-gray-700">
+                                          {cotacao.valor}
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
                                 )}

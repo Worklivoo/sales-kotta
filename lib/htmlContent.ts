@@ -22,6 +22,38 @@ const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
 
 const FALLBACK_EMPTY_HTML = '<p>Sem conteudo disponivel.</p>';
 
+const looksLikePlainText = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return !/<[a-z][\s\S]*>/i.test(trimmed);
+};
+
+const convertNewlinesToBreaks = (value: string) => {
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return normalized.replace(/\n/g, '<br />');
+};
+
+export const stripAttachmentAnalysisFromContent = (value: string) => {
+  if (!value) {
+    return value;
+  }
+
+  const descriptionPatterns = [
+    /Descrição\s+do\s+Arquivo\s+enviado\s+pelo\s+cliente[\s\S]*?$/i,
+    /Descrição\s+da\s+Imagem\s+enviada\s+pelo\s+cliente[\s\S]*?$/i,
+  ];
+
+  let cleaned = value;
+
+  descriptionPatterns.forEach((pattern) => {
+    cleaned = cleaned.replace(pattern, '');
+  });
+
+  return cleaned.trim();
+};
+
 const normalizeWhitespace = (value: string) =>
   value
     .replace(/\u00a0/g, ' ')
@@ -94,13 +126,16 @@ export const sanitizeHtmlContent = (value: string) => {
     return FALLBACK_EMPTY_HTML;
   }
 
+  const isPlainText = looksLikePlainText(value);
+  const preprocessedValue = isPlainText ? convertNewlinesToBreaks(value) : value;
+
   if (typeof DOMParser === 'undefined') {
     const escapedValue = escapeHtml(normalizeWhitespace(value));
-    return escapedValue ? `<p>${escapedValue.replace(/\n/g, '<br />')}</p>` : FALLBACK_EMPTY_HTML;
+    return escapedValue ? `<p>${convertNewlinesToBreaks(escapedValue)}</p>` : FALLBACK_EMPTY_HTML;
   }
 
   const parser = new DOMParser();
-  const document = parser.parseFromString(value, 'text/html');
+  const document = parser.parseFromString(preprocessedValue, 'text/html');
 
   BLOCKED_TAGS.forEach((tagName) => {
     document.querySelectorAll(tagName).forEach((node) => node.remove());
@@ -108,6 +143,34 @@ export const sanitizeHtmlContent = (value: string) => {
 
   document.body.querySelectorAll('*').forEach((element) => {
     stripUnsafeAttributes(element);
+  });
+
+  if (isPlainText) {
+    const sanitizedHtml = document.body.innerHTML.trim();
+    return sanitizedHtml || FALLBACK_EMPTY_HTML;
+  }
+
+  document.body.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
+      const formatted = node.nodeValue.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      if (!/\n/.test(formatted)) {
+        return;
+      }
+
+      const parts = formatted.split('\n');
+      const fragment = document.createDocumentFragment();
+      parts.forEach((part, index) => {
+        if (part.length > 0) {
+          fragment.appendChild(document.createTextNode(part));
+        }
+        if (index < parts.length - 1) {
+          const br = document.createElement('br');
+          fragment.appendChild(br);
+        }
+      });
+
+      node.replaceWith(fragment);
+    }
   });
 
   const sanitizedHtml = document.body.innerHTML.trim();

@@ -3,7 +3,8 @@ import Sidebar from './components/Sidebar';
 import LoginPage from './pages/Login';
 import CotacoesPage from './pages/Cotacoes';
 import CotacaoPage from './pages/Cotacao';
-import AtendimentosPage from './pages/Atendimentos';
+import EmailPage from './pages/Email';
+import WhatsAppPage from './pages/WhatsApp';
 import ConfiguracoesPage from './pages/Configuracoes.tsx';
 import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
@@ -193,8 +194,10 @@ function App() {
                 )
               }
             />
-          ) : currentPath === '/atendimentos' ? (
-            <AtendimentosPage />
+          ) : currentPath === '/email' ? (
+            <EmailPage />
+          ) : currentPath === '/whatsapp' ? (
+            <WhatsAppPage />
           ) : currentPath === '/configuracoes' ? (
             <ConfiguracoesPage />
           ) : cotacaoEmpresaId && cotacaoNumeroTicket ? (

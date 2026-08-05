@@ -8,9 +8,17 @@ import {
   Paperclip,
 } from 'lucide-react';
 import OrcamentoEditorModal from '../components/OrcamentoEditorModal';
+import WhatsAppChatView from '../components/chat/WhatsAppChatView';
+import {
+  formatBrazilianPhone,
+  extractTimeFromDateTime,
+  formatDateTime as formatChatDateTime,
+} from '../components/chat/utils';
+import type { ChatMessage, ChatMessageAuthor } from '../components/chat/types';
 import {
   messageHtmlClassName,
   sanitizeHtmlContent,
+  stripAttachmentAnalysisFromContent,
   stripHtmlToText,
 } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
@@ -45,6 +53,8 @@ interface AtendimentoRecord {
   assunto: string | null;
   numero_ticket: number | null;
   membro_id: string | null;
+  atendimento_origem: 'WhatsApp' | 'Email' | null;
+  provedor_thread_id: string | null;
 }
 
 interface ResponsibleMemberRecord {
@@ -95,6 +105,7 @@ interface ConversationItem {
   copia: string;
   assunto: string;
   horario: string;
+  createdAt: string;
   resumo: string;
   corpoHtml: string;
   corpoTexto: string;
@@ -436,7 +447,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         let atendimentoQuery = supabase
           .from('sales_atendimento')
           .select(
-            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id',
+            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, atendimento_origem, provedor_thread_id',
           )
           .eq('empresa_id', empresaId)
           .eq('numero_ticket', Number(numeroTicket))
@@ -570,7 +581,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
         const mappedMessages = rawMessages.map((message) => {
           const parsedMetadata = parseJsonObject(message.metadata);
-          const contentText = stripHtmlToText(message.conteudo || 'Sem conteudo disponivel.');
+          const rawContent = stripAttachmentAnalysisFromContent(
+            message.conteudo || 'Sem conteudo disponivel.',
+          );
+          const contentText = stripHtmlToText(rawContent);
 
           return {
             id: message.mensagem_id,
@@ -583,8 +597,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             copia: extractCopyRecipients(parsedMetadata),
             assunto: cotacaoAssunto,
             horario: formatDateTime(message.created_at),
+            createdAt: message.created_at,
             resumo: buildSummary(contentText),
-            corpoHtml: sanitizeHtmlContent(message.conteudo || 'Sem conteudo disponivel.'),
+            corpoHtml: sanitizeHtmlContent(rawContent),
             corpoTexto: contentText,
             anexos: parseAttachmentList(message.anexos),
           };
@@ -722,6 +737,87 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     .reverse()
     .find((message) => message.origem === 'IA');
   const latestIaMessageId = latestIaMessage?.id;
+  const isWhatsAppLayout = cotacao.atendimento_origem === 'WhatsApp';
+
+  const normalizeAuthor = (origem: string): ChatMessageAuthor => {
+    const upper = (origem || 'HUMANO').toUpperCase();
+    if (upper === 'CLIENTE' || upper === 'IA') {
+      return upper;
+    }
+    return 'HUMANO';
+  };
+
+  const chatMessages: ChatMessage[] = orderedConversationItems.map((message) => ({
+    id: message.id,
+    author: normalizeAuthor(message.origem),
+    time: formatChatDateTime(message.createdAt),
+    createdAt: message.createdAt,
+    contentHtml: message.corpoHtml,
+    attachments: message.anexos.map((url) => ({ url })),
+  }));
+
+  const renderActionsForMessageId = (messageId: string) => {
+    if (!shouldShowOrcamentoApprovalAction || latestIaMessageId !== messageId) {
+      return null;
+    }
+    const hasAttachments = orderedConversationItems.some(
+      (item) => item.id === messageId && item.anexos.length > 0,
+    );
+    const shouldOpenOrcamentoModal = hasAttachments && hasOrcamentoHtml;
+    const shouldShowDirectApproveAction = !hasAttachments;
+
+    if (shouldOpenOrcamentoModal) {
+      return (
+        <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setIsOrcamentoModalOpen(true)}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+          >
+            Visualizar Orçamento
+          </button>
+          <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+            Aprovação Pendente
+          </span>
+        </div>
+      );
+    }
+
+    if (shouldShowDirectApproveAction) {
+      return (
+        <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              setDirectApproveError(null);
+              setIsDirectApproveConfirmationOpen(true);
+            }}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
+          >
+            Aprovar
+          </button>
+          <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+            Aprovação Pendente
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+        <button
+          type="button"
+          disabled
+          className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
+        >
+          Visualizar Orçamento
+        </button>
+        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+          Aprovação Pendente
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
@@ -953,15 +1049,29 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
             </aside>
 
-            <section className="min-h-0">
+            <section className="flex min-h-0 h-[720px] flex-col overflow-hidden rounded-2xl">
+            {isWhatsAppLayout ? (
+                <WhatsAppChatView
+                  header={{
+                    phoneFormatted: formatBrazilianPhone(cotacao.provedor_thread_id),
+                    ticketLabel: cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket',
+                    category: formatEnumLabel(cotacao.categoria),
+                    categoryKey: (cotacao.categoria || '').toUpperCase(),
+                    customerName: clientData?.nome || undefined,
+                  }}
+                  messages={chatMessages}
+                  renderActionsForMessageId={renderActionsForMessageId}
+                />
+            ) : (
+              <div className="flex min-h-0 h-full flex-col">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Atendimento</h2>
               </div>
             </div>
 
-            <div className="min-h-[640px] rounded-2xl bg-[#FCFCFC] px-1 py-1 sm:px-2 sm:py-2">
-              <div className="space-y-4">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#FCFCFC]">
+              <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1 space-y-4 sm:px-2 sm:py-2">
                 {orderedConversationItems.length > 0 ? (
                   orderedConversationItems.map((message) => {
                     const isExpanded = expandedMessageIds.includes(message.id);
@@ -1143,6 +1253,8 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                 )}
               </div>
               </div>
+              </div>
+            )}
             </section>
           </div>
         </section>

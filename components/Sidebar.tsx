@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { LogOut, ChevronLeft, ChevronRight, FileText, Users, Settings, Bell, X, ArrowUpRight } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, FileText, Mail, MessageCircle, Settings, Bell, X, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface SidebarProps {
@@ -56,9 +56,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: FileText,
     },
     {
-      label: 'Atendimentos',
-      path: '/atendimentos',
-      icon: Users,
+      label: 'E-mails',
+      path: '/email',
+      icon: Mail,
+    },
+    {
+      label: 'WhatsApp',
+      path: '/whatsapp',
+      icon: MessageCircle,
     },
     {
       label: 'Configurações',

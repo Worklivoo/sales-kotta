@@ -3,8 +3,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Hash,
-  Paperclip,
   Search,
   SlidersHorizontal,
   Tag,
@@ -12,11 +10,14 @@ import {
   Zap,
 } from 'lucide-react';
 import {
-  messageHtmlClassName,
   sanitizeHtmlContent,
+  stripAttachmentAnalysisFromContent,
   stripHtmlToText,
 } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
+import WhatsAppChatView from '../components/chat/WhatsAppChatView';
+import { formatBrazilianPhone, formatDateTime, formatDayLabel } from '../components/chat/utils';
+import type { ChatMessage } from '../components/chat/types';
 
 type MessageAuthor = 'CLIENTE' | 'IA' | 'HUMANO';
 
@@ -47,6 +48,9 @@ interface AtendimentoRecord {
   assunto: string | null;
   numero_ticket: number | null;
   membro_id: string | null;
+  atendimento_origem: string | null;
+  provedor_thread_id: string | null;
+  cliente_id: string | null;
 }
 
 interface MemberRecord {
@@ -73,6 +77,7 @@ interface AtendimentoMessage {
   author: MessageAuthor;
   senderEmail: string;
   time: string;
+  createdAt: string;
   contentHtml: string;
   contentText: string;
   attachments: string[];
@@ -84,6 +89,8 @@ interface AtendimentoItem {
   subject: string;
   customer: string;
   email: string;
+  phoneFormatted: string;
+  customerName: string;
   preview: string;
   categoryKey: string;
   category: string;
@@ -182,7 +189,7 @@ const buildSummary = (value: string) => {
   const singleLine = value.replace(/\s+/g, ' ').trim();
 
   if (!singleLine) {
-    return 'Sem conteudo disponivel.';
+    return 'Sem conteúdo disponível.';
   }
 
   if (singleLine.length <= 140) {
@@ -216,22 +223,6 @@ const formatCategoryLabel = (category: string | null) => {
     .join(' ');
 };
 
-const formatDateTime = (value: string) => {
-  const parsedDate = new Date(value);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(parsedDate);
-};
-
 const formatInboxDate = (value: string) => {
   const parsedDate = new Date(value);
 
@@ -254,11 +245,11 @@ const formatInboxDate = (value: string) => {
   const timeLabel = minutes > 0 ? `${hours}h${String(minutes).padStart(2, '0')}` : `${hours}h`;
 
   if (diffInDays === 0) {
-    return `Hoje, as ${timeLabel}`;
+    return `Hoje, às ${timeLabel}`;
   }
 
   if (diffInDays === 1) {
-    return `Ontem, as ${timeLabel}`;
+    return `Ontem, às ${timeLabel}`;
   }
 
   if (diffInDays > 1 && diffInDays < 7) {
@@ -266,7 +257,7 @@ const formatInboxDate = (value: string) => {
       weekday: 'long',
     }).format(parsedDate);
 
-    return `${weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1)}, as ${timeLabel}`;
+    return `${weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1)}, às ${timeLabel}`;
   }
 
   return new Intl.DateTimeFormat('pt-BR', {
@@ -322,17 +313,16 @@ const buildMessageSenderEmail = (
     return companyName;
   }
 
-  return 'Email nao identificado';
+  return 'Contato não identificado';
 };
 
 const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
 
-const AtendimentosPage: React.FC = () => {
+const WhatsAppPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [atendimentos, setAtendimentos] = useState<AtendimentoItem[]>([]);
   const [selectedAtendimentoId, setSelectedAtendimentoId] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<AtendimentoCategory[]>([
     ...CATEGORY_OPTIONS,
   ]);
@@ -358,7 +348,7 @@ const AtendimentosPage: React.FC = () => {
         }
 
         if (!session?.user?.id) {
-          throw new Error('Nao foi possivel identificar o usuario autenticado.');
+          throw new Error('Não foi possível identificar o usuário autenticado.');
         }
 
         const { data: currentMemberRows, error: currentMemberError } = await supabase
@@ -374,15 +364,16 @@ const AtendimentosPage: React.FC = () => {
         const currentMember = getFirstRow(currentMemberRows as CurrentMemberRecord[] | null);
 
         if (!currentMember?.empresa_id) {
-          throw new Error('Nao foi possivel identificar a empresa do usuario.');
+          throw new Error('Não foi possível identificar a empresa do usuário.');
         }
 
         let atendimentosQuery = supabase
           .from('sales_atendimento')
           .select(
-            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id',
+            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id, atendimento_origem, provedor_thread_id, cliente_id',
           )
           .eq('empresa_id', currentMember.empresa_id)
+          .eq('atendimento_origem', 'WhatsApp')
           .order('created_at', { ascending: false });
 
         if (currentMember.cargo !== 'ADMIN') {
@@ -404,7 +395,6 @@ const AtendimentosPage: React.FC = () => {
 
           setAtendimentos([]);
           setSelectedAtendimentoId('');
-          setExpandedMessageIds([]);
           return;
         }
 
@@ -416,8 +406,15 @@ const AtendimentosPage: React.FC = () => {
               .filter((memberId): memberId is string => Boolean(memberId)),
           ),
         );
+        const clienteIds = Array.from(
+          new Set(
+            rawAtendimentos
+              .map((item) => item.cliente_id)
+              .filter((clienteId): clienteId is string => Boolean(clienteId)),
+          ),
+        );
 
-        const [messagesResponse, membersResponse, companyResponse] = await Promise.all([
+        const [messagesResponse, membersResponse, companyResponse, clientesResponse] = await Promise.all([
           supabase
             .from('sales_mensagens')
             .select('mensagem_id, atendimento_id, created_at, origem, conteudo, metadata, anexos')
@@ -438,6 +435,13 @@ const AtendimentosPage: React.FC = () => {
                 .eq('empresa_id', currentMember.empresa_id)
                 .limit(1)
             : Promise.resolve({ data: null, error: null }),
+          clienteIds.length > 0
+            ? supabase
+                .from('sales_clientes_finais')
+                .select('cliente_id, nome')
+                .eq('empresa_id', currentMember.empresa_id)
+                .in('cliente_id', clienteIds)
+            : Promise.resolve({ data: [], error: null }),
         ]);
 
         if (messagesResponse.error) {
@@ -452,10 +456,20 @@ const AtendimentosPage: React.FC = () => {
           throw companyResponse.error;
         }
 
+        if (clientesResponse.error) {
+          throw clientesResponse.error;
+        }
+
         const responsibleById = new Map<string, string>();
         ((membersResponse.data ?? []) as MemberRecord[]).forEach((member) => {
-          responsibleById.set(member.membro_id, member.nome || 'Membro nao identificado');
+          responsibleById.set(member.membro_id, member.nome || 'Membro não identificado');
         });
+        const customerNameById = new Map<string, string>();
+        ((clientesResponse.data ?? []) as { cliente_id: string; nome: string | null }[]).forEach(
+          (cliente) => {
+            customerNameById.set(cliente.cliente_id, cliente.nome || '');
+          },
+        );
         const resolvedCompanyName = (
           (getFirstRow(companyResponse.data as EmpresaRecord[] | null)?.razao_social || '')
         ).trim();
@@ -466,14 +480,18 @@ const AtendimentosPage: React.FC = () => {
 
         ((messagesResponse.data ?? []) as MensagemRecord[]).forEach((message) => {
           const parsedMetadata = parseJsonObject(message.metadata);
-          const contentText = stripHtmlToText(message.conteudo || 'Sem conteudo disponivel.');
+          const rawContent = stripAttachmentAnalysisFromContent(
+            message.conteudo || 'Sem conteúdo disponível.',
+          );
+          const contentText = stripHtmlToText(rawContent);
           const author = normalizeMessageAuthor(message.origem);
           const mappedMessage: AtendimentoMessage = {
             id: message.mensagem_id,
             author,
             senderEmail: buildMessageSenderEmail(author, parsedMetadata, resolvedCompanyName),
             time: formatDateTime(message.created_at),
-            contentHtml: sanitizeHtmlContent(message.conteudo || 'Sem conteudo disponivel.'),
+            createdAt: message.created_at,
+            contentHtml: sanitizeHtmlContent(rawContent),
             contentText,
             attachments: parseAttachmentList(message.anexos),
           };
@@ -510,7 +528,12 @@ const AtendimentosPage: React.FC = () => {
             ticketLabel: atendimento.numero_ticket ? `#${atendimento.numero_ticket}` : 'Sem ticket',
             subject,
             customer: buildCustomerLabel(senderEmail),
-            email: senderEmail || 'Email nao identificado',
+            email: senderEmail || 'Contato não identificado',
+            phoneFormatted: formatBrazilianPhone(atendimento.provedor_thread_id),
+            customerName:
+              atendimento.cliente_id && customerNameById.has(atendimento.cliente_id)
+                ? customerNameById.get(atendimento.cliente_id) || ''
+                : '',
             preview: latestMessage
               ? buildSummary(latestMessage.contentText)
               : 'Nenhuma mensagem vinculada.',
@@ -521,7 +544,7 @@ const AtendimentosPage: React.FC = () => {
             lastActivityAt,
             responsible:
               (atendimento.membro_id && responsibleById.get(atendimento.membro_id)) ||
-              'Membro nao identificado',
+              'Membro não identificado',
             messages: orderedMessages,
           } satisfies AtendimentoItem;
         });
@@ -549,7 +572,7 @@ const AtendimentosPage: React.FC = () => {
           return '';
         });
       } catch (error: any) {
-        console.error('Erro ao carregar atendimentos:', error);
+        console.error('Erro ao carregar conversas do WhatsApp:', error);
 
         if (!isMounted) {
           return;
@@ -558,8 +581,7 @@ const AtendimentosPage: React.FC = () => {
         setAtendimentos([]);
         setSelectedAtendimentoId('');
         setCompanyName('');
-        setExpandedMessageIds([]);
-        setLoadError(error?.message || 'Nao foi possivel carregar os atendimentos.');
+        setLoadError(error?.message || 'Não foi possível carregar as conversas do WhatsApp.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -587,6 +609,7 @@ const AtendimentosPage: React.FC = () => {
         atendimento.subject,
         atendimento.customer,
         atendimento.email,
+        atendimento.phoneFormatted,
         atendimento.preview,
         atendimento.category,
         atendimento.tag,
@@ -603,23 +626,6 @@ const AtendimentosPage: React.FC = () => {
 
   const selectedAtendimento =
     filteredAtendimentos.find((item) => item.atendimentoId === selectedAtendimentoId) ?? null;
-
-  useEffect(() => {
-    const defaultExpandedMessageId =
-      selectedAtendimento?.messages[selectedAtendimento.messages.length - 1]?.id ?? '';
-
-    setExpandedMessageIds((currentExpandedMessageIds) => {
-      const validExpandedMessageIds = currentExpandedMessageIds.filter((messageId) =>
-        selectedAtendimento?.messages.some((message) => message.id === messageId),
-      );
-
-      if (validExpandedMessageIds.length > 0) {
-        return validExpandedMessageIds;
-      }
-
-      return defaultExpandedMessageId ? [defaultExpandedMessageId] : [];
-    });
-  }, [selectedAtendimento]);
 
   if (isLoading) {
     return (
@@ -649,10 +655,10 @@ const AtendimentosPage: React.FC = () => {
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="space-y-0.5">
                     <h1 className="text-sm font-semibold tracking-tight text-gray-900 sm:text-base">
-                      Atendimentos
+                      WhatsApp
                     </h1>
                     <p className="text-xs text-gray-500">
-                      Visualize sua caixa de entrada e acompanhe o historico de cada atendimento.
+                      Visualize suas conversas e acompanhe o histórico de cada atendimento.
                     </p>
                   </div>
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
@@ -668,7 +674,7 @@ const AtendimentosPage: React.FC = () => {
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Buscar atendimento"
+                        placeholder="Buscar conversa"
                         className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
                       />
                     </label>
@@ -764,7 +770,7 @@ const AtendimentosPage: React.FC = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="break-words text-sm font-semibold text-gray-900 sm:truncate">
-                                {atendimento.email}
+                                {atendimento.phoneFormatted}
                               </p>
                             </div>
 
@@ -807,7 +813,7 @@ const AtendimentosPage: React.FC = () => {
                   {filteredAtendimentos.length === 0 ? (
                     <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-[#FAFAFA] px-6 text-center">
                       <p className="text-sm font-medium text-gray-400">
-                        Nenhum atendimento encontrado para esta busca.
+                        Nenhuma conversa encontrada para esta busca.
                       </p>
                     </div>
                   ) : null}
@@ -815,169 +821,45 @@ const AtendimentosPage: React.FC = () => {
               </div>
             </aside>
 
-            <section className="min-h-0 bg-[#FCFCFC]">
-              {selectedAtendimento ? (
-                <div className="flex h-full min-h-0 flex-col">
-                  <header className="border-b border-black/5 bg-white px-4 py-4 sm:px-6 sm:py-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-600">
-                            <Hash size={12} />
-                            {selectedAtendimento.ticketLabel.replace(/^#/, '')}
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
-                              selectedAtendimento.categoryKey === 'COTACAO'
-                                ? 'bg-[#EBF57D] text-gray-900'
-                                : 'bg-gray-100 text-gray-500'
-                            }`}
-                          >
-                            {selectedAtendimento.categoryKey === 'COTACAO' ? (
-                              <Zap size={12} />
-                            ) : (
-                              <Tag size={12} />
-                            )}
-                            {selectedAtendimento.category}
-                          </span>
-                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-500">
-                            <Tag size={12} />
-                            {selectedAtendimento.tag}
-                          </span>
-                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold text-gray-500">
-                            <User size={12} />
-                            {selectedAtendimento.responsible}
-                          </span>
-                        </div>
-
-                        <div>
-                          <h2 className="text-2xl font-semibold tracking-tight text-gray-900">
-                            {selectedAtendimento.subject}
-                          </h2>
-                        </div>
-                      </div>
-                    </div>
-                  </header>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-                    <div className="w-full">
-                      <div className="min-w-0 space-y-4">
-                        {selectedAtendimento.messages.length > 0 ? (
-                          selectedAtendimento.messages.map((message) => {
-                            const isExpanded = expandedMessageIds.includes(message.id);
-
-                            return (
-                              <div
-                                key={message.id}
-                                className={`w-full rounded-2xl border border-black/5 bg-white text-left shadow-[0_10px_32px_rgba(15,23,42,0.04)] transition-all ${
-                                  isExpanded
-                                    ? 'px-4 py-4 sm:px-5 sm:py-5'
-                                    : 'px-4 py-4 hover:border-black/10 hover:bg-[#FCFCFC]'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start gap-3">
-                                      <div className="min-w-0 flex-1">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setExpandedMessageIds((currentExpandedMessageIds) =>
-                                              currentExpandedMessageIds.includes(message.id)
-                                                ? currentExpandedMessageIds.filter(
-                                                    (messageId) => messageId !== message.id,
-                                                  )
-                                                : [...currentExpandedMessageIds, message.id],
-                                            )
-                                          }
-                                          className="flex w-full items-start justify-between gap-3 text-left"
-                                          aria-expanded={isExpanded}
-                                        >
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex items-start gap-3">
-                                              <div className="mt-0.5 text-gray-400">
-                                                {isExpanded ? (
-                                                  <ChevronDown size={18} />
-                                                ) : (
-                                                  <ChevronRight size={18} />
-                                                )}
-                                              </div>
-                                              <div className="min-w-0 flex-1">
-                                                <span className="text-sm font-semibold text-gray-900">
-                                                  {message.author}
-                                                </span>
-                                                <span className="mt-0.5 block break-all text-sm text-gray-500 sm:mt-0 sm:inline sm:break-all sm:pl-2">
-                                                  {message.senderEmail}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          <p className="shrink-0 text-xs font-medium text-gray-400">
-                                            {message.time}
-                                          </p>
-                                        </button>
-
-                                        {isExpanded ? (
-                                          <div className="mt-5 space-y-3">
-                                            <div
-                                              className={messageHtmlClassName}
-                                              dangerouslySetInnerHTML={{ __html: message.contentHtml }}
-                                            />
-                                            {message.attachments.length > 0 ? (
-                                              <div className="flex flex-wrap gap-2 pt-1">
-                                                {message.attachments.map((attachment) => (
-                                                  <a
-                                                    key={attachment}
-                                                    href={attachment}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    onClick={(event) => event.stopPropagation()}
-                                                    className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-black/20 hover:bg-white"
-                                                  >
-                                                    <Paperclip size={14} />
-                                                    {getAttachmentLabel(attachment)}
-                                                  </a>
-                                                ))}
-                                              </div>
-                                            ) : null}
-                                          </div>
-                                        ) : (
-                                          <p className="mt-3 line-clamp-1 text-sm leading-6 text-gray-500">
-                                            {buildSummary(message.contentText)}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-2xl border border-dashed border-black/10 bg-white px-6 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                            <p className="text-sm font-medium text-gray-400">
-                              Nenhuma mensagem vinculada a este atendimento.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center px-6">
-                  <div className="max-w-md rounded-3xl border border-dashed border-gray-200 bg-white px-8 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+            {selectedAtendimento ? (
+              React.createElement(WhatsAppChatView, {
+                header: {
+                  phoneFormatted: selectedAtendimento.phoneFormatted,
+                  ticketLabel: selectedAtendimento.ticketLabel,
+                  category: selectedAtendimento.category,
+                  categoryKey: selectedAtendimento.categoryKey,
+                  customerName: selectedAtendimento.customerName,
+                },
+                messages: selectedAtendimento.messages.map<ChatMessage>((message) => ({
+                  id: message.id,
+                  author: message.author,
+                  time: message.time,
+                  createdAt: message.createdAt,
+                  contentHtml: message.contentHtml,
+                  attachments: message.attachments.map((url) => ({ url })),
+                })),
+              })
+            ) : (
+              <section className="min-h-0 flex flex-col bg-[#efeae2]">
+                <div
+                  className="pointer-events-none absolute inset-0 z-0 opacity-[0.15]"
+                  style={{
+                    backgroundImage:
+                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%2325d366' fill-opacity='0.18' d='M30 30c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10-10-4.5-10-10zM10 10c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 15.5 10 10zm0 40c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 55.5 10 50z'/%3E%3C/svg%3E\")",
+                  }}
+                />
+                <div className="relative z-10 flex h-full items-center justify-center px-6">
+                  <div className="max-w-md rounded-3xl border border-dashed border-gray-200 bg-white/95 px-8 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur">
                     <p className="text-lg font-semibold text-gray-800">
-                      Nenhum atendimento selecionado
+                      Nenhuma conversa selecionada
                     </p>
                     <p className="mt-2 text-sm leading-6 text-gray-500">
-                      Escolha um atendimento na caixa de entrada para visualizar a conversa.
+                      Escolha uma conversa na lista para visualizar o histórico.
                     </p>
                   </div>
                 </div>
-              )}
-            </section>
+              </section>
+            )}
           </div>
         </section>
       </div>
@@ -985,4 +867,4 @@ const AtendimentosPage: React.FC = () => {
   );
 };
 
-export default AtendimentosPage;
+export default WhatsAppPage;
