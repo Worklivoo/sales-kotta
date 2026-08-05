@@ -841,13 +841,6 @@ const WhatsAppPage: React.FC = () => {
               })
             ) : (
               <section className="min-h-0 flex flex-col bg-[#efeae2]">
-                <div
-                  className="pointer-events-none absolute inset-0 z-0 opacity-[0.15]"
-                  style={{
-                    backgroundImage:
-                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%2325d366' fill-opacity='0.18' d='M30 30c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10-10-4.5-10-10zM10 10c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 15.5 10 10zm0 40c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10S10 55.5 10 50z'/%3E%3C/svg%3E\")",
-                  }}
-                />
                 <div className="relative z-10 flex h-full items-center justify-center px-6">
                   <div className="max-w-md rounded-3xl border border-dashed border-gray-200 bg-white/95 px-8 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur">
                     <p className="text-lg font-semibold text-gray-800">
