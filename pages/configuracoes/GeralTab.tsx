@@ -117,6 +117,25 @@ const SHOW_USER_PLAN_SECTION = false;
 const QUOTE_RULE_LEVEL_OPTIONS: QuoteRuleLevel[] = ['OBRIGATORIO', 'DESEJAVEL'];
 const SCRAPPER_TYPE_OPTIONS: ScrapperType[] = ['API', 'XML', 'HTML', 'PLANILHA', 'SITE'];
 
+const PROTECTED_QUOTE_RULE_KEYS: readonly string[] = ['Item'];
+
+const isProtectedQuoteRule = (ruleName: string) =>
+  PROTECTED_QUOTE_RULE_KEYS.includes(ruleName.trim());
+
+const splitQuoteRulesByProtection = (rules: QuoteRuleItem[]) =>
+  rules.reduce<{ protectedRules: QuoteRuleItem[]; visibleRules: QuoteRuleItem[] }>(
+    (accumulator, rule) => {
+      if (isProtectedQuoteRule(rule.name)) {
+        accumulator.protectedRules.push(rule);
+      } else {
+        accumulator.visibleRules.push(rule);
+      }
+
+      return accumulator;
+    },
+    { protectedRules: [], visibleRules: [] },
+  );
+
 const formatBudgetModeLabel = (value: BudgetMode | null) => {
   if (value === 'SEMI') {
     return 'Semi-automático';
@@ -573,14 +592,20 @@ const GeralTab: React.FC = () => {
     () => parseQuoteRules(companyPlan?.regras_cotacao),
     [companyPlan?.regras_cotacao],
   );
-  const activeCompanyQuoteRules = useMemo(
-    () => companyQuoteRules.filter((rule) => rule.ativo),
+  const splitCompanyQuoteRules = useMemo(
+    () => splitQuoteRulesByProtection(companyQuoteRules),
     [companyQuoteRules],
   );
-  const quoteRulesPreview = activeCompanyQuoteRules.slice(0, 3);
+  const protectedCompanyQuoteRules = splitCompanyQuoteRules.protectedRules;
+  const visibleCompanyQuoteRules = splitCompanyQuoteRules.visibleRules;
+  const activeVisibleCompanyQuoteRules = useMemo(
+    () => visibleCompanyQuoteRules.filter((rule) => rule.ativo),
+    [visibleCompanyQuoteRules],
+  );
+  const quoteRulesPreview = activeVisibleCompanyQuoteRules.slice(0, 3);
   const isEditingQuoteRule = Boolean(quoteRuleForm.originalName);
   const hasQuoteRulesChanges =
-    JSON.stringify(serializeQuoteRules(sortQuoteRules(companyQuoteRules))) !==
+    JSON.stringify(serializeQuoteRules(sortQuoteRules(visibleCompanyQuoteRules))) !==
     JSON.stringify(serializeQuoteRules(sortQuoteRules(quoteRulesDraft)));
   const companyPlanStatusClassName =
     companyPlan?.plano_status === 'ATIVO'
@@ -824,7 +849,7 @@ const GeralTab: React.FC = () => {
   };
 
   const handleOpenQuoteRulesModal = () => {
-    setQuoteRulesDraft(companyQuoteRules);
+    setQuoteRulesDraft(sortQuoteRules(visibleCompanyQuoteRules));
     setQuoteRuleForm(createEmptyQuoteRuleForm());
     setQuoteRulesError(null);
     setIsQuoteRuleEditorModalOpen(false);
@@ -894,6 +919,11 @@ const GeralTab: React.FC = () => {
       return;
     }
 
+    if (isProtectedQuoteRule(trimmedName)) {
+      setQuoteRulesError('Ja existe uma regra interna com esse nome.');
+      return;
+    }
+
     const hasDuplicateRule = quoteRulesDraft.some(
       (rule) =>
         rule.name.toLowerCase() === trimmedName.toLowerCase() &&
@@ -925,6 +955,10 @@ const GeralTab: React.FC = () => {
   };
 
   const handleToggleQuoteRuleActive = (ruleName: string) => {
+    if (isProtectedQuoteRule(ruleName)) {
+      return;
+    }
+
     setQuoteRulesDraft((currentRules) =>
       sortQuoteRules(
         currentRules.map((rule) =>
@@ -941,6 +975,10 @@ const GeralTab: React.FC = () => {
   };
 
   const handleDeleteQuoteRule = (ruleName: string) => {
+    if (isProtectedQuoteRule(ruleName)) {
+      return;
+    }
+
     setQuoteRulesDraft((currentRules) =>
       sortQuoteRules(currentRules.filter((rule) => rule.name !== ruleName)),
     );
@@ -963,7 +1001,35 @@ const GeralTab: React.FC = () => {
     setQuoteRulesError(null);
 
     try {
-      const serializedRules = serializeQuoteRules(quoteRulesDraft);
+      const serializedProtectedRules = serializeQuoteRules(protectedCompanyQuoteRules);
+      const serializedVisibleRules = serializeQuoteRules(quoteRulesDraft);
+      const protectedKeys = Object.keys(serializedProtectedRules);
+
+      if (protectedKeys.length > 0) {
+        const hasAllProtectedKeys = protectedKeys.every(
+          (protectedKey) => protectedKey in serializedVisibleRules,
+        );
+
+        if (hasAllProtectedKeys) {
+          throw new Error(
+            'Nao foi possivel salvar as regras de cotacao devido a um conflito com regras internas.',
+          );
+        }
+      }
+
+      const serializedRules: Record<string, QuoteRuleValue> = {
+        ...serializedProtectedRules,
+        ...serializedVisibleRules,
+      };
+
+      const missingProtectedRules = protectedKeys.some(
+        (protectedKey) => !(protectedKey in serializedRules),
+      );
+
+      if (missingProtectedRules) {
+        throw new Error('Nao foi possivel preservar as regras internas de cotacao.');
+      }
+
       const { error } = await supabase
         .from('sales_empresa')
         .update({
