@@ -29,6 +29,7 @@ const CATEGORY_OPTIONS = [
   'SPAM',
   'OUTROS',
   'PEDIDO_COMPRA',
+  'INDEFINIDO',
 ] as const;
 
 type AtendimentoCategory = (typeof CATEGORY_OPTIONS)[number];
