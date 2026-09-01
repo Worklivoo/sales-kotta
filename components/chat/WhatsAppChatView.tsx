@@ -31,33 +31,42 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
   return (
     <section className="min-h-0 flex flex-col bg-[#efeae2]">
       <div className="relative z-10 flex h-full min-h-0 flex-col">
-        <header className="flex items-center justify-between border-b border-black/5 bg-[#f0f2f5] px-4 py-3 sm:px-6">
+        <header className="flex items-center justify-between border-b border-line-soft bg-card px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#EBF57D] text-sm font-semibold text-gray-900 shadow-sm">
+              <div
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-lime text-[13px] text-ink"
+                style={{ fontWeight: 700 }}
+              >
                 {avatarInitials}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#f0f2f5] bg-[#EBF57D]" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-lime" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="truncate text-[15px] font-semibold text-gray-900">
+                <p className="truncate text-[15px] text-ink" style={{ fontWeight: 700 }}>
                   {header.phoneFormatted}
                 </p>
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500 ring-1 ring-black/5">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-paper px-2 py-0.5 text-[10px] text-muted"
+                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                >
                   <Hash size={10} />
                   {header.ticketLabel.replace(/^#/, '')}
                 </span>
                 {header.categoryKey === 'COTACAO' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#EBF57D] px-2 py-0.5 text-[10px] font-semibold text-gray-900">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-pill bg-lime px-2 py-0.5 text-[10px] text-ink"
+                    style={{ fontWeight: 800 }}
+                  >
                     <Zap size={10} />
                     {header.category}
                   </span>
                 ) : null}
                 {header.customerName ? (
-                  <p className="text-[12px] text-gray-500">
+                  <p className="text-[12px] text-muted" style={{ fontWeight: 500 }}>
                     {header.customerName}
                   </p>
                 ) : null}
@@ -83,13 +92,13 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                 const bubbleBackground = isIncoming
                   ? 'bg-white'
                   : isIABubble
-                    ? 'bg-[#EBF57D]'
+                    ? 'bg-lime'
                     : 'bg-[#d9fdd3]';
                 const bubbleAlign = isIncoming ? 'mr-auto' : 'ml-auto';
                 const tailColor = isIncoming
                   ? 'before:border-r-white'
                   : isIABubble
-                    ? 'before:border-l-[#EBF57D]'
+                    ? 'before:border-l-lime'
                     : 'before:border-l-[#d9fdd3]';
                 const tailClass = isIncoming
                   ? `before:absolute before:left-[-6px] before:top-2 before:h-0 before:w-0 before:border-y-[6px] before:border-r-[6px] before:border-y-transparent ${tailColor}`
@@ -113,19 +122,25 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                     >
                       {message.author !== 'CLIENTE' ? (
                         isIABubble ? (
-                          <span className="mb-1 mr-1 inline-flex w-fit items-center gap-1 self-end rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#EBF57D]">
+                          <span
+                            className="mb-1 mr-1 inline-flex w-fit items-center gap-1 self-end rounded-pill bg-ink px-2 py-0.5 text-[10px] text-lime"
+                            style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}
+                          >
                             <Zap size={10} />
                             IA
                           </span>
                         ) : (
-                          <span className="mb-1 mr-1 self-end text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          <span
+                            className="mb-1 mr-1 self-end text-[10px] text-muted"
+                            style={{ fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase' }}
+                          >
                             Você
                           </span>
                         )
                       ) : null}
 
                       <div
-                        className={`relative ${bubbleBackground} rounded-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${tailClass} ${isHighlighted ? 'ring-2 ring-[#EBF57D] shadow-[0_0_0_3px_rgba(235,245,125,0.3)]' : ''}`}
+                        className={`relative ${bubbleBackground} rounded-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${tailClass} ${isHighlighted ? 'ring-2 ring-lime shadow-[0_0_0_3px_rgba(235,245,125,0.3)]' : ''}`}
                       >
                         <div className="space-y-2 text-left">
                           <div

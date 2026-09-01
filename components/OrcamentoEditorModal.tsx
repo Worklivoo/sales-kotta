@@ -1,12 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Package, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+
+interface BlankOrcamentoEmpresaInfo {
+  logoUrl: string | null;
+  razaoSocial: string | null;
+  cnpj: string | null;
+  email: string | null;
+  telefone: string | null;
+}
 
 interface OrcamentoEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   assunto: string | null;
   htmlOrcamento: string | null;
+  numeroTicket: string | null;
+  empresaId: string | null;
+  empresaInfo: BlankOrcamentoEmpresaInfo | null;
   orcamentoId: string | null;
   atendimentoId: string | null;
   membroId: string | null;
@@ -24,6 +35,8 @@ interface EditorField {
 interface OrcamentoItemRow {
   id: string;
   itemId: string;
+  produtoId: string | null;
+  isManuallyAdded: boolean;
   nome: string;
   quantidade: string;
   sku: string;
@@ -33,6 +46,15 @@ interface OrcamentoItemRow {
   valorUnitario: string;
   valorTotal: string;
   disponivel: boolean;
+}
+
+interface ProdutoOption {
+  produto_id: string;
+  codigo_sku: string | null;
+  nome: string;
+  descricao: string | null;
+  preco_venda: number | null;
+  unidade_medida: string | null;
 }
 
 interface ObservacaoField {
@@ -45,12 +67,11 @@ interface CurrencySignature {
   position: 'prefix' | 'suffix';
 }
 
-const CLIENT_FIELD_ORDER = ['razao_social', 'cnpj_cpf', 'endereco', 'email', 'telefone'] as const;
+const CLIENT_FIELD_ORDER = ['razao_social', 'cnpj_cpf', 'email', 'telefone'] as const;
 
 const CLIENT_FIELD_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
   razao_social: 'Razão Social',
   cnpj_cpf: 'CNPJ/CPF',
-  endereco: 'Endereço',
   email: 'Email',
   telefone: 'Telefone',
 };
@@ -58,15 +79,17 @@ const CLIENT_FIELD_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> =
 const CLIENT_HTML_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = {
   razao_social: 'Razão Social:',
   cnpj_cpf: 'CNPJ/CPF:',
-  endereco: 'Endereço:',
   email: 'Email:',
   telefone: 'Telefone:',
 };
 
 const APROVACAO_WEBHOOK_URL =
-  'https://primary-systec.up.railway.app/webhook/c0b437a3-92f2-4e07-8017-33534099784b';
+  'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
 
-const ITEM_FIELD_LABELS: Record<Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>, string> = {
+const ITEM_FIELD_LABELS: Record<
+  Exclude<keyof OrcamentoItemRow, 'id' | 'itemId' | 'produtoId' | 'isManuallyAdded'>,
+  string
+> = {
   nome: 'Nome',
   quantidade: 'Quantidade',
   sku: 'SKU',
@@ -91,12 +114,20 @@ const normalizeEmbeddedAssetUrl = (value: string | null) => {
   return normalizedValue || null;
 };
 
+const BOM_PATTERN = new RegExp(String.fromCharCode(0xfeff));
+const NBSP_PATTERN = new RegExp(String.fromCharCode(0xa0), 'g');
+const NULL_CHAR_PATTERN = new RegExp(String.fromCharCode(0), 'g');
+const COMBINING_MARKS_PATTERN = /[̀-ͯ]/g;
+
+const stripLeadingBom = (value: string) => value.replace(BOM_PATTERN, '');
+const stripNbsp = (value: string) => value.replace(NBSP_PATTERN, ' ');
+
 const normalizeHtmlSource = (value: string | null) => {
   if (!value) {
     return '';
   }
 
-  const normalizedValue = value.replace(/^\uFEFF/, '').trim();
+  const normalizedValue = stripLeadingBom(value).trim();
 
   if (!normalizedValue) {
     return '';
@@ -106,12 +137,12 @@ const normalizeHtmlSource = (value: string | null) => {
     const parsedValue = JSON.parse(normalizedValue);
 
     if (typeof parsedValue === 'string') {
-      return parsedValue.replace(/^\uFEFF/, '').trim();
+      return stripLeadingBom(parsedValue).trim();
     }
 
     if (Array.isArray(parsedValue)) {
       const firstHtmlEntry = parsedValue.find((item): item is string => typeof item === 'string');
-      return firstHtmlEntry ? firstHtmlEntry.replace(/^\uFEFF/, '').trim() : normalizedValue;
+      return firstHtmlEntry ? stripLeadingBom(firstHtmlEntry).trim() : normalizedValue;
     }
   } catch {
     // Mantem o valor original quando nao for JSON valido.
@@ -133,7 +164,7 @@ const escapeHtmlValue = (value: string) =>
 const normalizeComparisonText = (value: string) =>
   value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(COMBINING_MARKS_PATTERN, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
@@ -144,26 +175,26 @@ const decodeInlineHtmlText = (value: string) => {
   }
 
   if (typeof DOMParser === 'undefined') {
-    return value
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&amp;/gi, '&')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      .replace(/<\/?[^>]+>/g, '')
-      .replace(/\u00a0/g, ' ')
-      .trim();
+    return stripNbsp(
+      value
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/<\/?[^>]+>/g, ''),
+    ).trim();
   }
 
   const documentNode = new DOMParser().parseFromString(value, 'text/html');
-  return (documentNode.body.textContent || '').replace(/\u00a0/g, ' ').trim();
+  return stripNbsp(documentNode.body.textContent || '').trim();
 };
 
 const decodeInlineHtmlMultilineText = (value: string) =>
   decodeInlineHtmlText(value.replace(/<br\s*\/?>/gi, '\n')).replace(/\n{3,}/g, '\n\n');
 
-const isDashLikeValue = (value: string) => /^[-—–\s]*$/.test(value.replace(/\u00a0/g, ' ').trim());
+const isDashLikeValue = (value: string) => /^[-—–\s]*$/.test(stripNbsp(value).trim());
 
 const formatMultilineHtmlValue = (value: string) =>
   escapeHtmlValue(value.trim()).replace(/\r?\n/g, '<br>');
@@ -198,7 +229,7 @@ const setFieldElementContent = (
 };
 
 const parseCurrencyValue = (value: string) => {
-  const normalizedValue = value.replace(/\u00a0/g, ' ').trim();
+  const normalizedValue = stripNbsp(value).trim();
 
   if (!normalizedValue || isDashLikeValue(normalizedValue)) {
     return null;
@@ -219,7 +250,7 @@ const parseCurrencyValue = (value: string) => {
 };
 
 const extractCurrencySignature = (value: string): CurrencySignature | null => {
-  const normalizedValue = value.replace(/\u00a0/g, ' ').trim();
+  const normalizedValue = stripNbsp(value).trim();
 
   if (!normalizedValue || isDashLikeValue(normalizedValue)) {
     return null;
@@ -251,10 +282,11 @@ const formatMonetaryValue = (value: number, currencySignature: CurrencySignature
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  const nbsp = String.fromCharCode(0xa0);
 
   return currencySignature.position === 'suffix'
-    ? `${formattedNumber}\u00a0${currencySignature.marker}`
-    : `${currencySignature.marker}\u00a0${formattedNumber}`;
+    ? `${formattedNumber}${nbsp}${currencySignature.marker}`
+    : `${currencySignature.marker}${nbsp}${formattedNumber}`;
 };
 
 const serializeHtmlDocument = (documentNode: Document) => {
@@ -278,8 +310,10 @@ const buildDefaultClientFields = () =>
 const buildDefaultItemRow = () => ({
   id: buildFieldId('item'),
   itemId: '',
+  produtoId: null,
+  isManuallyAdded: true,
   nome: '',
-  quantidade: '',
+  quantidade: '1',
   sku: '',
   descricao: '',
   ncm: '',
@@ -393,6 +427,8 @@ const extractItemsSectionRows = (value: string | null) => {
     return {
       id: buildFieldId(`item-row-${index}`),
       itemId,
+      produtoId: null,
+      isManuallyAdded: false,
       nome: nomeText,
       quantidade: decodeInlineHtmlText(cells[1]?.textContent || ''),
       sku:
@@ -604,7 +640,7 @@ const buildOrcamentoPreviewHtml = (value: string | null) => {
     return '';
   }
 
-  const normalizedSource = htmlSource.replace(/\u0000/g, '').trim();
+  const normalizedSource = htmlSource.replace(NULL_CHAR_PATTERN, '').trim();
 
   if (!normalizedSource) {
     return '';
@@ -641,11 +677,105 @@ const buildOrcamentoPreviewHtml = (value: string | null) => {
   return `<!DOCTYPE html><html><head>${viewportTag}${previewSpacingStyle}</head><body>${cleanedSource}</body></html>`;
 };
 
+const buildBlankOrcamentoHtml = (
+  numeroTicket: string | null,
+  empresa: BlankOrcamentoEmpresaInfo | null,
+  dataEmissao: string,
+) => {
+  const empresaLogo = empresa?.logoUrl || '';
+  const empresaNome = empresa?.razaoSocial || '';
+  const empresaCnpj = empresa?.cnpj || '';
+  const empresaEmail = empresa?.email || '';
+  const empresaTelefone = empresa?.telefone || '';
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+    "@page { size: A4; margin: 15mm; }" +
+    "body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 12px; }" +
+    '.header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 20px; }' +
+    '.header-logo img { max-width: 120px; max-height: 70px; object-fit: contain; }' +
+    '.header-empresa { flex: 1; margin-left: 20px; font-size: 11px; color: #475569; line-height: 1.5; }' +
+    '.header-empresa strong { display: block; font-size: 14px; color: #0f172a; margin-bottom: 3px; }' +
+    '.header-orcamento { text-align: right; min-width: 160px; }' +
+    '.header-orcamento h1 { margin: 0 0 4px 0; font-size: 20px; color: #0f172a; }' +
+    '.header-orcamento p { margin: 0; color: #64748b; font-size: 12px; }' +
+    '.header-orcamento .atendimento-id { font-weight: normal; color: #94a3b8; font-size: 11px; margin-top: 4px; }' +
+    '.info-cliente { margin-bottom: 20px; }' +
+    '.info-cliente h3 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }' +
+    '.info-cliente .campo { font-size: 11px; color: #1e293b; margin: 3px 0; }' +
+    '.info-cliente .campo strong { color: #475569; font-weight: 600; margin-right: 4px; }' +
+    '.section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin: 0 0 8px 0; }' +
+    'table.itens-pedido { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 15px; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-size: 9.5px; }' +
+    'table.itens-pedido thead th { background: #e2e8f0; color: #334155; padding: 5px 4px; font-weight: 600; font-size: 8px; text-transform: uppercase; letter-spacing: 0.2px; text-align: left; line-height: 1.1; }' +
+    'table.itens-pedido tbody td { padding: 5px 4px; font-size: 9px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: middle; line-height: 1.2; word-wrap: break-word; overflow: visible; }' +
+    'table.itens-pedido tbody tr:nth-child(even) { background: #f8fafc; }' +
+    'table.itens-pedido tfoot td { padding: 6px 4px; font-size: 9.5px; font-weight: bold; color: #0f172a; border-top: 2px solid #cbd5e1; white-space: nowrap; }' +
+    '.col-previsao { font-size: 8px !important; line-height: 1.15 !important; }' +
+    '.observacoes { margin-top: 10px; font-size: 10px; color: #475569; line-height: 1.5; }' +
+    '.observacoes h3 { margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }' +
+    '.footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }' +
+    '</style></head><body>' +
+    '<div class="header">' +
+    '<div class="header-logo">' +
+    (empresaLogo ? '<img src="' + empresaLogo + '" alt="Logo">' : '') +
+    '</div>' +
+    '<div class="header-empresa">' +
+    '<strong>' + empresaNome + '</strong>' +
+    (empresaCnpj ? 'CNPJ: ' + empresaCnpj + '<br>' : '') +
+    (empresaEmail ? empresaEmail + '<br>' : '') +
+    (empresaTelefone ? empresaTelefone : '') +
+    '</div>' +
+    '<div class="header-orcamento">' +
+    '<h1>ORÇAMENTO</h1>' +
+    ('<p>Data de emissão: ' + dataEmissao + '</p>') +
+    (numeroTicket ? '<p class="atendimento-id">Nº ' + numeroTicket + '</p>' : '') +
+    '</div>' +
+    '</div>' +
+    '<div class="info-cliente">' +
+    '<h3>Informações do cliente:</h3>' +
+    '<div class="campo"><strong>Razão Social:</strong> </div>' +
+    '<div class="campo"><strong>CNPJ/CPF:</strong> </div>' +
+    '<div class="campo"><strong>Email:</strong> </div>' +
+    '<div class="campo"><strong>Telefone:</strong> </div>' +
+    '</div>' +
+    '<p class="section-title">Itens do Pedido</p>' +
+    '<table class="itens-pedido"><thead><tr>' +
+    '<th style="width: 14%;">Solicitado</th>' +
+    '<th style="width: 6%; text-align: center;">Qtd.</th>' +
+    '<th style="width: 11%;">SKU</th>' +
+    '<th style="width: 21%;">Descrição</th>' +
+    '<th style="width: 7%;">NCM</th>' +
+    '<th style="width: 15%;">Prev. entrega</th>' +
+    '<th style="width: 13%; text-align: right;">Val. Unit.</th>' +
+    '<th style="width: 13%; text-align: right;">Val. Total</th>' +
+    '</tr></thead><tbody></tbody>' +
+    '<tfoot><tr><td colspan="7" style="text-align: right;">Total:</td>' +
+    '<td style="text-align: right; font-weight: bold;">—</td></tr></tfoot>' +
+    '</table>' +
+    '<div class="observacoes"><h3>Observações</h3><p></p></div>' +
+    '<div class="footer"><strong>' + empresaNome + '</strong></div>' +
+    '</body></html>'
+  );
+};
+
+const formatProdutoPreco = (produto: ProdutoOption) => {
+  if (produto.preco_venda == null) {
+    return null;
+  }
+
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    produto.preco_venda,
+  );
+};
+
 const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   isOpen,
   onClose,
   assunto,
   htmlOrcamento,
+  numeroTicket,
+  empresaId,
+  empresaInfo,
   orcamentoId,
   atendimentoId,
   membroId,
@@ -667,25 +797,100 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   const [isApproveConfirmationOpen, setIsApproveConfirmationOpen] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [wasOpen, setWasOpen] = useState(false);
+  const [lastSyncedHtml, setLastSyncedHtml] = useState<string | null>(null);
+  const [productSearchRowId, setProductSearchRowId] = useState<string | null>(null);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productResults, setProductResults] = useState<ProdutoOption[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+  const isBlankOrcamento = !normalizeHtmlSource(htmlOrcamento).trim();
+  // Congelado no primeiro render: se recalculado a cada render, o timestamp muda quando o
+  // relogio vira o minuto, o que quebraria a comparacao de sincronizacao abaixo e descartaria
+  // edicoes em andamento do usuario.
+  const [blankOrcamentoDataEmissao] = useState(() =>
+    new Date().toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  );
+  const effectiveHtmlOrcamento = isBlankOrcamento
+    ? buildBlankOrcamentoHtml(numeroTicket, empresaInfo, blankOrcamentoDataEmissao)
+    : htmlOrcamento;
 
-    const extractedClientFields = extractClientSectionFields(htmlOrcamento);
-    const extractedItemsRows = extractItemsSectionRows(htmlOrcamento);
-    const extractedObservacaoField = extractObservacaoField(htmlOrcamento);
-    setClientFields(extractedClientFields);
-    setItemsRows(extractedItemsRows);
-    setObservacaoField(extractedObservacaoField);
+  // Sincroniza o estado do editor a partir do HTML fonte durante a renderizacao (nao em useEffect),
+  // para nunca pintar um frame intermediario com a tabela de itens vazia antes da extracao concluir.
+  if (isOpen && (!wasOpen || effectiveHtmlOrcamento !== lastSyncedHtml)) {
+    setWasOpen(true);
+    setLastSyncedHtml(effectiveHtmlOrcamento);
+    setClientFields(extractClientSectionFields(effectiveHtmlOrcamento));
+    setItemsRows(extractItemsSectionRows(effectiveHtmlOrcamento));
+    setObservacaoField(extractObservacaoField(effectiveHtmlOrcamento));
     setExpandedClientFieldIds([]);
     setExpandedItemRowIds([]);
     setIsObservacaoFieldExpanded(false);
     setIsApproveConfirmationOpen(false);
     setActionFeedback(null);
     setActionError(null);
-  }, [htmlOrcamento, isOpen]);
+    setProductSearchRowId(null);
+    setProductSearchQuery('');
+    setProductResults([]);
+  } else if (!isOpen && wasOpen) {
+    setWasOpen(false);
+  }
+
+  useEffect(() => {
+    if (!productSearchRowId || !empresaId) {
+      setProductResults([]);
+      return;
+    }
+
+    const query = productSearchQuery.trim();
+
+    if (!query) {
+      setProductResults([]);
+      setIsSearchingProducts(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsSearchingProducts(true);
+
+    const timeoutId = window.setTimeout(async () => {
+      const safeQuery = query.replace(/[%,()]/g, ' ').trim();
+
+      const { data, error } = await supabase
+        .from('sales_produtos_v2')
+        .select('produto_id, codigo_sku, nome, descricao, preco_venda, unidade_medida')
+        .eq('empresa_id', empresaId)
+        .eq('ativo', true)
+        .or(`nome.ilike.%${safeQuery}%,codigo_sku.ilike.%${safeQuery}%`)
+        .order('nome', { ascending: true })
+        .limit(15);
+
+      if (isCancelled) {
+        return;
+      }
+
+      if (error) {
+        console.error('Erro ao buscar produtos:', error);
+        setProductResults([]);
+      } else {
+        setProductResults((data ?? []) as ProdutoOption[]);
+      }
+
+      setIsSearchingProducts(false);
+    }, 300);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [productSearchQuery, productSearchRowId, empresaId]);
 
   const toggleClientFieldExpansion = (fieldId: string) => {
     setExpandedClientFieldIds((currentIds) =>
@@ -738,7 +943,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
 
   const handleItemRowChange = (
     rowId: string,
-    fieldKey: keyof Omit<OrcamentoItemRow, 'id'>,
+    fieldKey: keyof Omit<OrcamentoItemRow, 'id' | 'itemId' | 'produtoId' | 'isManuallyAdded'>,
     fieldValue: string | boolean,
   ) => {
     setItemsRows((currentRows) =>
@@ -749,12 +954,39 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   const handleRemoveItemRow = (rowId: string) => {
     setItemsRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
     setExpandedItemRowIds((currentIds) => currentIds.filter((currentId) => currentId !== rowId));
+
+    if (productSearchRowId === rowId) {
+      setProductSearchRowId(null);
+      setProductSearchQuery('');
+    }
   };
 
   const handleAddItemRow = () => {
     const newItemRow = buildDefaultItemRow();
     setItemsRows((currentRows) => [...currentRows, newItemRow]);
     setExpandedItemRowIds((currentIds) => [...currentIds, newItemRow.id]);
+    setProductSearchRowId(newItemRow.id);
+    setProductSearchQuery('');
+  };
+
+  const handleSelectProduto = (rowId: string, produto: ProdutoOption) => {
+    setItemsRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              produtoId: produto.produto_id,
+              nome: produto.nome,
+              sku: produto.codigo_sku || '',
+              descricao: produto.descricao || row.descricao,
+              valorUnitario: formatProdutoPreco(produto) || row.valorUnitario,
+            }
+          : row,
+      ),
+    );
+    setProductSearchRowId(null);
+    setProductSearchQuery('');
+    setProductResults([]);
   };
 
   const handleObservacaoChange = (texto: string) => {
@@ -765,21 +997,23 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
     () =>
       applyObservacaoToOrcamentoHtml(
         applyItemsToOrcamentoHtml(
-          applyClientFieldsToOrcamentoHtml(htmlOrcamento, clientFields),
+          applyClientFieldsToOrcamentoHtml(effectiveHtmlOrcamento, clientFields),
           itemsRows,
         ),
         observacaoField,
       ),
-    [clientFields, htmlOrcamento, itemsRows, observacaoField],
+    [clientFields, effectiveHtmlOrcamento, itemsRows, observacaoField],
   );
   const orcamentoHtml = useMemo(
     () => buildOrcamentoPreviewHtml(editedOrcamentoHtmlSource),
     [editedOrcamentoHtmlSource],
   );
   const hasOrcamentoHtml = Boolean(orcamentoHtml);
-  const canSaveHtml = Boolean(orcamentoId && editedOrcamentoHtmlSource.trim()) && !isSavingHtml;
+  const hasUnlinkedManualItem = itemsRows.some((row) => row.isManuallyAdded && !row.produtoId);
+  const canSaveHtml =
+    Boolean(orcamentoId && editedOrcamentoHtmlSource.trim()) && !isSavingHtml && !hasUnlinkedManualItem;
   const canApproveOrcamento =
-    Boolean(orcamentoId && atendimentoId && membroId) && !isApprovingOrcamento;
+    Boolean(orcamentoId && atendimentoId && membroId) && !isApprovingOrcamento && !hasUnlinkedManualItem;
 
   const saveHtmlToDatabase = async () => {
     if (!orcamentoId || !editedOrcamentoHtmlSource.trim()) {
@@ -787,7 +1021,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
     }
 
     const { error } = await supabase
-      .from('sales_orcamentos')
+      .from('sales_orcamentos_v2')
       .update({ html_orcamento: editedOrcamentoHtmlSource })
       .eq('orcamento_id', orcamentoId);
 
@@ -861,7 +1095,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] font-sans">
       <button
         type="button"
         aria-label="Fechar visualizacao do orcamento"
@@ -869,20 +1103,27 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         className="absolute inset-0"
       />
 
-      <div className="relative z-10 flex h-screen w-screen flex-col overflow-hidden bg-[#F3F6FA]">
-        <div className="flex items-center justify-between gap-4 border-b border-black/5 bg-white px-6 py-5">
+      <div className="relative z-10 flex h-screen w-screen flex-col overflow-hidden bg-paper">
+        <div className="flex items-center justify-between gap-4 border-b border-line-soft bg-card px-6 py-5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+            <p
+              className="text-[10.5px] text-muted-soft"
+              style={{ fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase' }}
+            >
               Visualização do Orçamento
             </p>
-            <h2 className="truncate text-lg font-semibold text-gray-900">
+            <h2 className="truncate text-[18px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
               {assunto || 'Cotação sem assunto'}
             </h2>
             {actionFeedback ? (
-              <p className="mt-2 text-sm font-medium text-emerald-600">{actionFeedback}</p>
+              <p className="mt-1.5 text-[12.5px] text-emerald-600" style={{ fontWeight: 700 }}>
+                {actionFeedback}
+              </p>
             ) : null}
             {actionError ? (
-              <p className="mt-2 text-sm font-medium text-red-600">{actionError}</p>
+              <p className="mt-1.5 text-[12.5px] text-red-600" style={{ fontWeight: 700 }}>
+                {actionError}
+              </p>
             ) : null}
           </div>
 
@@ -891,7 +1132,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
               type="button"
               onClick={handleSaveHtml}
               disabled={!canSaveHtml}
-              className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
             >
               {isSavingHtml ? 'Salvando...' : 'Salvar Alterações'}
             </button>
@@ -904,7 +1146,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 setIsApproveConfirmationOpen(true);
               }}
               disabled={!canApproveOrcamento}
-              className="inline-flex items-center justify-center rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#dce86a] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-4 text-[13px] text-ink transition-colors hover:bg-lime-deep disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
             >
               {isApprovingOrcamento ? 'Aprovando...' : 'Aprovar e Enviar'}
             </button>
@@ -912,7 +1155,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink"
+              style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
               aria-label="Fechar modal do orçamento"
             >
               <X size={18} />
@@ -920,61 +1164,85 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
           </div>
         </div>
 
+        {isBlankOrcamento ? (
+          <div className="flex items-start gap-3 border-b border-red-100 bg-red-50 px-6 py-3.5">
+            <div className="mt-0.5 shrink-0 text-red-600">
+              <AlertTriangle size={17} strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] text-red-600" style={{ fontWeight: 700 }}>
+                Nenhum item foi encontrado automaticamente para esse lead
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-red-600" style={{ fontWeight: 500, opacity: 0.85 }}>
+                A IA não localizou os itens solicitados no catálogo. Preencha os dados do cliente e
+                adicione os itens manualmente abaixo antes de aprovar o orçamento.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {hasUnlinkedManualItem ? (
+          <div className="flex items-start gap-3 border-b border-line-soft bg-stone px-6 py-3">
+            <div className="mt-0.5 shrink-0 text-muted">
+              <Package size={16} strokeWidth={2} />
+            </div>
+            <p className="text-[12.5px] text-muted" style={{ fontWeight: 500 }}>
+              Existem itens adicionados manualmente sem produto vinculado — busque e selecione um
+              produto do catálogo para poder salvar ou aprovar.
+            </p>
+          </div>
+        ) : null}
+
         <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto border-b border-black/5 bg-white px-6 py-6 xl:border-b-0 xl:border-r">
-            <div className="space-y-5">
-              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+          <aside className="min-h-0 overflow-y-auto border-b border-line-soft bg-card px-5 py-6 xl:border-b-0 xl:border-r">
+            <div className="space-y-4">
+              {/* Informações do Cliente */}
+              <div className="rounded-panel border border-line-soft bg-paper">
                 <button
                   type="button"
                   onClick={() => setIsClientSectionExpanded((currentValue) => !currentValue)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
                   aria-expanded={isClientSectionExpanded}
                 >
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900">
-                      Informações do Cliente
-                    </h3>
-                  </div>
-
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                  <h3 className="text-[13.5px] text-ink" style={{ fontWeight: 800 }}>
+                    Informações do Cliente
+                  </h3>
+                  <div className="ml-4 flex shrink-0 items-center gap-2.5">
+                    <span
+                      className="rounded-pill bg-card px-2.5 py-0.5 text-[11px] text-muted"
+                      style={{ fontWeight: 700 }}
+                    >
                       {clientFields.length}
                     </span>
-                    <span className="text-gray-400">
-                      {isClientSectionExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <span className="text-muted-soft">
+                      {isClientSectionExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                     </span>
                   </div>
                 </button>
 
                 {isClientSectionExpanded ? (
-                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                  <div className="space-y-2.5 border-t border-line-soft px-4 pb-4 pt-3.5">
                     {clientFields.map((field) => {
                       const isExpanded = expandedClientFieldIds.includes(field.id);
 
                       return (
-                        <div
-                          key={field.id}
-                          className="rounded-3xl border border-black/10 bg-white"
-                        >
+                        <div key={field.id} className="rounded-tile border border-line-soft bg-card">
                           <button
                             type="button"
                             onClick={() => toggleClientFieldExpansion(field.id)}
-                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left"
                             aria-expanded={isExpanded}
                           >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-gray-900">
-                                {field.label}
-                              </p>
-                            </div>
-
-                            <span className="shrink-0 text-gray-400">
-                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            <p className="truncate text-[12.5px] text-ink" style={{ fontWeight: 700 }}>
+                              {field.label}
+                            </p>
+                            <span className="shrink-0 text-muted-soft">
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </span>
                           </button>
 
                           {isExpanded ? (
-                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                            <div className="space-y-2 border-t border-line-soft px-3.5 pb-3.5 pt-3">
                               {field.isCustom ? (
                                 <input
                                   type="text"
@@ -983,7 +1251,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                                     handleClientFieldLabelChange(field.id, event.target.value)
                                   }
                                   placeholder="Nome do campo"
-                                  className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-black/20"
+                                  className="w-full rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                                  style={{ fontWeight: 700, transitionDuration: '.22s' }}
                                 />
                               ) : null}
 
@@ -994,13 +1263,15 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                                   handleClientFieldValueChange(field.id, event.target.value)
                                 }
                                 placeholder="Digite o valor"
-                                className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                                className="w-full rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                                style={{ fontWeight: 500, transitionDuration: '.22s' }}
                               />
 
                               <button
                                 type="button"
                                 onClick={() => handleRemoveClientField(field.id)}
-                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
+                                className="text-[11.5px] text-muted-soft transition-colors hover:text-red-600"
+                                style={{ fontWeight: 700, transitionDuration: '.22s' }}
                               >
                                 Excluir
                               </button>
@@ -1013,7 +1284,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                     <button
                       type="button"
                       onClick={handleAddClientField}
-                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                      className="inline-flex w-full items-center justify-center rounded-[9px] border border-line bg-card px-4 py-2.5 text-[12.5px] text-ink transition-colors hover:bg-stone"
+                      style={{ fontWeight: 700, transitionDuration: '.22s' }}
                     >
                       Adicionar informação
                     </button>
@@ -1021,98 +1293,238 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 ) : null}
               </div>
 
-              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+              {/* Itens do Pedido */}
+              <div className="rounded-panel border border-line-soft bg-paper">
                 <button
                   type="button"
                   onClick={() => setIsItemsSectionExpanded((currentValue) => !currentValue)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
                   aria-expanded={isItemsSectionExpanded}
                 >
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900">Itens do Pedido</h3>
-                  </div>
-
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                  <h3 className="text-[13.5px] text-ink" style={{ fontWeight: 800 }}>
+                    Itens do Pedido
+                  </h3>
+                  <div className="ml-4 flex shrink-0 items-center gap-2.5">
+                    <span
+                      className="rounded-pill bg-card px-2.5 py-0.5 text-[11px] text-muted"
+                      style={{ fontWeight: 700 }}
+                    >
                       {itemsRows.length}
                     </span>
-                    <span className="text-gray-400">
-                      {isItemsSectionExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <span className="text-muted-soft">
+                      {isItemsSectionExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                     </span>
                   </div>
                 </button>
 
                 {isItemsSectionExpanded ? (
-                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
+                  <div className="space-y-2.5 border-t border-line-soft px-4 pb-4 pt-3.5">
                     {itemsRows.map((itemRow, index) => {
                       const isExpanded = expandedItemRowIds.includes(itemRow.id);
-                      const itemLabel = itemRow.nome.trim() || `Item ${index + 1}`;
+                      const itemLabel = itemRow.nome.trim() || `Novo item ${index + 1}`;
+                      const isSearchingThisRow = productSearchRowId === itemRow.id;
+                      const needsProductLink = itemRow.isManuallyAdded && !itemRow.produtoId;
 
                       return (
-                        <div
-                          key={itemRow.id}
-                          className="rounded-3xl border border-black/10 bg-white"
-                        >
+                        <div key={itemRow.id} className="rounded-tile border border-line-soft bg-card">
                           <button
                             type="button"
                             onClick={() => toggleItemRowExpansion(itemRow.id)}
-                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left"
                             aria-expanded={isExpanded}
                           >
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-gray-900">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate text-[12.5px] text-ink" style={{ fontWeight: 700 }}>
                                 {itemLabel}
                               </p>
+                              {needsProductLink ? (
+                                <span
+                                  className="shrink-0 rounded-pill bg-red-50 px-2 py-0.5 text-[9.5px] text-red-600"
+                                  style={{ fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase' }}
+                                >
+                                  Vincular produto
+                                </span>
+                              ) : itemRow.isManuallyAdded ? (
+                                <span
+                                  className="shrink-0 rounded-pill bg-lime px-2 py-0.5 text-[9.5px] text-ink"
+                                  style={{ fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase' }}
+                                >
+                                  Catálogo
+                                </span>
+                              ) : null}
                             </div>
-
-                            <span className="shrink-0 text-gray-400">
-                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            <span className="shrink-0 text-muted-soft">
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </span>
                           </button>
 
                           {isExpanded ? (
-                            <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
-                              {(Object.keys(ITEM_FIELD_LABELS) as Array<
-                                Exclude<keyof OrcamentoItemRow, 'id' | 'itemId'>
-                              >).map((fieldKey) => (
-                                <div key={fieldKey} className="space-y-1.5">
-                                  <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">
-                                    {ITEM_FIELD_LABELS[fieldKey]}
+                            <div className="space-y-2.5 border-t border-line-soft px-3.5 pb-3.5 pt-3">
+                              {itemRow.isManuallyAdded ? (
+                                <div className="space-y-1.5">
+                                  <label
+                                    className="block text-[10.5px] text-muted-soft"
+                                    style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                                  >
+                                    Produto (catálogo)
                                   </label>
 
-                                  {fieldKey === 'disponivel' ? (
-                                    <select
-                                      value={itemRow.disponivel ? 'true' : 'false'}
-                                      onChange={(event) =>
-                                        handleItemRowChange(
-                                          itemRow.id,
-                                          fieldKey,
-                                          event.target.value === 'true',
-                                        )
-                                      }
-                                      className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
-                                    >
-                                      <option value="true">Disponível</option>
-                                      <option value="false">Indisponível</option>
-                                    </select>
+                                  {itemRow.produtoId && !isSearchingThisRow ? (
+                                    <div className="flex items-center justify-between gap-2 rounded-[9px] border border-line bg-paper px-3 py-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[12.5px] text-ink" style={{ fontWeight: 700 }}>
+                                          {itemRow.nome}
+                                        </p>
+                                        <p className="truncate text-[11px] text-muted" style={{ fontWeight: 500 }}>
+                                          SKU: {itemRow.sku || '—'}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setProductSearchRowId(itemRow.id);
+                                          setProductSearchQuery('');
+                                        }}
+                                        className="shrink-0 text-[11.5px] text-muted-soft transition-colors hover:text-ink"
+                                        style={{ fontWeight: 700, transitionDuration: '.22s' }}
+                                      >
+                                        Trocar
+                                      </button>
+                                    </div>
                                   ) : (
-                                    <input
-                                      type="text"
-                                      value={String(itemRow[fieldKey] || '')}
-                                      onChange={(event) =>
-                                        handleItemRowChange(itemRow.id, fieldKey, event.target.value)
-                                      }
-                                      placeholder="Digite o valor"
-                                      className="w-full rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
-                                    />
+                                    <div className="relative">
+                                      <div className="flex h-10 items-center gap-2 rounded-[9px] border border-line bg-paper px-3">
+                                        <Search size={14} className="shrink-0 text-muted-soft" />
+                                        <input
+                                          type="text"
+                                          autoFocus
+                                          value={productSearchQuery}
+                                          onChange={(event) => {
+                                            setProductSearchRowId(itemRow.id);
+                                            setProductSearchQuery(event.target.value);
+                                          }}
+                                          onFocus={() => setProductSearchRowId(itemRow.id)}
+                                          placeholder="Buscar por nome ou SKU"
+                                          className="w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-muted-soft"
+                                          style={{ fontWeight: 500 }}
+                                        />
+                                      </div>
+
+                                      {isSearchingThisRow && productSearchQuery.trim() ? (
+                                        <div
+                                          className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[220px] overflow-y-auto rounded-[9px] border border-line bg-card py-1"
+                                          style={{ boxShadow: '0 18px 40px -18px rgba(20,20,20,.35)' }}
+                                        >
+                                          {isSearchingProducts ? (
+                                            <p className="px-3.5 py-2.5 text-[12px] text-muted-soft" style={{ fontWeight: 500 }}>
+                                              Buscando...
+                                            </p>
+                                          ) : productResults.length > 0 ? (
+                                            productResults.map((produto) => (
+                                              <button
+                                                key={produto.produto_id}
+                                                type="button"
+                                                onClick={() => handleSelectProduto(itemRow.id, produto)}
+                                                className="flex w-full items-start justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-stone"
+                                                style={{ transitionDuration: '.15s' }}
+                                              >
+                                                <div className="min-w-0">
+                                                  <p className="truncate text-[12.5px] text-ink" style={{ fontWeight: 700 }}>
+                                                    {produto.nome}
+                                                  </p>
+                                                  <p className="truncate text-[11px] text-muted" style={{ fontWeight: 500 }}>
+                                                    SKU: {produto.codigo_sku || '—'}
+                                                  </p>
+                                                </div>
+                                                {formatProdutoPreco(produto) ? (
+                                                  <span
+                                                    className="shrink-0 text-[11.5px] text-ink"
+                                                    style={{ fontWeight: 700 }}
+                                                  >
+                                                    {formatProdutoPreco(produto)}
+                                                  </span>
+                                                ) : null}
+                                              </button>
+                                            ))
+                                          ) : (
+                                            <p className="px-3.5 py-2.5 text-[12px] text-muted-soft" style={{ fontWeight: 500 }}>
+                                              Nenhum produto encontrado no catálogo.
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   )}
                                 </div>
-                              ))}
+                              ) : (
+                                <div className="space-y-1.5">
+                                  <label
+                                    className="block text-[10.5px] text-muted-soft"
+                                    style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                                  >
+                                    Nome
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={itemRow.nome}
+                                    onChange={(event) => handleItemRowChange(itemRow.id, 'nome', event.target.value)}
+                                    placeholder="Digite o valor"
+                                    className="w-full rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                                    style={{ fontWeight: 500, transitionDuration: '.22s' }}
+                                  />
+                                </div>
+                              )}
+
+                              {(Object.keys(ITEM_FIELD_LABELS) as Array<
+                                Exclude<keyof OrcamentoItemRow, 'id' | 'itemId' | 'produtoId' | 'isManuallyAdded'>
+                              >)
+                                .filter((fieldKey) => fieldKey !== 'nome' || !itemRow.isManuallyAdded)
+                                .filter((fieldKey) => fieldKey !== 'sku' || !itemRow.isManuallyAdded)
+                                .map((fieldKey) => (
+                                  <div key={fieldKey} className="space-y-1.5">
+                                    <label
+                                      className="block text-[10.5px] text-muted-soft"
+                                      style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                                    >
+                                      {ITEM_FIELD_LABELS[fieldKey]}
+                                    </label>
+
+                                    {fieldKey === 'disponivel' ? (
+                                      <select
+                                        value={itemRow.disponivel ? 'true' : 'false'}
+                                        onChange={(event) =>
+                                          handleItemRowChange(
+                                            itemRow.id,
+                                            fieldKey,
+                                            event.target.value === 'true',
+                                          )
+                                        }
+                                        className="w-full rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                                        style={{ fontWeight: 500, transitionDuration: '.22s' }}
+                                      >
+                                        <option value="true">Disponível</option>
+                                        <option value="false">Indisponível</option>
+                                      </select>
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={String(itemRow[fieldKey] || '')}
+                                        onChange={(event) =>
+                                          handleItemRowChange(itemRow.id, fieldKey, event.target.value)
+                                        }
+                                        placeholder="Digite o valor"
+                                        className="w-full rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                                        style={{ fontWeight: 500, transitionDuration: '.22s' }}
+                                      />
+                                    )}
+                                  </div>
+                                ))}
 
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItemRow(itemRow.id)}
-                                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-[#FAFBFC] px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900"
+                                className="text-[11.5px] text-muted-soft transition-colors hover:text-red-600"
+                                style={{ fontWeight: 700, transitionDuration: '.22s' }}
                               >
                                 Excluir linha
                               </button>
@@ -1125,7 +1537,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                     <button
                       type="button"
                       onClick={handleAddItemRow}
-                      className="inline-flex w-full items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                      className="inline-flex w-full items-center justify-center rounded-[9px] border border-line bg-card px-4 py-2.5 text-[12.5px] text-ink transition-colors hover:bg-stone"
+                      style={{ fontWeight: 700, transitionDuration: '.22s' }}
                     >
                       Adicionar linha
                     </button>
@@ -1133,61 +1546,56 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 ) : null}
               </div>
 
-              <div className="rounded-[28px] border border-black/10 bg-[#FAFBFC]">
+              {/* Observação */}
+              <div className="rounded-panel border border-line-soft bg-paper">
                 <button
                   type="button"
                   onClick={() => setIsObservacaoSectionExpanded((currentValue) => !currentValue)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
                   aria-expanded={isObservacaoSectionExpanded}
                 >
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-gray-900">Observação</h3>
-                  </div>
-
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                  <h3 className="text-[13.5px] text-ink" style={{ fontWeight: 800 }}>
+                    Observação
+                  </h3>
+                  <div className="ml-4 flex shrink-0 items-center gap-2.5">
+                    <span
+                      className="rounded-pill bg-card px-2.5 py-0.5 text-[11px] text-muted"
+                      style={{ fontWeight: 700 }}
+                    >
                       1
                     </span>
-                    <span className="text-gray-400">
-                      {isObservacaoSectionExpanded ? (
-                        <ChevronDown size={18} />
-                      ) : (
-                        <ChevronRight size={18} />
-                      )}
+                    <span className="text-muted-soft">
+                      {isObservacaoSectionExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
                     </span>
                   </div>
                 </button>
 
                 {isObservacaoSectionExpanded ? (
-                  <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-4">
-                    <div className="rounded-3xl border border-black/10 bg-white">
+                  <div className="space-y-2.5 border-t border-line-soft px-4 pb-4 pt-3.5">
+                    <div className="rounded-tile border border-line-soft bg-card">
                       <button
                         type="button"
                         onClick={() => setIsObservacaoFieldExpanded((currentValue) => !currentValue)}
-                        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                        className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left"
                         aria-expanded={isObservacaoFieldExpanded}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-gray-900">Texto</p>
-                        </div>
-
-                        <span className="shrink-0 text-gray-400">
-                          {isObservacaoFieldExpanded ? (
-                            <ChevronDown size={18} />
-                          ) : (
-                            <ChevronRight size={18} />
-                          )}
+                        <p className="truncate text-[12.5px] text-ink" style={{ fontWeight: 700 }}>
+                          Texto
+                        </p>
+                        <span className="shrink-0 text-muted-soft">
+                          {isObservacaoFieldExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                         </span>
                       </button>
 
                       {isObservacaoFieldExpanded ? (
-                        <div className="space-y-3 border-t border-black/8 px-4 pb-4 pt-3">
+                        <div className="space-y-2 border-t border-line-soft px-3.5 pb-3.5 pt-3">
                           <textarea
                             value={observacaoField.texto}
                             onChange={(event) => handleObservacaoChange(event.target.value)}
                             rows={6}
                             placeholder="Digite o texto da observação"
-                            className="w-full resize-y rounded-2xl border border-black/10 bg-[#FAFBFC] px-3 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-black/20"
+                            className="w-full resize-y rounded-[9px] border border-line bg-paper px-3 py-2 text-[12.5px] text-ink outline-none transition-colors focus:border-ink"
+                            style={{ fontWeight: 500, transitionDuration: '.22s' }}
                           />
                         </div>
                       ) : null}
@@ -1198,21 +1606,21 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             </div>
           </aside>
 
-          <section className="min-h-0 overflow-auto bg-[#F7F8FA] p-5 pb-8">
+          <section className="min-h-0 overflow-auto bg-stone p-5 pb-8">
             {hasOrcamentoHtml ? (
-              <div className="flex min-h-full w-full overflow-auto rounded-[24px] border border-black/10 bg-white p-6 pb-10">
+              <div className="flex min-h-full w-full overflow-auto rounded-panel border border-line-soft bg-card p-6 pb-10">
                 <div className="mx-auto flex w-full min-w-[860px] max-w-[860px] justify-center pb-8">
                   <iframe
                     title="Visualização do orçamento"
                     srcDoc={orcamentoHtml}
-                    className="h-[1160px] w-[820px] flex-none border border-black/10 bg-white"
+                    className="h-[1160px] w-[820px] flex-none border border-line bg-white"
                     referrerPolicy="no-referrer"
                   />
                 </div>
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-black/10 bg-white px-6 text-center">
-                <p className="text-sm font-medium text-gray-500">
+              <div className="flex h-full items-center justify-center rounded-panel border border-dashed border-line bg-card px-6 text-center">
+                <p className="text-[13px] text-muted" style={{ fontWeight: 500 }}>
                   Nenhum HTML de orçamento foi encontrado para esta cotação.
                 </p>
               </div>
@@ -1223,20 +1631,25 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
 
       {isApproveConfirmationOpen ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-md rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+          <div
+            className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
+            style={{ boxShadow: '0 28px 80px -34px rgba(20,20,20,.45)' }}
+          >
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Aprovar Orçamento</h3>
+              <h3 className="text-[18px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
+                Aprovar Orçamento
+              </h3>
               {isApprovingOrcamento ? (
                 <div className="mt-4 space-y-3">
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
-                    <div className="h-full w-1/3 animate-pulse rounded-full bg-[#EBF57D]" />
+                  <div className="h-2 w-full overflow-hidden rounded-pill bg-stone">
+                    <div className="h-full w-1/3 animate-pulse rounded-pill bg-lime" />
                   </div>
-                  <p className="text-sm leading-6 text-gray-600">
+                  <p className="text-[13px] leading-6 text-muted" style={{ fontWeight: 500 }}>
                     Enviando o orçamento. Aguarde alguns segundos enquanto finalizamos o envio.
                   </p>
                 </div>
               ) : (
-                <p className="mt-3 text-sm leading-6 text-gray-600">
+                <p className="mt-3 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
                   Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o
                   cliente.
                 </p>
@@ -1248,7 +1661,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsApproveConfirmationOpen(false)}
-                  className="inline-flex items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-black/20 hover:bg-[#FAFAFA]"
+                  className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone"
+                  style={{ fontWeight: 700, transitionDuration: '.22s' }}
                 >
                   Não
                 </button>
@@ -1257,7 +1671,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                   type="button"
                   onClick={handleApproveOrcamento}
                   disabled={isApprovingOrcamento}
-                  className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-[9px] bg-ink px-4 text-[13px] text-white transition-colors hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ fontWeight: 700, transitionDuration: '.22s' }}
                 >
                   Sim
                 </button>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Mail, MessageCircle, Search, UserRound, Zap } from 'lucide-react';
+import { CalendarRange, Mail, MessageCircle, Search, TrendingUp, UserRound, X, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type KanbanStatus =
@@ -10,20 +10,19 @@ type KanbanStatus =
   | 'CONCLUIDO'
   | 'DESCARTADO';
 
-interface MockCotacao {
-  id: string;
+interface CardCotacao {
   atendimentoId: string;
   empresaId: string;
   numeroTicket: string;
   isNovoCliente: boolean;
-  nome: string;
+  titulo: string;
   membro: string;
   membroId: string;
   dataEntrada: string;
   status: KanbanStatus;
-  cliente: string;
-  valor: string;
-  atendimentoOrigem: 'WhatsApp' | 'Email' | null;
+  valorFormatado: string | null;
+  valorNumerico: number;
+  origem: 'EMAIL' | 'WHATSAPP' | null;
 }
 
 const KANBAN_COLUMNS: Array<{
@@ -31,32 +30,12 @@ const KANBAN_COLUMNS: Array<{
   label: string;
   isAiStage?: boolean;
 }> = [
-  {
-    key: 'TRIAGEM',
-    label: 'Triagem',
-    isAiStage: true,
-  },
-  {
-    key: 'COLETANDO_DADOS',
-    label: 'Coletando Dados',
-    isAiStage: true,
-  },
-  {
-    key: 'AGUARDANDO_APROVACAO',
-    label: 'Aguardando Aprovacao',
-  },
-  {
-    key: 'ORCAMENTO_ENVIADO',
-    label: 'Orcamento Enviado',
-  },
-  {
-    key: 'CONCLUIDO',
-    label: 'Concluido',
-  },
-  {
-    key: 'DESCARTADO',
-    label: 'Descartado',
-  },
+  { key: 'TRIAGEM', label: 'Triagem', isAiStage: true },
+  { key: 'COLETANDO_DADOS', label: 'Coletando Dados', isAiStage: true },
+  { key: 'AGUARDANDO_APROVACAO', label: 'Aguardando Aprovação' },
+  { key: 'ORCAMENTO_ENVIADO', label: 'Orçamento Enviado' },
+  { key: 'CONCLUIDO', label: 'Concluído' },
+  { key: 'DESCARTADO', label: 'Descartado' },
 ];
 
 interface MemberOption {
@@ -65,6 +44,7 @@ interface MemberOption {
 }
 
 interface MemberRecord {
+  membro_id: string;
   empresa_id: string;
   cargo: string | null;
   nome: string | null;
@@ -80,12 +60,24 @@ interface AtendimentoRow {
   numero_ticket: number | null;
   membro_id: string | null;
   cliente_id: string | null;
-  atendimento_origem: 'WhatsApp' | 'Email' | null;
+  origem: 'EMAIL' | 'WHATSAPP' | null;
+  email_lead: string | null;
+  telefone_lead: string | null;
+}
+
+interface OrcamentoValorRow {
+  atendimento_id: string;
+  valor_total: number | null;
 }
 
 interface NotificationUnreadRow {
   atendimento_id: string | null;
 }
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
 
 const formatDate = (value: string) => {
   const parsedDate = new Date(value);
@@ -97,6 +89,31 @@ const formatDate = (value: string) => {
   return new Intl.DateTimeFormat('pt-BR').format(parsedDate);
 };
 
+const formatPhone = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 10) {
+    return value;
+  }
+  const ddd = digits.slice(-11, -9);
+  const rest = digits.slice(-9);
+  const middle = rest.length === 9 ? rest.slice(0, 5) : rest.slice(0, 4);
+  const end = rest.length === 9 ? rest.slice(5) : rest.slice(4);
+  return `(${ddd}) ${middle}-${end}`;
+};
+
+const tituloDoAtendimento = (item: AtendimentoRow) => {
+  if (item.assunto) {
+    return item.assunto;
+  }
+  if (item.origem === 'WHATSAPP' && item.telefone_lead) {
+    return formatPhone(item.telefone_lead);
+  }
+  if (item.email_lead) {
+    return item.email_lead;
+  }
+  return 'Cotação sem identificação';
+};
+
 interface CotacoesPageProps {
   onOpenCotacao: (empresaId: string, numeroTicket: string) => void;
 }
@@ -106,7 +123,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedMember, setSelectedMember] = useState('Todos');
-  const [cotacoes, setCotacoes] = useState<MockCotacao[]>([]);
+  const [cotacoes, setCotacoes] = useState<CardCotacao[]>([]);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
   const [unreadNotificationsByAtendimento, setUnreadNotificationsByAtendimento] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -135,9 +152,9 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         }
 
         const { data: memberRecord, error: memberRecordError } = await supabase
-          .from('sales_membros_empresa')
-          .select('empresa_id, cargo, nome')
-          .eq('membro_id', session.user.id)
+          .from('sales_membros_v2')
+          .select('membro_id, empresa_id, cargo, nome')
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (memberRecordError) {
@@ -153,29 +170,29 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         const adminAccess = currentMember.cargo === 'ADMIN';
 
         const cotacoesQuery = supabase
-          .from('sales_atendimento')
+          .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id, atendimento_origem',
+            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id, origem, email_lead, telefone_lead',
           )
           .eq('empresa_id', currentMember.empresa_id)
-          .eq('categoria', 'COTACAO')
+          .in('categoria', ['COTACAO', 'PEDIDO_COMPRA'])
           .order('created_at', { ascending: false });
 
         const scopedCotacoesQuery = adminAccess
           ? cotacoesQuery
-          : cotacoesQuery.eq('membro_id', session.user.id);
+          : cotacoesQuery.eq('membro_id', currentMember.membro_id);
 
         const [membersResponse, cotacoesResponse, notificationsResponse] = await Promise.all([
           adminAccess
             ? supabase
-                .from('sales_membros_empresa')
+                .from('sales_membros_v2')
                 .select('membro_id, nome')
                 .eq('empresa_id', currentMember.empresa_id)
                 .order('nome', { ascending: true })
             : Promise.resolve({
                 data: [
                   {
-                    membro_id: session.user.id,
+                    membro_id: currentMember.membro_id,
                     nome: currentMember.nome || 'Meu usuário',
                   },
                 ],
@@ -183,10 +200,10 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
               }),
           scopedCotacoesQuery,
           supabase
-            .from('sales_notificacoes')
+            .from('sales_notificacoes_v2')
             .select('atendimento_id')
-            .eq('membro_id', session.user.id)
-            .eq('notificacao_lida', false),
+            .eq('membro_id', currentMember.membro_id)
+            .eq('lida', false),
         ]);
 
         if (membersResponse.error) {
@@ -200,6 +217,24 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         if (notificationsResponse.error) {
           throw notificationsResponse.error;
         }
+
+        const atendimentos = (cotacoesResponse.data ?? []) as AtendimentoRow[];
+        const atendimentoIds = atendimentos.map((item) => item.atendimento_id);
+
+        const { data: orcamentosData, error: orcamentosError } = atendimentoIds.length
+          ? await supabase
+              .from('sales_orcamentos_v2')
+              .select('atendimento_id, valor_total')
+              .in('atendimento_id', atendimentoIds)
+          : { data: [] as OrcamentoValorRow[], error: null };
+
+        if (orcamentosError) {
+          throw orcamentosError;
+        }
+
+        const valorPorAtendimento = new Map(
+          ((orcamentosData ?? []) as OrcamentoValorRow[]).map((item) => [item.atendimento_id, item.valor_total]),
+        );
 
         const members = (membersResponse.data ?? []) as MemberOption[];
         const memberNameById = new Map(
@@ -217,28 +252,24 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           {} as Record<string, number>,
         );
 
-        const mappedCotacoes: MockCotacao[] = ((cotacoesResponse.data ?? []) as AtendimentoRow[]).map((item) => {
+        const mappedCotacoes: CardCotacao[] = atendimentos.map((item) => {
           const ticketNumber = item.numero_ticket ? `#${item.numero_ticket}` : 'Sem ticket';
-          const memberName = memberNameById.get(item.membro_id) || 'Membro nao identificado';
-          const atendimentoOrigem =
-            item.atendimento_origem === 'WhatsApp' || item.atendimento_origem === 'Email'
-              ? item.atendimento_origem
-              : null;
+          const memberName = memberNameById.get(item.membro_id || '') || 'Membro não identificado';
+          const valor = valorPorAtendimento.get(item.atendimento_id);
 
           return {
-            id: ticketNumber,
             atendimentoId: item.atendimento_id,
             empresaId: item.empresa_id,
             numeroTicket: item.numero_ticket ? String(item.numero_ticket) : '',
             isNovoCliente: !item.cliente_id,
-            nome: item.assunto || 'Cotacao sem assunto',
+            titulo: tituloDoAtendimento(item),
             membro: memberName,
             membroId: item.membro_id || '',
             dataEntrada: item.created_at,
-            status: item.status as KanbanStatus,
-            cliente: item.cliente_id ? `Cliente ${item.cliente_id}` : 'Cliente nao vinculado',
-            valor: ticketNumber,
-            atendimentoOrigem,
+            status: item.status,
+            valorFormatado: valor != null ? currencyFormatter.format(valor) : ticketNumber,
+            valorNumerico: valor ?? 0,
+            origem: item.origem,
           };
         });
 
@@ -275,7 +306,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
 
   const filteredCotacoes = useMemo(() => {
     return cotacoes.filter((cotacao) => {
-      const matchesSearch = cotacao.nome.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = cotacao.titulo.toLowerCase().includes(search.toLowerCase());
       const matchesMember =
         selectedMember === 'Todos' || cotacao.membroId === selectedMember;
       const cotacaoDate = cotacao.dataEntrada.slice(0, 10);
@@ -286,78 +317,125 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
     });
   }, [cotacoes, endDate, search, selectedMember, startDate]);
 
+  const pipelineStat = useMemo(() => {
+    const cotacoesAbertas = cotacoes.filter(
+      (cotacao) => cotacao.status !== 'CONCLUIDO' && cotacao.status !== 'DESCARTADO',
+    );
+    const total = cotacoesAbertas.reduce((sum, cotacao) => sum + cotacao.valorNumerico, 0);
+
+    return {
+      count: cotacoesAbertas.length,
+      valorFormatado: currencyFormatter.format(total),
+    };
+  }, [cotacoes]);
+
+  const hasActiveFilters = Boolean(search || startDate || endDate || selectedMember !== 'Todos');
+
+  const clearFilters = () => {
+    setSearch('');
+    setStartDate('');
+    setEndDate('');
+    setSelectedMember('Todos');
+  };
+
   return (
-    <div className="h-full min-h-0 w-full">
+    <div className="h-full min-h-0 w-full font-sans">
       <div className="flex h-full min-h-0 flex-col gap-4">
-        <section className="rounded-2xl border border-black/5 bg-white px-5 py-4 shadow-[0_6px_24px_rgba(15,23,42,0.04)] lg:px-6">
+        <section className="flex flex-wrap items-end justify-between gap-4 px-1 pt-1">
           <div className="space-y-1">
-            <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
+            <h1 className="text-[23px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.025em' }}>
               Funil de Cotações
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
               Gerencie suas cotações e oportunidades de vendas.
             </p>
           </div>
+
+          <div className="flex items-center gap-3 rounded-panel bg-ink px-5 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-tile bg-lime">
+              <TrendingUp size={16} className="text-ink" strokeWidth={2.25} />
+            </div>
+            <div className="leading-tight">
+              <p className="text-[10px] text-white/55" style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                Em aberto no funil
+              </p>
+              <p className="text-[15px] text-white" style={{ fontWeight: 800 }}>
+                {pipelineStat.valorFormatado}
+                <span className="ml-1.5 text-white/55" style={{ fontWeight: 500 }}>
+                  · {pipelineStat.count} {pipelineStat.count === 1 ? 'cotação' : 'cotações'}
+                </span>
+              </p>
+            </div>
+          </div>
         </section>
 
-        <section className="rounded-2xl border border-black/5 bg-white px-4 py-3 shadow-[0_6px_24px_rgba(15,23,42,0.035)]">
-          <div
-            className={`grid gap-3 ${
-              isAdmin ? 'xl:grid-cols-[1.9fr_1.2fr_0.95fr]' : 'xl:grid-cols-[2fr_1.3fr]'
-            }`}
-          >
-            <label className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-4 transition-colors focus-within:border-gray-300">
-              <Search size={16} className="text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar pelo nome da cotação"
-                className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
-              />
-            </label>
-
-            <label className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-4">
-              <CalendarRange size={16} className="text-gray-400" />
-              <div className="grid w-full grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-transparent text-sm text-gray-700 outline-none"
-                />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-transparent text-sm text-gray-700 outline-none"
-                />
-              </div>
-            </label>
-
-            {isAdmin ? (
-              <label className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-4">
-                <UserRound size={16} className="text-gray-400" />
-                <select
-                  value={selectedMember}
-                  onChange={(e) => setSelectedMember(e.target.value)}
-                  className="w-full bg-transparent text-sm text-gray-800 outline-none"
-                >
-                  <option value="Todos">Todos</option>
-                  {memberOptions.map((member) => (
-                    <option key={member.membro_id} value={member.membro_id}>
-                      {member.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+        <section className="flex flex-wrap items-center gap-2 px-1">
+          <div className="flex h-10 min-w-[240px] flex-1 items-center gap-2.5 rounded-pill border border-line bg-card px-4">
+            <Search size={14} className="text-muted-soft shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar pelo nome da cotação"
+              className="w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-muted-soft"
+              style={{ fontWeight: 500 }}
+            />
           </div>
+
+          <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5">
+            <CalendarRange size={14} className="text-muted-soft shrink-0" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none"
+              style={{ fontWeight: 500 }}
+            />
+            <span className="text-muted-soft">–</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none"
+              style={{ fontWeight: 500 }}
+            />
+          </div>
+
+          {isAdmin ? (
+            <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5">
+              <UserRound size={14} className="text-muted-soft shrink-0" />
+              <select
+                value={selectedMember}
+                onChange={(e) => setSelectedMember(e.target.value)}
+                className="bg-transparent text-[13px] text-ink outline-none"
+                style={{ fontWeight: 500 }}
+              >
+                <option value="Todos">Todos</option>
+                {memberOptions.map((member) => (
+                  <option key={member.membro_id} value={member.membro_id}>
+                    {member.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="flex h-10 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] text-muted hover:text-ink"
+              style={{ fontWeight: 700, transition: 'color .22s var(--ease)' }}
+            >
+              <X size={13} />
+              Limpar
+            </button>
+          ) : null}
         </section>
 
         <section className="min-h-0 flex flex-1 flex-col overflow-hidden">
           {loadError ? (
-            <div className="mb-4 shrink-0 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+            <div className="mb-4 shrink-0 rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600" style={{ fontWeight: 500 }}>
               {loadError}
             </div>
           ) : null}
@@ -372,23 +450,32 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                 return (
                   <div
                     key={column.key}
-                    className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-black/5 bg-[#F3F3F3] p-3"
+                    className="flex h-full min-h-0 min-w-0 flex-col rounded-panel border border-line-soft bg-stone p-3"
                   >
                     <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1 py-1">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-gray-700">
+                          <h3
+                            className="truncate text-[11.5px] text-muted"
+                            style={{ fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase' }}
+                          >
                             {column.label}
                           </h3>
                           {column.isAiStage ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#EBF57D] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-800">
-                              <Zap size={10} className="text-gray-800" />
+                            <span
+                              className="inline-flex items-center gap-1 rounded-pill bg-lime px-2 py-[3px] text-[9.5px] text-ink"
+                              style={{ fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}
+                            >
+                              <Zap size={10} />
                               IA
                             </span>
                           ) : null}
                         </div>
                       </div>
-                      <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-gray-500">
+                      <span
+                        className="rounded-[6px] bg-card px-2 py-0.5 text-[11.5px] text-muted"
+                        style={{ fontWeight: 700 }}
+                      >
                         {columnItems.length}
                       </span>
                     </div>
@@ -398,13 +485,13 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                         Array.from({ length: 2 }).map((_, index) => (
                           <div
                             key={`${column.key}-loading-${index}`}
-                            className="rounded-xl border border-black/5 bg-white p-3 shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
+                            className="rounded-[11px] border border-line-soft bg-card p-3"
                           >
                             <div className="animate-pulse space-y-3">
-                              <div className="h-3 w-20 rounded bg-gray-200" />
-                              <div className="h-4 w-3/4 rounded bg-gray-200" />
-                              <div className="h-3 w-1/2 rounded bg-gray-100" />
-                              <div className="h-3 w-2/3 rounded bg-gray-100" />
+                              <div className="h-3 w-20 rounded bg-stone-deep" />
+                              <div className="h-4 w-3/4 rounded bg-stone-deep" />
+                              <div className="h-3 w-1/2 rounded bg-stone" />
+                              <div className="h-3 w-2/3 rounded bg-stone" />
                             </div>
                           </div>
                         ))
@@ -415,89 +502,89 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                           const showClientBadge =
                             cotacao.status !== 'TRIAGEM' &&
                             cotacao.status !== 'COLETANDO_DADOS';
-                          const origemIcon =
-                            cotacao.atendimentoOrigem === 'WhatsApp' ? (
-                              <MessageCircle size={13} className="text-gray-500" />
-                            ) : (
-                              <Mail size={13} className="text-gray-500" />
-                            );
+                          const OrigemIcon = cotacao.origem === 'WHATSAPP' ? MessageCircle : Mail;
 
                           return (
                             <button
                               key={cotacao.atendimentoId}
                               type="button"
                               onClick={() => onOpenCotacao(cotacao.empresaId, cotacao.numeroTicket)}
-                              className="w-full rounded-xl border border-black/5 bg-white p-3 text-left shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-black/10 hover:shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
+                              className="w-full rounded-[11px] border border-line-soft bg-card p-3 text-left transition-all hover:border-ink/15"
+                              style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
                             >
                               <div className="space-y-3">
                                 {showClientBadge ? (
                                   <>
                                     <div className="flex items-center justify-between gap-3">
                                       {cotacao.isNovoCliente ? (
-                                        <span className="rounded-md bg-[#EBF57D] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-800">
+                                        <span
+                                          className="rounded-[6px] bg-lime px-1.5 py-0.5 text-[9px] text-ink"
+                                          style={{ fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}
+                                        >
                                           Novo Cliente
                                         </span>
                                       ) : (
-                                        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-gray-600">
+                                        <span
+                                          className="rounded-[6px] bg-stone px-1.5 py-0.5 text-[9px] text-muted"
+                                          style={{ fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}
+                                        >
                                           Cliente
                                         </span>
                                       )}
 
                                       <div className="ml-auto flex items-center gap-2">
                                         {unreadNotificationCount > 0 ? (
-                                          <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
+                                          <span className="flex min-w-[20px] items-center justify-center rounded-pill bg-red-600 px-1.5 py-0.5 text-[10px] leading-none text-white" style={{ fontWeight: 700 }}>
                                             {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
                                           </span>
                                         ) : null}
 
                                         <div className="flex items-center gap-1.5">
-                                          {origemIcon}
-                                          <span className="text-[12px] font-semibold text-gray-700">
-                                            {cotacao.valor}
+                                          <OrigemIcon size={13} className="text-muted-soft" />
+                                          <span className="text-[12px] text-ink" style={{ fontWeight: 700 }}>
+                                            {cotacao.valorFormatado}
                                           </span>
                                         </div>
                                       </div>
                                     </div>
 
-                                    <div className="space-y-1">
-                                      <h4 className="line-clamp-2 text-[13px] font-semibold leading-5 text-gray-800">
-                                        {cotacao.nome}
-                                      </h4>
-                                    </div>
+                                    <h4 className="line-clamp-2 text-[13px] leading-5 text-ink" style={{ fontWeight: 700 }}>
+                                      {cotacao.titulo}
+                                    </h4>
                                   </>
                                 ) : (
                                   <div className="flex items-start justify-between gap-3">
-                                    <h4 className="line-clamp-2 flex-1 text-[13px] font-semibold leading-5 text-gray-800">
-                                      {cotacao.nome}
+                                    <h4 className="line-clamp-2 flex-1 text-[13px] leading-5 text-ink" style={{ fontWeight: 700 }}>
+                                      {cotacao.titulo}
                                     </h4>
 
                                     <div className="flex shrink-0 items-center gap-2 pl-2">
                                       {unreadNotificationCount > 0 ? (
-                                        <span className="flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]">
+                                        <span className="flex min-w-[20px] items-center justify-center rounded-pill bg-red-600 px-1.5 py-0.5 text-[10px] leading-none text-white" style={{ fontWeight: 700 }}>
                                           {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
                                         </span>
                                       ) : null}
 
                                       <div className="flex items-center gap-1.5">
-                                        {origemIcon}
-                                        <span className="text-[12px] font-semibold text-gray-700">
-                                          {cotacao.valor}
+                                        <OrigemIcon size={13} className="text-muted-soft" />
+                                        <span className="text-[12px] text-ink" style={{ fontWeight: 700 }}>
+                                          {cotacao.valorFormatado}
                                         </span>
                                       </div>
                                     </div>
                                   </div>
                                 )}
 
-                                <div className="space-y-2 border-t border-gray-100 pt-3 text-[11px] text-gray-500">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="font-medium text-gray-400">Responsável</span>
-                                    <span className="truncate text-right font-semibold text-gray-700">
+                                <div className="space-y-1.5 border-t border-line-soft pt-3">
+                                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                                    <span className="text-muted-soft" style={{ fontWeight: 500 }}>Responsável</span>
+                                    <span className="truncate text-right text-muted" style={{ fontWeight: 700 }}>
                                       {cotacao.membro}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="font-medium text-gray-400">Criado em</span>
-                                    <span className="font-semibold text-gray-700">
+                                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                                    <span className="text-muted-soft" style={{ fontWeight: 500 }}>Criado em</span>
+                                    <span className="text-muted" style={{ fontWeight: 700 }}>
                                       {formatDate(cotacao.dataEntrada)}
                                     </span>
                                   </div>
@@ -507,8 +594,8 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                           );
                         })
                       ) : (
-                        <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white/70 px-4 text-center">
-                          <p className="text-xs font-medium leading-5 text-gray-400">
+                        <div className="flex h-24 items-center justify-center rounded-[11px] border border-dashed border-line px-4 text-center">
+                          <p className="text-[11px] leading-5 text-muted-soft" style={{ fontWeight: 500 }}>
                             Nenhuma cotação encontrada nesta etapa.
                           </p>
                         </div>

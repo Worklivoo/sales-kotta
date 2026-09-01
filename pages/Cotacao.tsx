@@ -4,8 +4,12 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Download,
   FileText,
+  Mail,
+  MessageCircle,
   Paperclip,
+  Zap,
 } from 'lucide-react';
 import OrcamentoEditorModal from '../components/OrcamentoEditorModal';
 import WhatsAppChatView from '../components/chat/WhatsAppChatView';
@@ -39,6 +43,7 @@ type KanbanStatus =
 type MessageOrigin = 'CLIENTE' | 'IA' | 'HUMANO';
 
 interface CurrentMemberRecord {
+  membro_id: string;
   empresa_id: string;
   cargo: string | null;
 }
@@ -53,8 +58,8 @@ interface AtendimentoRecord {
   assunto: string | null;
   numero_ticket: number | null;
   membro_id: string | null;
-  atendimento_origem: 'WhatsApp' | 'Email' | null;
-  provedor_thread_id: string | null;
+  origem: 'EMAIL' | 'WHATSAPP' | null;
+  telefone_lead: string | null;
 }
 
 interface ResponsibleMemberRecord {
@@ -67,6 +72,14 @@ interface ClientRecord {
   email: string | null;
   telefone: string | null;
   cnpj: string | null;
+}
+
+interface EmpresaRecord {
+  razao_social: string | null;
+  cnpj: string | null;
+  logo_url: string | null;
+  email_responsavel: string | null;
+  telefone_responsavel: string | null;
 }
 
 interface OrcamentoRecord {
@@ -388,7 +401,21 @@ const getAttachmentLabel = (attachment: string) => {
 
 const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
 const APPROVE_ORCAMENTO_WEBHOOK_URL =
-  'https://primary-systec.up.railway.app/webhook/c0b437a3-92f2-4e07-8017-33534099784b';
+  'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
+
+const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div>
+    <p
+      className="text-[10.5px] text-muted-soft"
+      style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+    >
+      {label}
+    </p>
+    <p className="mt-1 text-[13px] text-ink" style={{ fontWeight: 700 }}>
+      {value}
+    </p>
+  </div>
+);
 
 const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
@@ -398,6 +425,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [orcamentoData, setOrcamentoData] = useState<OrcamentoRecord | null>(null);
   const [approvedByName, setApprovedByName] = useState('Não aprovado');
   const [orcamentoItems, setOrcamentoItems] = useState<OrcamentoItemRecord[]>([]);
+  const [empresaData, setEmpresaData] = useState<EmpresaRecord | null>(null);
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [isOrcamentoModalOpen, setIsOrcamentoModalOpen] = useState(false);
@@ -429,9 +457,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
 
         const { data: currentMemberRows, error: currentMemberError } = await supabase
-          .from('sales_membros_empresa')
-          .select('empresa_id, cargo')
-          .eq('membro_id', session.user.id)
+          .from('sales_membros_v2')
+          .select('membro_id, empresa_id, cargo')
+          .eq('user_id', session.user.id)
           .limit(1);
 
         if (currentMemberError) {
@@ -445,16 +473,16 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
 
         let atendimentoQuery = supabase
-          .from('sales_atendimento')
+          .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, atendimento_origem, provedor_thread_id',
+            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, origem, telefone_lead',
           )
           .eq('empresa_id', empresaId)
           .eq('numero_ticket', Number(numeroTicket))
-          .eq('categoria', 'COTACAO');
+          .in('categoria', ['COTACAO', 'PEDIDO_COMPRA']);
 
         if (currentMember.cargo !== 'ADMIN') {
-          atendimentoQuery = atendimentoQuery.eq('membro_id', session.user.id);
+          atendimentoQuery = atendimentoQuery.eq('membro_id', currentMember.membro_id);
         }
 
         const { data: atendimentoRows, error: atendimentoError } = await atendimentoQuery.limit(1);
@@ -470,28 +498,29 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
 
         const markNotificationsAsReadPromise = supabase
-          .from('sales_notificacoes')
-          .update({ notificacao_lida: true })
-          .eq('membro_id', session.user.id)
+          .from('sales_notificacoes_v2')
+          .update({ lida: true })
+          .eq('membro_id', currentMember.membro_id)
           .eq('atendimento_id', atendimento.atendimento_id)
-          .eq('notificacao_lida', false);
+          .eq('lida', false);
 
         const [
           messagesResponse,
           responsibleResponse,
           clientResponse,
           orcamentoResponse,
+          empresaResponse,
           markNotificationsAsReadResponse,
         ] = await Promise.all([
           supabase
-            .from('sales_mensagens')
+            .from('sales_mensagens_v2')
             .select('mensagem_id, created_at, origem, conteudo, metadata, anexos')
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
             .order('created_at', { ascending: true }),
           atendimento.membro_id
             ? supabase
-                .from('sales_membros_empresa')
+                .from('sales_membros_v2')
                 .select('nome')
                 .eq('empresa_id', currentMember.empresa_id)
                 .eq('membro_id', atendimento.membro_id)
@@ -499,20 +528,25 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             : Promise.resolve({ data: null, error: null }),
           atendimento.cliente_id
             ? supabase
-                .from('sales_clientes_finais')
+                .from('sales_clientes_v2')
                 .select('nome, razao_social, email, telefone, cnpj')
                 .eq('empresa_id', currentMember.empresa_id)
                 .eq('cliente_id', atendimento.cliente_id)
                 .limit(1)
             : Promise.resolve({ data: null, error: null }),
           supabase
-            .from('sales_orcamentos')
+            .from('sales_orcamentos_v2')
             .select(
               'orcamento_id, data_emissao, validade, valor_total, status, aprovado_por, data_aprovacao, updated_at, pdf_url, html_orcamento',
             )
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
             .order('updated_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('sales_empresas_v2')
+            .select('razao_social, cnpj, logo_url, email_responsavel, telefone_responsavel')
+            .eq('empresa_id', currentMember.empresa_id)
             .limit(1),
           markNotificationsAsReadPromise,
         ]);
@@ -533,6 +567,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           throw orcamentoResponse.error;
         }
 
+        if (empresaResponse.error) {
+          throw empresaResponse.error;
+        }
+
         if (markNotificationsAsReadResponse.error) {
           console.error('Erro ao marcar notificacoes da cotacao como lidas:', markNotificationsAsReadResponse.error);
         }
@@ -543,6 +581,8 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         const resolvedClientData = getFirstRow(clientResponse.data as ClientRecord[] | null) ?? null;
         const resolvedOrcamentoData =
           getFirstRow(orcamentoResponse.data as OrcamentoRecord[] | null) ?? null;
+        const resolvedEmpresaData =
+          getFirstRow(empresaResponse.data as EmpresaRecord[] | null) ?? null;
         let resolvedApprovedByName = 'Não aprovado';
         const cotacaoAssunto = atendimento.assunto || 'Cotacao sem assunto';
         const rawMessages = (messagesResponse.data ?? []) as MensagemRecord[];
@@ -550,7 +590,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
         if (resolvedOrcamentoData?.orcamento_id) {
           const { data: itemsData, error: itemsError } = await supabase
-            .from('sales_orcamentos_itens')
+            .from('sales_orcamentos_itens_v2')
             .select('item_id, quantidade, preco_unitario, total_item')
             .eq('orcamento_id', resolvedOrcamentoData.orcamento_id);
 
@@ -563,7 +603,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
         if (resolvedOrcamentoData?.aprovado_por) {
           const { data: approvedByRows, error: approvedByError } = await supabase
-            .from('sales_membros_empresa')
+            .from('sales_membros_v2')
             .select('nome')
             .eq('empresa_id', currentMember.empresa_id)
             .eq('membro_id', resolvedOrcamentoData.aprovado_por)
@@ -620,6 +660,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setLinkedEmails(resolvedLinkedEmails);
         setClientData(resolvedClientData);
         setOrcamentoData(resolvedOrcamentoData);
+        setEmpresaData(resolvedEmpresaData);
         setApprovedByName(resolvedApprovedByName);
         setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
@@ -639,6 +680,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setLinkedEmails([]);
         setClientData(null);
         setOrcamentoData(null);
+        setEmpresaData(null);
         setApprovedByName('Não aprovado');
         setOrcamentoItems([]);
         setOrderedConversationItems([]);
@@ -715,16 +757,19 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-2 border-black/10 border-t-black animate-spin" />
+      <div className="flex h-full w-full items-center justify-center font-sans">
+        <div className="h-10 w-10 rounded-full border-2 border-ink/15 border-t-ink animate-spin" />
       </div>
     );
   }
 
   if (loadError || !cotacao) {
     return (
-      <div className="h-full w-full">
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-600">
+      <div className="h-full w-full font-sans">
+        <div
+          className="rounded-tile border border-red-100 bg-red-50 px-5 py-4 text-[13px] text-red-600"
+          style={{ fontWeight: 500 }}
+        >
           {loadError || 'Nao foi possivel carregar a cotacao.'}
         </div>
       </div>
@@ -737,14 +782,17 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     .reverse()
     .find((message) => message.origem === 'IA');
   const latestIaMessageId = latestIaMessage?.id;
-  const isWhatsAppLayout = cotacao.atendimento_origem === 'WhatsApp';
+  const isWhatsAppLayout = cotacao.origem === 'WHATSAPP';
 
   const normalizeAuthor = (origem: string): ChatMessageAuthor => {
-    const upper = (origem || 'HUMANO').toUpperCase();
-    if (upper === 'CLIENTE' || upper === 'IA') {
-      return upper;
+    const upper = (origem || '').toUpperCase();
+    if (upper === 'IA') {
+      return 'IA';
     }
-    return 'HUMANO';
+    if (upper === 'HUMANO') {
+      return 'HUMANO';
+    }
+    return 'CLIENTE';
   };
 
   const chatMessages: ChatMessage[] = orderedConversationItems.map((message) => ({
@@ -760,92 +808,88 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     if (!shouldShowOrcamentoApprovalAction || latestIaMessageId !== messageId) {
       return null;
     }
-    const hasAttachments = orderedConversationItems.some(
-      (item) => item.id === messageId && item.anexos.length > 0,
-    );
-    const shouldOpenOrcamentoModal = hasAttachments && hasOrcamentoHtml;
-    const shouldShowDirectApproveAction = !hasAttachments;
 
-    if (shouldOpenOrcamentoModal) {
-      return (
-        <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => setIsOrcamentoModalOpen(true)}
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-          >
-            Visualizar Orçamento
-          </button>
-          <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
-            Aprovação Pendente
-          </span>
-        </div>
-      );
-    }
-
-    if (shouldShowDirectApproveAction) {
-      return (
-        <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => {
-              setDirectApproveError(null);
-              setIsDirectApproveConfirmationOpen(true);
-            }}
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-          >
-            Aprovar
-          </button>
-          <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
-            Aprovação Pendente
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
+    const approvalPendingCta = (label: string, onClick: () => void) => (
+      <div
+        className="flex flex-wrap items-center gap-4 rounded-tile border px-4 py-3"
+        style={{ borderColor: 'rgba(235,245,125,.7)', backgroundColor: 'rgba(235,245,125,.18)' }}
+      >
         <button
           type="button"
-          disabled
-          className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
+          onClick={onClick}
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-[9px] bg-ink px-5 text-[13px] text-white transition-colors hover:bg-ink-soft"
+          style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
         >
-          Visualizar Orçamento
+          {label}
         </button>
-        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
+        <span
+          className="animate-pulse text-[10.5px] text-ink"
+          style={{ fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}
+        >
           Aprovação Pendente
         </span>
       </div>
     );
+
+    if (hasOrcamentoHtml) {
+      return approvalPendingCta('Visualizar Orçamento', () => setIsOrcamentoModalOpen(true));
+    }
+
+    if (orcamentoData) {
+      return (
+        <div className="space-y-2.5">
+          <div
+            className="rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[12.5px] text-red-600"
+            style={{ fontWeight: 500 }}
+          >
+            <span style={{ fontWeight: 700 }}>Nenhum item foi encontrado para esse lead.</span> A IA
+            não localizou os itens solicitados no catálogo — continue o atendimento manualmente,
+            adicionando os itens no orçamento antes de aprovar.
+          </div>
+          {approvalPendingCta('Montar Orçamento', () => setIsOrcamentoModalOpen(true))}
+        </div>
+      );
+    }
+
+    return approvalPendingCta('Aprovar', () => {
+      setDirectApproveError(null);
+      setIsDirectApproveConfirmationOpen(true);
+    });
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto" data-atendimento-id={cotacao.atendimento_id}>
+    <div className="h-full w-full overflow-y-auto font-sans" data-atendimento-id={cotacao.atendimento_id}>
       {isDirectApproveConfirmationOpen ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-[0_28px_80px_rgba(15,23,42,0.24)]">
+          <div
+            className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
+            style={{ boxShadow: '0 28px 80px -34px rgba(20,20,20,.45)' }}
+          >
             <div className="space-y-3">
-              <h3 className="text-xl font-semibold tracking-tight text-gray-900">
+              <h3 className="text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
                 Aprovar e enviar
               </h3>
-              <p className="text-sm leading-6 text-gray-600">
+              <p className="text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
                 Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o cliente.
               </p>
               {directApproveError ? (
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                <div
+                  className="rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600"
+                  style={{ fontWeight: 500 }}
+                >
                   {directApproveError}
                 </div>
               ) : null}
             </div>
 
             {isDirectApproving ? (
-              <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-[24px] border border-black/5 bg-[#FAFAFA] px-6 py-10 text-center">
-                <div className="h-10 w-10 animate-spin rounded-full border-2 border-black/10 border-t-black" />
+              <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-panel border border-line-soft bg-paper px-6 py-10 text-center">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-ink/15 border-t-ink" />
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold tracking-[0.08em] text-gray-900">
+                  <p className="text-[12.5px] text-ink" style={{ fontWeight: 800, letterSpacing: '.08em' }}>
                     ORÇAMENTO ENVIADO
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-[13px] text-muted" style={{ fontWeight: 500 }}>
                     Aguarde enquanto recarregamos a página.
                   </p>
                 </div>
@@ -858,14 +902,16 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                     setIsDirectApproveConfirmationOpen(false);
                     setDirectApproveError(null);
                   }}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 bg-white px-5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-5 text-[13px] text-ink transition-colors hover:bg-stone"
+                  style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
                 >
                   Não
                 </button>
                 <button
                   type="button"
                   onClick={handleDirectApprove}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-black/10 bg-[#EBF57D] px-5 text-sm font-semibold text-gray-900 transition-colors hover:bg-[#E3EE61]"
+                  className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-5 text-[13px] text-ink transition-colors hover:bg-lime-deep"
+                  style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
                 >
                   Sim
                 </button>
@@ -880,6 +926,19 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         onClose={() => setIsOrcamentoModalOpen(false)}
         assunto={cotacao.assunto}
         htmlOrcamento={orcamentoData?.html_orcamento || null}
+        numeroTicket={cotacao.numero_ticket ? String(cotacao.numero_ticket) : null}
+        empresaId={cotacao.empresa_id || null}
+        empresaInfo={
+          empresaData
+            ? {
+                logoUrl: empresaData.logo_url,
+                razaoSocial: empresaData.razao_social,
+                cnpj: empresaData.cnpj,
+                email: empresaData.email_responsavel,
+                telefone: empresaData.telefone_responsavel,
+              }
+            : null
+        }
         orcamentoId={orcamentoData?.orcamento_id || null}
         atendimentoId={cotacao.atendimento_id}
         membroId={cotacao.membro_id}
@@ -891,169 +950,144 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
       />
 
       <div className="flex min-h-full flex-col gap-4 pb-2">
-        <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-[0_6px_24px_rgba(15,23,42,0.035)] lg:p-5">
-          <div className="border-b border-black/5 px-1 pb-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={goBackToCotacoes}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-[#F8F8F8] text-gray-600 transition-colors hover:bg-[#F1F1F1] hover:text-gray-900"
-                  aria-label="Voltar para cotações"
+        <section className="flex flex-wrap items-start justify-between gap-4 px-1 pt-1">
+          <div className="flex min-w-0 items-start gap-3">
+            <button
+              type="button"
+              onClick={goBackToCotacoes}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink"
+              style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              aria-label="Voltar para cotações"
+            >
+              <ArrowLeft size={17} strokeWidth={2} />
+            </button>
+
+            <div className="min-w-0 space-y-1.5 pt-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-pill border border-line bg-card px-2.5 py-1 text-[10.5px] text-muted"
+                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
                 >
-                  <ArrowLeft size={18} />
-                </button>
-
-                <div className="flex min-w-0 flex-wrap items-center gap-3">
-                  <span className="inline-flex rounded-full border border-black/10 bg-[#F6F6F6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-                    {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-                  </span>
-                  <h1 className="text-[28px] font-semibold tracking-tight text-gray-900">
-                    {cotacao.assunto || 'Cotação sem assunto'}
-                  </h1>
-                </div>
+                  {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+                </span>
+                <span
+                  className="rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
+                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                >
+                  {formatEnumLabel(cotacao.status)}
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
+                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                >
+                  {isWhatsAppLayout ? <MessageCircle size={11} /> : <Mail size={11} />}
+                  {isWhatsAppLayout ? 'WhatsApp' : 'E-mail'}
+                </span>
               </div>
-
+              <h1 className="text-[22px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
+                {cotacao.assunto || 'Cotação sem assunto'}
+              </h1>
             </div>
           </div>
+        </section>
 
-          <div className="grid min-h-0 flex-1 gap-8 pt-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <aside className="space-y-6 xl:border-r xl:border-black/5 xl:pr-6">
-              <section className="border-b border-black/5 pb-6">
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
-                    <ClipboardList size={20} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h2 className="text-base font-semibold tracking-tight text-gray-900">
-                      Dados do Atendimento
-                    </h2>
-                  </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="space-y-4">
+            <section className="rounded-panel border border-line-soft bg-card p-5">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-tile bg-stone text-muted">
+                  <ClipboardList size={17} />
                 </div>
+                <h2 className="text-[13.5px] text-ink" style={{ fontWeight: 800 }}>
+                  Dados do Atendimento
+                </h2>
+              </div>
 
-                <div className="space-y-4 pl-1">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Status</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatEnumLabel(cotacao.status)}
-                    </p>
-                  </div>
+              <div className="space-y-4">
+                <InfoField label="Status" value={formatEnumLabel(cotacao.status)} />
+                <InfoField label="Categoria" value={formatEnumLabel(cotacao.categoria)} />
+                <InfoField
+                  label="Ticket"
+                  value={cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+                />
+                <InfoField label="Data de Criação" value={formatDateTime(cotacao.created_at)} />
+                <InfoField label="Responsável" value={responsibleName} />
 
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Categoria</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatEnumLabel(cotacao.categoria)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Ticket</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Data de Criação</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {formatDateTime(cotacao.created_at)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">Responsável</p>
-                    <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                      {responsibleName}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500">E-mails Vinculados</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {linkedEmails.length > 0 ? (
-                        linkedEmails.map((email) => (
-                          <span
-                            key={email}
-                            className="inline-flex rounded-full border border-black/10 bg-[#F7F7F7] px-3 py-1 text-xs font-medium text-gray-700"
-                          >
-                            {email}
-                          </span>
-                        ))
-                      ) : (
-                        <p className="text-sm font-semibold tracking-tight text-gray-900">-</p>
-                      )}
-                    </div>
+                <div>
+                  <p
+                    className="text-[10.5px] text-muted-soft"
+                    style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                  >
+                    E-mails Vinculados
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {linkedEmails.length > 0 ? (
+                      linkedEmails.map((email) => (
+                        <span
+                          key={email}
+                          className="rounded-pill border border-line bg-paper px-2.5 py-1 text-[11px] text-muted"
+                          style={{ fontWeight: 700 }}
+                        >
+                          {email}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-[13px] text-ink" style={{ fontWeight: 700 }}>
+                        -
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
-              </section>
+            </section>
 
-              <section className="border-b border-black/5 pb-6">
-                <div className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="rounded-2xl bg-[#F3F4F6] p-3 text-gray-600">
-                      <FileText size={20} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <h2 className="text-base font-semibold tracking-tight text-gray-900">
-                        Dados do Orçamento
-                      </h2>
-                    </div>
-                  </div>
-
-                  {orcamentoData ? (
-                    <div className="space-y-4 pl-1">
-                      <div>
-                        <p className="text-xs font-medium text-gray-500">Status</p>
-                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                          {formatEnumLabel(orcamentoData.status)}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-gray-500">Data de Emissão</p>
-                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                          {formatDateOnly(orcamentoData.data_emissao)}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-gray-500">Aprovado por:</p>
-                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                          {approvedByName}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-gray-500">Data da aprovação do orçamento</p>
-                        <p className="mt-1 text-sm font-semibold tracking-tight text-gray-900">
-                          {orcamentoData.data_aprovacao
-                            ? formatDateTime(orcamentoData.data_aprovacao)
-                            : '-'}
-                        </p>
-                      </div>
-
-                    </div>
-                  ) : (
-                    <div className="pl-1">
-                      <p className="text-sm font-medium text-gray-500">
-                        Nenhum orçamento vinculado a este atendimento.
-                      </p>
-                    </div>
-                  )}
+            <section className="rounded-panel border border-line-soft bg-card p-5">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-tile bg-stone text-muted">
+                  <FileText size={17} />
                 </div>
-              </section>
+                <h2 className="text-[13.5px] text-ink" style={{ fontWeight: 800 }}>
+                  Dados do Orçamento
+                </h2>
+              </div>
 
-            </aside>
+              {orcamentoData ? (
+                <div className="space-y-4">
+                  <InfoField label="Status" value={formatEnumLabel(orcamentoData.status)} />
+                  <InfoField label="Data de Emissão" value={formatDateOnly(orcamentoData.data_emissao)} />
+                  <InfoField label="Aprovado por" value={approvedByName} />
+                  <InfoField
+                    label="Data da aprovação do orçamento"
+                    value={
+                      orcamentoData.data_aprovacao ? formatDateTime(orcamentoData.data_aprovacao) : '-'
+                    }
+                  />
+                  {normalizeExternalUrl(orcamentoData.pdf_url) ? (
+                    <a
+                      href={normalizeExternalUrl(orcamentoData.pdf_url) || undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-[9px] border border-line bg-paper px-4 py-2.5 text-[12.5px] text-ink transition-colors hover:bg-stone"
+                      style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                    >
+                      <Download size={14} />
+                      Baixar PDF do Orçamento
+                    </a>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-[12.5px] text-muted" style={{ fontWeight: 500 }}>
+                  Nenhum orçamento vinculado a este atendimento.
+                </p>
+              )}
+            </section>
+          </aside>
 
-            <section className="flex min-h-0 h-[720px] flex-col overflow-hidden rounded-2xl">
+          <section className="flex min-h-0 h-[720px] flex-col overflow-hidden rounded-panel border border-line-soft xl:h-auto">
             {isWhatsAppLayout ? (
                 <WhatsAppChatView
                   header={{
-                    phoneFormatted: formatBrazilianPhone(cotacao.provedor_thread_id),
+                    phoneFormatted: formatBrazilianPhone(cotacao.telefone_lead),
                     ticketLabel: cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket',
                     category: formatEnumLabel(cotacao.categoria),
                     categoryKey: (cotacao.categoria || '').toUpperCase(),
@@ -1064,201 +1098,130 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                   highlightedMessageId={shouldShowOrcamentoApprovalAction ? latestIaMessageId : undefined}
                 />
             ) : (
-              <div className="flex min-h-0 h-full flex-col">
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Atendimento</h2>
-              </div>
-            </div>
+              <div className="flex min-h-0 h-full flex-col overflow-y-auto bg-paper p-4">
+                <div className="flex-1 space-y-2.5">
+                  {orderedConversationItems.length > 0 ? (
+                    orderedConversationItems.map((message) => {
+                      const isExpanded = expandedMessageIds.includes(message.id);
+                      const shouldShowMessageOrcamentoAction =
+                        shouldShowOrcamentoApprovalAction && latestIaMessageId === message.id;
+                      const originBadge =
+                        message.origem === 'IA' ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-pill bg-lime px-2 py-0.5 text-[9.5px] text-ink"
+                            style={{ fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                          >
+                            <Zap size={10} />
+                            IA
+                          </span>
+                        ) : message.origem === 'HUMANO' ? (
+                          <span
+                            className="rounded-pill bg-stone px-2 py-0.5 text-[9.5px] text-muted"
+                            style={{ fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                          >
+                            Você
+                          </span>
+                        ) : (
+                          <span
+                            className="rounded-pill border border-line px-2 py-0.5 text-[9.5px] text-muted"
+                            style={{ fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                          >
+                            Cliente
+                          </span>
+                        );
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#FCFCFC]">
-              <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1 space-y-4 sm:px-2 sm:py-2">
-                {orderedConversationItems.length > 0 ? (
-                  orderedConversationItems.map((message) => {
-                    const isExpanded = expandedMessageIds.includes(message.id);
-                    const shouldShowMessageOrcamentoAction =
-                      shouldShowOrcamentoApprovalAction && latestIaMessageId === message.id;
-                    const shouldOpenOrcamentoModal =
-                      shouldShowMessageOrcamentoAction && message.anexos.length > 0 && hasOrcamentoHtml;
-                    const shouldShowDirectApproveAction =
-                      shouldShowMessageOrcamentoAction && message.anexos.length === 0;
-
-                    return (
-                      <div
-                        key={message.id}
-                        className={`w-full rounded-2xl text-left transition-all ${
-                          shouldShowMessageOrcamentoAction
-                            ? 'animate-pulse border border-[#EBF57D] bg-[#EBF57D]/55 px-4 py-4 sm:px-5 sm:py-5'
-                            : isExpanded
-                              ? 'border border-black/5 bg-white px-4 py-4 sm:px-5 sm:py-5'
-                              : 'border border-black/5 bg-white px-4 py-4 hover:border-black/10 hover:bg-[#FCFCFC]'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start gap-3">
-                              <div className="min-w-0 flex-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setExpandedMessageIds((currentExpandedMessageIds) =>
-                                      currentExpandedMessageIds.includes(message.id)
-                                        ? currentExpandedMessageIds.filter(
-                                            (messageId) => messageId !== message.id,
-                                          )
-                                        : [...currentExpandedMessageIds, message.id],
+                      return (
+                        <div
+                          key={message.id}
+                          className={`w-full rounded-panel border text-left transition-all ${
+                            shouldShowMessageOrcamentoAction
+                              ? 'border-lime bg-card'
+                              : 'border-line-soft bg-card hover:border-ink/15'
+                          }`}
+                          style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedMessageIds((currentExpandedMessageIds) =>
+                                currentExpandedMessageIds.includes(message.id)
+                                  ? currentExpandedMessageIds.filter(
+                                      (messageId) => messageId !== message.id,
                                     )
-                                  }
-                                  className="flex w-full items-start justify-between gap-3 text-left"
-                                  aria-expanded={isExpanded}
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start gap-3">
-                                      <div className="mt-0.5 text-gray-400">
-                                        {isExpanded ? (
-                                          <ChevronDown size={18} />
-                                        ) : (
-                                          <ChevronRight size={18} />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <span className="text-sm font-semibold text-gray-900">
-                                          {message.origem}
-                                        </span>
-                                        <span className="mt-0.5 block break-all text-sm text-gray-500 sm:mt-0 sm:inline sm:break-all sm:pl-2">
-                                          {message.remetente}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <p className="shrink-0 text-xs font-medium text-gray-400">
-                                    {message.horario}
+                                  : [...currentExpandedMessageIds, message.id],
+                              )
+                            }
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <span className="mt-0.5 shrink-0 text-muted-soft">
+                                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              </span>
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {originBadge}
+                                  <span className="truncate text-[12px] text-muted" style={{ fontWeight: 500 }}>
+                                    {message.remetente}
+                                  </span>
+                                </div>
+                                {!isExpanded ? (
+                                  <p className="line-clamp-1 text-[12.5px] text-muted" style={{ fontWeight: 500 }}>
+                                    {buildSummary(message.corpoTexto)}
                                   </p>
-                                </button>
-
-                                {isExpanded ? (
-                                  <div className="mt-5 space-y-3">
-                                    <div
-                                      className={messageHtmlClassName}
-                                      dangerouslySetInnerHTML={{ __html: message.corpoHtml }}
-                                    />
-                                    {shouldShowMessageOrcamentoAction ? (
-                                      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-                                        {shouldOpenOrcamentoModal ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => setIsOrcamentoModalOpen(true)}
-                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-                                          >
-                                            Visualizar Orçamento
-                                          </button>
-                                        ) : shouldShowDirectApproveAction ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setDirectApproveError(null);
-                                              setIsDirectApproveConfirmationOpen(true);
-                                            }}
-                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-                                          >
-                                            Aprovar
-                                          </button>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            disabled
-                                            className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
-                                          >
-                                            Visualizar Orçamento
-                                          </button>
-                                        )}
-                                        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
-                                          Aprovação Pendente
-                                        </span>
-                                      </div>
-                                    ) : null}
-                                    {!shouldShowMessageOrcamentoAction && message.anexos.length > 0 ? (
-                                      <div className="flex flex-wrap gap-2 pt-1">
-                                        {message.anexos.map((attachment) => (
-                                          <a
-                                            key={attachment}
-                                            href={attachment}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            onClick={(event) => event.stopPropagation()}
-                                            className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-black/20 hover:bg-white"
-                                          >
-                                            <Paperclip size={14} />
-                                            {getAttachmentLabel(attachment)}
-                                          </a>
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                ) : (
-                                  <div className="mt-3 space-y-3">
-                                    <p className="line-clamp-1 text-sm leading-6 text-gray-500">
-                                      {buildSummary(message.corpoTexto)}
-                                    </p>
-                                    {shouldShowMessageOrcamentoAction ? (
-                                      <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-[#EBF57D]/60 bg-[#EBF57D]/20 px-4 py-3">
-                                        {shouldOpenOrcamentoModal ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => setIsOrcamentoModalOpen(true)}
-                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-                                          >
-                                            Visualizar Orçamento
-                                          </button>
-                                        ) : shouldShowDirectApproveAction ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setDirectApproveError(null);
-                                              setIsDirectApproveConfirmationOpen(true);
-                                            }}
-                                            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-black/85"
-                                          >
-                                            Aprovar
-                                          </button>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            disabled
-                                            className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-black/10 bg-black/10 px-5 text-sm font-semibold text-gray-500"
-                                          >
-                                            Visualizar Orçamento
-                                          </button>
-                                        )}
-                                        <span className="animate-pulse text-xs font-semibold uppercase tracking-[0.12em] text-gray-700">
-                                          Aprovação Pendente
-                                        </span>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                )}
+                                ) : null}
                               </div>
                             </div>
-                          </div>
+                            <span className="shrink-0 text-[11px] text-muted-soft" style={{ fontWeight: 700 }}>
+                              {message.horario}
+                            </span>
+                          </button>
+
+                          {shouldShowMessageOrcamentoAction ? (
+                            <div className="px-4 pb-3.5">{renderActionsForMessageId(message.id)}</div>
+                          ) : null}
+
+                          {isExpanded ? (
+                            <div className="space-y-3 border-t border-line-soft px-4 pb-4 pt-3.5">
+                              <div
+                                className={messageHtmlClassName}
+                                dangerouslySetInnerHTML={{ __html: message.corpoHtml }}
+                              />
+                              {!shouldShowMessageOrcamentoAction && message.anexos.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {message.anexos.map((attachment) => (
+                                    <a
+                                      key={attachment}
+                                      href={attachment}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(event) => event.stopPropagation()}
+                                      className="inline-flex items-center gap-2 rounded-tile border border-line bg-paper px-3 py-2 text-[11.5px] text-muted transition-colors hover:border-ink/15"
+                                      style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                                    >
+                                      <Paperclip size={13} />
+                                      {getAttachmentLabel(attachment)}
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-black/10 bg-white px-4 text-center">
-                    <p className="text-xs font-medium text-gray-400">
-                      Nenhuma mensagem vinculada a esta cotação.
-                    </p>
-                  </div>
-                )}
-              </div>
-              </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex h-24 items-center justify-center rounded-panel border border-dashed border-line px-4 text-center">
+                      <p className="text-[11px] text-muted-soft" style={{ fontWeight: 500 }}>
+                        Nenhuma mensagem vinculada a esta cotação.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-            </section>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   );

@@ -63,46 +63,48 @@ const LoginPage: React.FC<LoginPageProps> = ({ initialError = null }) => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#F6F6F6] flex items-center justify-center p-6 md:p-12 relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-[#EBF57D]/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-gray-200/40 rounded-full blur-[120px] pointer-events-none" />
-
-      <div className="w-full max-w-[420px] bg-white rounded-[32px] p-8 md:p-12 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] relative z-10 transition-all duration-500 hover:shadow-[0_25px_70px_-12px_rgba(0,0,0,0.08)]">
-        <div className="flex flex-col items-center mb-12 space-y-6">
-          <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center shadow-lg shadow-black/10 transition-transform duration-500 hover:scale-105">
-            <img 
-              src="/logo-worklivoo-fundo-preto.png" 
-              alt="Worklivoo" 
-              className="w-full h-full object-cover rounded-2xl opacity-90" 
+    <div className="h-screen w-full overflow-y-auto bg-paper flex items-center justify-center p-6 md:p-12 font-sans">
+      <div
+        className="w-full max-w-[440px] bg-card rounded-card border border-line-soft p-8 md:p-12"
+        style={{ boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)' }}
+      >
+        <div className="flex flex-col items-center mb-10 space-y-5">
+          <div className="w-16 h-16 bg-ink rounded-tile flex items-center justify-center overflow-hidden">
+            <img
+              src="/logo-worklivoo-fundo-preto.png"
+              alt="Worklivoo"
+              className="w-full h-full object-cover opacity-90"
             />
           </div>
-          
-          <div className="text-center space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Bem-vindo de volta!</h1>
-            <p className="text-sm text-gray-500 font-medium tracking-wide">
-              Acesse o nosso sistema utilizando sua conta
+
+          <div className="text-center space-y-1.5">
+            <h1
+              className="text-[23px] text-ink"
+              style={{ fontWeight: 800, letterSpacing: '-.025em' }}
+            >
+              Bem-vindo de volta
+            </h1>
+            <p className="text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
+              Acesse o Sales Kotta com sua conta
             </p>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-red-600 font-medium">{error}</p>
+          <div className="mb-6 p-4 rounded-tile bg-red-50 border border-red-100 flex items-start gap-3">
+            <AlertCircle className="w-4.5 h-4.5 text-red-500 shrink-0 mt-0.5" size={18} />
+            <p className="text-[13px] text-red-600" style={{ fontWeight: 500 }}>{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="group relative">
-            <label 
-              htmlFor="email" 
-              className={`absolute left-0 transition-all duration-300 ease-out pointer-events-none ${
-                focusedField === 'email' || email 
-                  ? '-top-5 text-xs text-gray-500 font-medium' 
-                  : 'top-3 text-gray-400 font-normal'
-              }`}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-[11.5px] text-muted mb-1.5"
+              style={{ fontWeight: 700, letterSpacing: '.02em' }}
             >
-              Endereco de e-mail
+              E-mail
             </label>
             <input
               id="email"
@@ -111,75 +113,82 @@ const LoginPage: React.FC<LoginPageProps> = ({ initialError = null }) => {
               onChange={(e) => setEmail(e.target.value)}
               onFocus={() => setFocusedField('email')}
               onBlur={() => setFocusedField(null)}
-              className="w-full bg-transparent border-b border-gray-200 py-3 text-gray-900 placeholder-transparent focus:outline-none focus:border-black transition-colors duration-300"
+              className="w-full h-[47px] bg-stone rounded-[10px] px-4 text-[14px] text-ink placeholder:text-muted-soft outline-none border transition-colors"
+              style={{
+                fontWeight: 500,
+                borderColor: focusedField === 'email' ? 'var(--ink)' : 'transparent',
+                transitionDuration: '.22s',
+                transitionTimingFunction: 'var(--ease)',
+              }}
               placeholder="seu@email.com"
               required
             />
-            <div 
-              className={`absolute bottom-0 left-0 h-[1px] bg-black transition-all duration-500 ease-in-out ${
-                focusedField === 'email' ? 'w-full' : 'w-0'
-              }`} 
-            />
           </div>
 
-          <div className="group relative mt-8">
-            <label 
-              htmlFor="password" 
-              className={`absolute left-0 transition-all duration-300 ease-out pointer-events-none ${
-                focusedField === 'password' || password 
-                  ? '-top-5 text-xs text-gray-500 font-medium' 
-                  : 'top-3 text-gray-400 font-normal'
-              }`}
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-[11.5px] text-muted mb-1.5"
+              style={{ fontWeight: 700, letterSpacing: '.02em' }}
             >
               Senha
             </label>
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onFocus={() => setFocusedField('password')}
-              onBlur={() => setFocusedField(null)}
-              className="w-full bg-transparent border-b border-gray-200 py-3 text-gray-900 placeholder-transparent focus:outline-none focus:border-black transition-colors duration-300 pr-10"
-              placeholder="••••••••"
-              required
-            />
-            <div 
-              className={`absolute bottom-0 left-0 h-[1px] bg-black transition-all duration-500 ease-in-out ${
-                focusedField === 'password' ? 'w-full' : 'w-0'
-              }`} 
-            />
-            
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-0 top-3 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
-            >
-              {showPassword ? <EyeOff size={18} strokeWidth={1.5} /> : <Eye size={18} strokeWidth={1.5} />}
-            </button>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                className="w-full h-[47px] bg-stone rounded-[10px] pl-4 pr-11 text-[14px] text-ink placeholder:text-muted-soft outline-none border transition-colors"
+                style={{
+                  fontWeight: 500,
+                  borderColor: focusedField === 'password' ? 'var(--ink)' : 'transparent',
+                  transitionDuration: '.22s',
+                  transitionTimingFunction: 'var(--ease)',
+                }}
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-soft hover:text-ink transition-colors"
+                style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={17} strokeWidth={1.75} /> : <Eye size={17} strokeWidth={1.75} />}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-black text-white h-14 rounded-xl font-medium tracking-wide flex items-center justify-center gap-2 group hover:bg-[#222] active:scale-[0.98] transition-all duration-300 shadow-xl shadow-black/5 overflow-hidden relative"
+            className="group w-full mt-2 inline-flex items-center justify-center gap-[9px] h-[47px] rounded-[9px] text-[14px] text-ink bg-lime hover:bg-lime-deep hover:-translate-y-px disabled:opacity-70 disabled:hover:translate-y-0 relative overflow-hidden"
+            style={{
+              fontWeight: 700,
+              transition: 'transform .22s var(--ease), background .22s var(--ease)',
+            }}
           >
-            <span className={`transition-all duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+            <span
+              className="inline-flex items-center gap-[9px] transition-opacity"
+              style={{ opacity: isLoading ? 0 : 1, transitionDuration: '.22s' }}
+            >
               Entrar
+              <ArrowRight
+                size={16}
+                className="transition-transform group-hover:translate-x-[3px]"
+                style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              />
             </span>
-            <ArrowRight 
-              size={18} 
-              className={`transition-all duration-300 transform ${
-                isLoading ? 'translate-x-10 opacity-0' : 'group-hover:translate-x-1'
-              }`} 
-            />
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4.5 h-4.5 border-2 border-ink/20 border-t-ink rounded-full animate-spin" />
               </div>
             )}
           </button>
-
         </form>
       </div>
     </div>

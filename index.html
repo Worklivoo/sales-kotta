@@ -12,27 +12,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
     <link rel="shortcut icon" href="/favicon.ico?v=2" />
-    <title>SALES Kotta</title>
+    <title>Sales Kotta</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/tokens.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['"Google Sans"', 'Inter', 'Roboto', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              sans: ['"DM Sans"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
             },
             colors: {
               primary: '#EBF57D',
               background: '#F6F6F6',
               surface: '#FFFFFF',
+              ink: 'var(--ink)',
+              'ink-soft': 'var(--ink-soft)',
+              paper: 'var(--paper)',
+              stone: 'var(--stone)',
+              'stone-deep': 'var(--stone-deep)',
+              card: 'var(--white)',
+              muted: 'var(--muted)',
+              'muted-soft': 'var(--muted-soft)',
+              lime: 'var(--lime)',
+              'lime-deep': 'var(--lime-deep)',
+              line: 'var(--line)',
+              'line-soft': 'var(--line-soft)',
             },
              borderRadius: {
               lg: '0.5rem',
               md: 'calc(0.5rem - 2px)',
               sm: 'calc(0.5rem - 4px)',
+              pill: '999px',
+              card: 'var(--radius-card)',
+              section: '32px',
+              panel: '22px',
+              tile: '14px',
             },
             keyframes: {
               "accordion-down": {

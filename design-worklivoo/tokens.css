@@ -1,0 +1,44 @@
+/* ==========================================================================
+   Worklivoo — variáveis do sistema
+   Extraídas do site aprovado. Copie este arquivo inteiro; não reescreva
+   valores à mão, é daqui que tudo depende.
+   ========================================================================== */
+
+:root{
+  /* --- cinzas -----------------------------------------------------------
+     ATENÇÃO: a ID visual dos posts usa #e6e9e5 / #14150f, que têm viés
+     esverdeado. Para tela isso suja o branco. Esta família é neutra de
+     verdade e é a que vale para produto e site. */
+  --ink:        #141414;   /* texto, botão preto, rodapé */
+  --ink-soft:   #1e1e1e;
+  --paper:      #f1f1f1;   /* fundo da página */
+  --stone:      #e6e6e6;   /* superfície rebaixada */
+  --stone-deep: #d8d8d8;
+  --white:      #fbfbfb;   /* card sobre a página */
+  --muted:      #6e6e6e;   /* texto secundário */
+  --muted-soft: #909090;   /* legenda, metadado */
+
+  /* --- linhas ----------------------------------------------------------- */
+  --line:       rgba(20,20,20,.10);
+  --line-soft:  rgba(20,20,20,.06);   /* divisor entre seções */
+
+  /* --- acento -----------------------------------------------------------
+     Uma cor só, e usada pouco. Se aparecer em mais de dois elementos por
+     tela, está demais. */
+  --lime:       #ebf57d;
+  --lime-deep:  #dbe665;   /* estado de passagem do mouse */
+
+  /* --- tipografia ------------------------------------------------------- */
+  --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* --- movimento --------------------------------------------------------
+     Uma curva só em tudo. Saída rápida, chegada macia. */
+  --ease: cubic-bezier(.22,1,.36,1);
+
+  /* --- medidas ----------------------------------------------------------- */
+  --shell-max:   1280px;   /* largura útil */
+  --shell-pad:   56px;     /* respiro lateral */
+  --nav-inset:   34px;     /* recuo da barra flutuante */
+  --radius-card: 48px;     /* cartão da página */
+  --section-y:   104px;    /* respiro vertical entre seções */
+}

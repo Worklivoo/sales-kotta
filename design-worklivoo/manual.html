@@ -1,0 +1,211 @@
+<meta charset="utf-8">
+<title>Sistema visual Worklivoo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#141414;--paper:#f1f1f1;--white:#fbfbfb;--muted:#6e6e6e;
+--stone:#e6e6e6;--line:rgba(20,20,20,.10);--line-soft:rgba(20,20,20,.06);--lime:#ebf57d;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+ font-family:'DM Sans',system-ui,sans-serif;font-weight:500;line-height:1.62;font-size:15.5px}
+.env{max-width:800px;margin:0 auto;padding:64px 28px 96px}
+h1{font-size:clamp(30px,4vw,42px);font-weight:800;letter-spacing:-.03em;line-height:1.08;margin:0 0 8px}
+h2{font-size:23px;font-weight:800;letter-spacing:-.025em;margin:56px 0 14px;
+ padding-top:26px;border-top:1px solid var(--line-soft)}
+h3{font-size:16.5px;font-weight:700;letter-spacing:-.015em;margin:30px 0 8px}
+p{margin:0 0 14px}
+strong{font-weight:700}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;
+ background:var(--stone);padding:1px 5px;border-radius:5px}
+pre{background:var(--ink);color:#e8e8e8;padding:18px 20px;border-radius:14px;
+ overflow-x:auto;margin:0 0 18px;font-size:13px;line-height:1.62}
+pre code{background:none;padding:0;color:inherit;font-size:13px}
+table{width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14.5px}
+th{text-align:left;font-weight:800;font-size:11px;letter-spacing:.1em;
+ text-transform:uppercase;color:var(--muted);padding:0 12px 8px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line-soft);vertical-align:top}
+ul{margin:0 0 16px;padding-left:20px}
+li{margin:0 0 7px}
+hr{border:0;height:0;margin:0}
+h1+p{font-size:17px;color:var(--muted);margin-bottom:34px}
+</style>
+<div class="env">
+<h1>Sistema visual Worklivoo</h1>
+<p>Este arquivo é a fonte da verdade de layout para tudo que a Worklivoo constrói: site, painéis e produto. Ele descreve o padrão já aprovado — siga-o em vez de inventar um novo.</p>
+<p><code>tokens.css</code> acompanha este arquivo. Importe-o e use as variáveis; nunca escreva um valor de cor, raio ou espaçamento direto no código.</p>
+<hr>
+<h2>1. Fundamentos</h2>
+<h3>Cor</h3>
+<p>A paleta é <strong>cinza neutro e preto</strong>, com <strong>um único acento</strong>: o verde-limão <code>--lime</code>.</p>
+<p>O limão é pontuação, não tinta. Ele marca a ação principal, o dado que importa e nada mais. <strong>Se aparecer em mais de dois elementos por tela, está demais.</strong></p>
+<p>Cuidado herdado da marca: os cinzas do manual antigo (<code>#e6e9e5</code>, <code>#14150f</code>) têm viés esverdeado. Em tela isso suja o branco e briga com o limão. Use os cinzas de <code>tokens.css</code>, que são neutros de verdade.</p>
+<h3>Tipografia</h3>
+<p>DM Sans em tudo. Três pesos, com papéis fixos:</p>
+<table><thead><tr><th>Peso</th><th>Onde</th></tr></thead><tbody><tr><td>500</td><td>corpo de texto, descrição, legenda</td></tr><tr><td>700</td><td>rótulo, nome, item de lista, botão</td></tr><tr><td>800</td><td>título, número em destaque, etiqueta em caixa alta</td></tr></tbody></table>
+Títulos levam espacejamento negativo (<code>-.02em</code> a <code>-.035em</code>) — quanto maior a
+fonte, mais fechado. Etiquetas em caixa alta levam positivo (<code>.1em</code> a <code>.2em</code>).
+Sem isso o texto parece de rascunho.
+<p>Escala em uso: 9,5 / 10,5 / 11,5 / 12 / 12,5 / 13 / 13,5 / 14 / 14,5 / 16 / 21 px e daí títulos com <code>clamp()</code>. Não invente tamanhos intermediários.</p>
+<h3>Raio de canto</h3>
+<p>O raio comunica hierarquia. Quanto maior a superfície, maior o canto:</p>
+<table><thead><tr><th>Raio</th><th>Onde</th></tr></thead><tbody><tr><td><code>999px</code></td><td>pílula, etiqueta, avatar</td></tr><tr><td>48px</td><td>cartão da página inteira</td></tr><tr><td>32px</td><td>bloco de seção</td></tr><tr><td>22px</td><td>painel dentro de um card</td></tr><tr><td>14px</td><td>tile, item de lista</td></tr><tr><td>8-10px</td><td>botão, campo</td></tr></tbody></table>
+<strong>Nunca arredonde um canto só.</strong> Se usar <code>border-left</code> de destaque, o raio vai
+a zero. Meio-arredondado sempre parece defeito.
+<h3>Movimento</h3>
+<p>Uma curva em tudo: <code>--ease</code>. Transições entre 0,22s e 0,35s.</p>
+<hr>
+<h2>2. Composição</h2>
+<h3>Estrutura da página</h3>
+<p>Barra flutuante recuada <code>--nav-inset</code> das laterais, arredondada só embaixo. Abaixo dela, o conteúdo vive num cartão de <code>--radius-card</code> sobre um fundo que escurece <strong>só na reta final</strong>, chegando ao preto exatamente onde o rodapé começa.</p>
+<p>Não escureça cedo: o cinza claro segura a página quase inteira e a virada acontece no último quinto. Escurecer no meio parte a página em duas.</p>
+<h3>Ritmo</h3>
+<p>Seções alternam respiro (<code>--section-y</code>, ou 72px nas mais curtas) e são separadas por um fio de <code>--line-soft</code>.</p>
+<p>Cuidado real: esse fio vem de <code>.section + .section</code>. **Qualquer elemento entre duas seções quebra a regra em silêncio** — inclusive uma âncora vazia <code><div id="..."></code>. Coloque o <code>id</code> na própria seção.</p>
+<h3>Alinhamento</h3>
+<p>Cabeçalho de seção alinhado à esquerda, com largura máxima de ~62 caracteres. Texto de painel centralizado tem no máximo 740px. Linha longa demais cansa.</p>
+<hr>
+<h2>3. Componentes</h2>
+<h3>Botões</h3>
+<p>Três variantes, e a escolha entre elas não é estética:</p>
+<p><strong>Limão sólido</strong> — a ação principal. Uma por tela. <strong>Cinza em vidro</strong> — ação secundária. <strong>Preto em vidro</strong> — ação dentro de card claro.</p>
+<pre><code>.btn{
+  display:inline-flex; align-items:center; gap:9px;
+  height:47px; padding:0 22px;
+  border-radius:9px; border:1px solid transparent;
+  font-size:14px; font-weight:700;
+  transition:transform .22s var(--ease), background .22s var(--ease);
+}
+.btn:hover{ transform:translateY(-1px) }
+</code></pre>
+<p>O botão sobe 1px ao passar o mouse, e a seta dentro dele anda 3px. Movimento mínimo, mas é o que dá sensação de resposta.</p>
+<h3>Vidro</h3>
+<p>Usado na barra ao rolar, nos botões secundários e nas pílulas.</p>
+<pre><code>.vidro{
+  background:rgba(255,255,255,.52);
+  -webkit-backdrop-filter:blur(16px) saturate(180%) brightness(1.03);
+  backdrop-filter:blur(16px) saturate(180%) brightness(1.03);
+  border-color:transparent;
+  box-shadow:0 12px 30px -12px rgba(20,20,20,.30);
+}
+</code></pre>
+<p><strong>Três erros que já cometemos, não repita:</strong></p>
+<ul><li><strong>Nada de aro branco.</strong> Um <code>inset 0 0 0 1px rgba(255,255,255,...)</code> parece dar</li>
+</ul>
+   espessura ao vidro, mas sobre fundo claro vira contorno duro e entrega o
+   truque. O volume vem do desfoque e da sombra solta, só.
+<ul><li><strong>Brilho especular também desenha aro.</strong> Um degradê branco na diagonal que</li>
+</ul>
+   encoste na borda arredondada redesenha exatamente o mesmo contorno que você
+   acabou de tirar do <code>box-shadow</code>. Se usar, faça-o morrer antes da borda.
+<ul><li><strong>Cor fiel e vidro puxam em direções opostas.</strong> Acima de ~90% de opacidade</li>
+</ul>
+   não sobra transparência para o desfoque atravessar — o efeito custa e não
+   aparece. Para superfície colorida da marca, use sólido.
+<p>Sempre ofereça reserva:</p>
+<pre><code>@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .vidro{ background:rgba(255,255,255,.9) }
+}
+</code></pre>
+<h3>Cards</h3>
+<p>Fundo <code>--white</code>, borda <code>--line-soft</code>, e sombra baixa e larga:</p>
+<pre><code>box-shadow:0 34px 64px -34px rgba(20,20,20,.45);
+</code></pre>
+<p>O deslocamento vertical alto com espalhamento negativo grande é o que faz a sombra parecer peso, não borrão.</p>
+<h3>Cartas empilhadas</h3>
+<p>Cada card gruda no topo e o seguinte sobe por cima:</p>
+<pre><code>.card{ position:sticky }
+.card:nth-of-type(1){ top:76px }
+.card:nth-of-type(2){ top:88px }
+.card:nth-of-type(3){ top:100px }
+.card:not(:last-of-type){ padding-bottom:104px }
+.card + .card{ margin-top:-60px }
+</code></pre>
+<p>Três coisas importam aqui:</p>
+<ul><li><strong><code>position:sticky</code> morre dentro de qualquer ancestral com <code>overflow:hidden</code>.</strong></li>
+</ul>
+  Se não grudar, é isso.
+<ul><li>A margem negativa faz o card seguinte nascer por dentro do anterior. Sem o</li>
+</ul>
+  <code>padding-bottom</code> extra no card coberto, ela come o conteúdo.
+<ul><li><strong>Card alto demais tem o rodapé cortado.</strong> Meça: <code>top</code> + altura precisa caber</li>
+</ul>
+  na janela. Em notebook a área útil é ~713px.
+<h3>Trilhos rolantes</h3>
+<p>Para logotipos e depoimentos:</p>
+<pre><code>.trilho{
+  overflow:hidden;
+  mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);
+}
+.trilho__track{
+  display:flex; gap:18px; width:max-content;
+  animation:desliza 64s linear infinite;
+}
+@keyframes desliza{ to{ transform:translateX(-50%) } }
+</code></pre>
+<p>O conteúdo é <strong>duplicado no HTML</strong> — é isso que faz o ciclo fechar sem emenda, já que a animação anda exatamente metade.</p>
+<p>Não pause no passar do mouse em trilho decorativo; pause só onde há texto para ler.</p>
+<hr>
+<h2>4. Desempenho — regras duras</h2>
+<p>Estas vieram de erro real, com medição antes e depois.</p>
+<p><strong>Fundo é imagem, nunca cálculo por quadro.</strong> Um fundo desenhado por shader recalcula 2,8 milhões de pixels 60 vezes por segundo numa janela comum, e 8,3 milhões num monitor grande. A rolagem trava enquanto ele está visível. Uma foto custa zero por quadro e ainda fica melhor.</p>
+<p><strong>Movimento é <code>transform</code>, nunca posição.</strong> <code>transform</code> roda no compositor e não dispara recálculo de layout. Para deriva lateral de fundo: deixe a imagem ~20% mais larga que a caixa e anime <code>translateX</code> dentro dessa sobra.</p>
+<p><strong><code>backdrop-filter</code> é barato em área pequena.</strong> Catorze elementos com vidro na página somam 109 mil pixels — 25 vezes menos que o shader que tiramos. Não tema usá-lo em botões; pense duas vezes antes de aplicá-lo em algo do tamanho da tela.</p>
+<p><strong>Sempre desligue movimento para quem pediu:</strong></p>
+<pre><code>@media (prefers-reduced-motion: reduce){
+  .trilho__track, .fundo-animado{ animation:none }
+}
+</code></pre>
+<hr>
+<h2>5. Padrão de interface de produto</h2>
+<p>O site mostra maquetes de painel que **valem como referência para as telas reais dos produtos**. Reaproveite estes padrões:</p>
+<p><strong>Moldura de janela</strong> — barra superior clara com três pontos, título discreto ao centro, corpo em <code>--paper</code>. Raio de 14px.</p>
+<p><strong>Kanban</strong> — colunas com cabeçalho em caixa alta 11,5px/800, contador à direita, cartões brancos de raio 11px com nome em 13px/700 e metadado em 12px/500. Cartão ativo ganha borda <code>--lime</code>.</p>
+<p><strong>Conversa</strong> — fiel ao WhatsApp: fundo <code>#efeae2</code> com padrão, balão recebido branco à esquerda, enviado <code>#d9fdd3</code> à direita, hora em 11px alinhada ao fim, cabeçalho com avatar redondo de 32px.</p>
+<p><strong>Tabela de itens</strong> — cabeçalho em caixa alta 10,5px/800 <code>--muted</code>, linhas separadas por <code>--line-soft</code>, número alinhado à direita, total em 800.</p>
+<p><strong>Documento gerado</strong> — cartão branco com faixa de cabeçalho, linhas cinza simulando texto, e o total em destaque. Serve para PDF, proposta e relatório.</p>
+<p>Regra geral dessas telas: **densidade alta, contraste baixo, uma cor só de acento.** É o que faz parecer software de verdade e não maquete.</p>
+<hr>
+<h2>6. Imagem</h2>
+<p><strong>Fotografia é monocromática neutra.</strong> Qualquer foto que entre no layout passa por dessaturação. Cor solta briga com o limão.</p>
+<p><strong>Retrato para avatar</strong>: recorte medido, não fixo. Ache o topo da cabeça e corte logo acima, com o mesmo respiro em todos — fotos diferentes têm enquadramentos diferentes, e um recorte fixo afunda um rosto e corta outro.</p>
+<p><strong>Logotipo de cliente entra em preto.</strong> Converta usando a distância de cada pixel até a cor de fundo, não o brilho — assim funciona igual para marca clara sobre fundo escuro e escura sobre claro.</p>
+<p>Duas armadilhas:</p>
+<ul><li><strong>Formas sobrepostas viram mancha em silhueta.</strong> Se o logotipo tem um símbolo</li>
+</ul>
+  colorido sobre outro, mapeie cada cor original para um tom de cinza diferente,
+  preservando as relações de claro e escuro. Preto chapado apaga a estrutura.
+<ul><li><strong>Marca clara dentro de forma sólida</strong> (letra branca dentro de círculo) precisa</li>
+</ul>
+  do tratamento invertido, senão a silhueta pega a forma e deixa a letra como
+  buraco.
+<p><strong>Dê altura por logotipo, não a mesma para todos.</strong> Um wordmark largo e um emblema quadrado na mesma altura têm pesos visuais muito diferentes. Calcule a altura para que todos ocupem largura parecida.</p>
+<hr>
+<h2>7. Armadilhas de CSS que já nos custaram tempo</h2>
+<ul><li><strong><code>object-position</code> não faz nada</strong> quando a imagem e a caixa têm a mesma</li>
+</ul>
+  proporção — sem corte, não há o que deslocar. Enquadramento nesse caso vem do
+  arquivo.
+<ul><li><strong><code>z-index</code> positivo num fundo pula por cima de camadas sem <code>z-index</code></strong>, mesmo</li>
+</ul>
+  que elas venham depois no HTML. Um fundo com <code>z-index:1</code> passa na frente do véu
+  que deveria cobri-lo.
+<ul><li><strong><code>img{ max-width:100% }</code> num reset grampeia imagem de fundo</strong> que precisa ser</li>
+</ul>
+  maior que a caixa. Use <code>max-width:none</code> onde a sobra é intencional.
+<ul><li><strong><code>display:flex</code> sem <code>align-items</code> estica o filho</strong> — botão de largura</li>
+</ul>
+  automática vira largura total. Declare <code>align-items:flex-start</code>.
+<ul><li><strong>Elemento entre duas seções mata <code>.section + .section</code></strong>, e o divisor some sem</li>
+</ul>
+  aviso.
+<hr>
+<h2>8. Como usar este arquivo</h2>
+<p>Coloque <code>CLAUDE.md</code> e <code>tokens.css</code> na raiz do projeto. O Claude Code lê o <code>CLAUDE.md</code> sozinho a cada sessão e passa a seguir estas diretrizes.</p>
+<p>Ao criar tela nova, o caminho é:</p>
+<ul><li>Importar <code>tokens.css</code></li>
+<li>Escolher o componente da seção 3 que mais se aproxima</li>
+<li>Só inventar quando nenhum servir — e nesse caso, escrever aqui o que foi</li>
+</ul>
+   criado, para o próximo aproveitar
+<p>Este arquivo é vivo. Padrão que vingar entra aqui; padrão que se provar ruim sai.</p>
+</div>

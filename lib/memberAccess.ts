@@ -8,9 +8,9 @@ export const MEMBER_INACTIVE_MESSAGE =
 
 export async function validateActiveMemberAccess(userId: string) {
   const { data, error } = await supabase
-    .from('sales_membros_empresa')
+    .from('sales_membros_v2')
     .select('status')
-    .eq('membro_id', userId)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error) {
