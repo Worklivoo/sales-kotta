@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 interface NotificationRecord {
-  notificacao_id: number;
+  notificacao_id: string;
   notificacao_tipo: string | null;
   notificacao_titulo: string | null;
   notificacao_descricao: string | null;
@@ -19,6 +19,8 @@ interface NotificationRecord {
   criado_em: string;
   notificacao_lida?: boolean | null;
 }
+
+const EASE = 'cubic-bezier(.22,1,.36,1)';
 
 const formatNotificationDate = (value: string) => {
   const parsedDate = new Date(value);
@@ -91,19 +93,42 @@ const Sidebar: React.FC<SidebarProps> = ({
         return;
       }
 
+      const { data: memberRow, error: memberError } = await supabase
+        .from('sales_membros_v2')
+        .select('membro_id')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (memberError) {
+        throw memberError;
+      }
+
+      if (!memberRow?.membro_id) {
+        setNotifications([]);
+        return;
+      }
+
       const { data, error } = await supabase
-        .from('sales_notificacoes')
-        .select(
-          'notificacao_id, notificacao_tipo, notificacao_titulo, notificacao_descricao, atendimento_id, criado_em, notificacao_lida',
-        )
-        .eq('membro_id', session.user.id)
-        .order('criado_em', { ascending: false });
+        .from('sales_notificacoes_v2')
+        .select('notificacao_id, tipo, titulo, descricao, atendimento_id, created_at, lida')
+        .eq('membro_id', memberRow.membro_id)
+        .order('created_at', { ascending: false });
 
       if (error) {
         throw error;
       }
 
-      setNotifications((data ?? []) as NotificationRecord[]);
+      const mappedNotifications: NotificationRecord[] = (data ?? []).map((item) => ({
+        notificacao_id: item.notificacao_id,
+        notificacao_tipo: item.tipo,
+        notificacao_titulo: item.titulo,
+        notificacao_descricao: item.descricao,
+        atendimento_id: item.atendimento_id,
+        criado_em: item.created_at,
+        notificacao_lida: item.lida,
+      }));
+
+      setNotifications(mappedNotifications);
     } catch (error: any) {
       console.error('Erro ao carregar notificacoes:', error);
       setNotificationsError(error?.message || 'Nao foi possivel carregar as notificacoes.');
@@ -132,7 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       }
 
       const { data: atendimentoData, error: atendimentoError } = await supabase
-        .from('sales_atendimento')
+        .from('sales_atendimentos_v2')
         .select('empresa_id, numero_ticket')
         .eq('atendimento_id', notification.atendimento_id)
         .maybeSingle();
@@ -163,8 +188,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       }
 
       const { error } = await supabase
-        .from('sales_notificacoes')
-        .update({ notificacao_lida: true })
+        .from('sales_notificacoes_v2')
+        .update({ lida: true })
         .eq('notificacao_id', notification.notificacao_id);
 
       if (error) {
@@ -212,51 +237,60 @@ const Sidebar: React.FC<SidebarProps> = ({
           type="button"
           aria-label="Fechar painel de notificações"
           onClick={() => setIsNotificationsOpen(false)}
-          className="fixed inset-0 z-10 bg-black/10 backdrop-blur-[2px]"
+          className="fixed inset-0 z-10 bg-ink/10 backdrop-blur-[2px]"
         />
       )}
 
       {isNotificationsOpen && (
         <aside
-          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-[30px] border border-black/5 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.18)]"
-          style={{ left: notificationsPanelLeft }}
+          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-card border border-line-soft bg-card"
+          style={{ left: notificationsPanelLeft, boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)' }}
         >
           <div className="flex h-full flex-col">
-            <div className="border-b border-black/5 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.90)_100%)] px-6 py-6">
+            <div className="border-b border-line-soft px-6 py-6">
               <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-lg font-semibold text-black">Notificacoes</div>
+                <div className="text-[16px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
+                  Notificações
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsNotificationsOpen(false)}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/[0.04] text-black transition-colors hover:bg-black/[0.08]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-tile bg-stone text-ink transition-colors hover:bg-stone-deep"
+                  style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="inline-flex rounded-[22px] border border-black/6 bg-black/[0.03] p-1">
+              <div className="inline-flex rounded-pill border border-line bg-stone p-1">
                 <button
                   type="button"
                   onClick={() => setNotificationsFilter('UNREAD')}
-                  className={`rounded-[18px] px-4 py-2 text-sm font-medium transition-all ${
-                    notificationsFilter === 'UNREAD'
-                      ? 'bg-white text-black shadow-[0_6px_18px_rgba(15,23,42,0.08)]'
-                      : 'text-black/55 hover:text-black'
-                  }`}
+                  className="rounded-pill px-4 py-2 text-[13px] transition-all"
+                  style={{
+                    fontWeight: 700,
+                    transitionDuration: '.22s',
+                    transitionTimingFunction: EASE,
+                    ...(notificationsFilter === 'UNREAD'
+                      ? { background: 'var(--white)', color: 'var(--ink)', boxShadow: '0 6px 18px rgba(20,20,20,.08)' }
+                      : { color: 'var(--muted)' }),
+                  }}
                 >
-                  Nao lidas
+                  Não lidas
                 </button>
                 <button
                   type="button"
                   onClick={() => setNotificationsFilter('ALL')}
-                  className={`rounded-[18px] px-4 py-2 text-sm font-medium transition-all ${
-                    notificationsFilter === 'ALL'
-                      ? 'bg-white text-black shadow-[0_6px_18px_rgba(15,23,42,0.08)]'
-                      : 'text-black/55 hover:text-black'
-                  }`}
+                  className="rounded-pill px-4 py-2 text-[13px] transition-all"
+                  style={{
+                    fontWeight: 700,
+                    transitionDuration: '.22s',
+                    transitionTimingFunction: EASE,
+                    ...(notificationsFilter === 'ALL'
+                      ? { background: 'var(--white)', color: 'var(--ink)', boxShadow: '0 6px 18px rgba(20,20,20,.08)' }
+                      : { color: 'var(--muted)' }),
+                  }}
                 >
                   Todos
                 </button>
@@ -264,54 +298,55 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="flex min-h-full flex-col gap-3 rounded-[26px] bg-[#F8FAFC] p-3">
+              <div className="flex min-h-full flex-col gap-3 rounded-panel bg-stone p-3">
                 {isLoadingNotifications ? (
                   <>
                     {[0, 1, 2].map((item) => (
                       <div
                         key={item}
-                        className="animate-pulse rounded-[24px] border border-black/5 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)]"
+                        className="animate-pulse rounded-tile border border-line-soft bg-card p-5"
                       >
                         <div className="mb-4 flex items-center justify-between gap-3">
-                          <div className="h-6 w-32 rounded-full bg-black/6" />
-                          <div className="h-4 w-24 rounded-full bg-black/6" />
+                          <div className="h-6 w-32 rounded-pill bg-stone-deep/70" />
+                          <div className="h-4 w-24 rounded-pill bg-stone-deep/70" />
                         </div>
-                        <div className="h-5 w-4/5 rounded-full bg-black/6" />
-                        <div className="mt-3 h-4 w-full rounded-full bg-black/6" />
-                        <div className="mt-2 h-4 w-3/4 rounded-full bg-black/6" />
+                        <div className="h-5 w-4/5 rounded-pill bg-stone-deep/70" />
+                        <div className="mt-3 h-4 w-full rounded-pill bg-stone-deep/70" />
+                        <div className="mt-2 h-4 w-3/4 rounded-pill bg-stone-deep/70" />
                       </div>
                     ))}
                   </>
                 ) : notificationsError ? (
-                  <div className="flex min-h-full flex-1 flex-col items-center justify-center rounded-[24px] border border-rose-200 bg-rose-50 px-6 py-10 text-center">
-                    <div className="text-base font-semibold text-rose-700">
-                      Nao foi possivel carregar as notificacoes
+                  <div className="flex min-h-full flex-1 flex-col items-center justify-center rounded-tile border border-rose-200 bg-rose-50 px-6 py-10 text-center">
+                    <div className="text-[14px] text-rose-700" style={{ fontWeight: 700 }}>
+                      Não foi possível carregar as notificações
                     </div>
-                    <div className="mt-2 max-w-[280px] text-sm leading-6 text-rose-700/80">
+                    <div className="mt-2 max-w-[280px] text-[13px] leading-6 text-rose-700/80" style={{ fontWeight: 500 }}>
                       {notificationsError}
                     </div>
                     <button
                       type="button"
                       onClick={loadNotifications}
-                      className="mt-5 rounded-2xl bg-rose-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-700"
+                      className="mt-5 rounded-[9px] bg-rose-600 px-4 py-2.5 text-[13px] text-white transition-colors hover:bg-rose-700"
+                      style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: EASE }}
                     >
                       Tentar novamente
                     </button>
                   </div>
                 ) : filteredNotifications.length === 0 ? (
-                  <div className="flex min-h-full flex-1 flex-col items-center justify-center rounded-[24px] border border-dashed border-black/10 bg-white px-6 py-10 text-center">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-primary/18 text-black">
+                  <div className="flex min-h-full flex-1 flex-col items-center justify-center rounded-tile border border-dashed border-line px-6 py-10 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-tile bg-lime/20 text-ink">
                       <Bell size={24} />
                     </div>
-                    <div className="mt-4 text-base font-semibold text-black">
+                    <div className="mt-4 text-[14px] text-ink" style={{ fontWeight: 700 }}>
                       {notificationsFilter === 'UNREAD'
-                        ? 'Nenhuma notificacao nao lida'
-                        : 'Nenhuma notificacao por enquanto'}
+                        ? 'Nenhuma notificação não lida'
+                        : 'Nenhuma notificação por enquanto'}
                     </div>
-                    <div className="mt-2 max-w-[280px] text-sm leading-6 text-black/50">
+                    <div className="mt-2 max-w-[280px] text-[13px] leading-6 text-muted" style={{ fontWeight: 500 }}>
                       {notificationsFilter === 'UNREAD'
-                        ? 'As notificacoes pendentes de leitura aparecerao aqui.'
-                        : 'Quando houver atualizacoes importantes das suas cotacoes, elas aparecerao aqui.'}
+                        ? 'As notificações pendentes de leitura aparecerão aqui.'
+                        : 'Quando houver atualizações importantes das suas cotações, elas aparecerão aqui.'}
                     </div>
                   </div>
                 ) : (
@@ -321,23 +356,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                     return (
                       <article
                         key={notification.notificacao_id}
-                        className={`rounded-[20px] border px-4 py-3.5 transition-all ${
+                        className={`rounded-tile border px-4 py-3.5 transition-all ${
                           isUnread
-                            ? 'border-black/12 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.08)]'
-                            : 'border-black/6 bg-white/78 shadow-[0_6px_18px_rgba(15,23,42,0.03)]'
+                            ? 'border-line bg-card shadow-[0_12px_28px_rgba(20,20,20,.08)]'
+                            : 'border-line-soft bg-card/80 shadow-[0_6px_18px_rgba(20,20,20,.03)]'
                         }`}
+                        style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
                       >
                         <div className="flex items-start gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-[15px] font-semibold leading-5 text-black">
-                              {notification.notificacao_titulo || 'Notificacao sem titulo'}
+                            <div className="text-[14.5px] leading-5 text-ink" style={{ fontWeight: 700 }}>
+                              {notification.notificacao_titulo || 'Notificação sem título'}
                             </div>
 
-                            <div className="mt-1.5 text-sm leading-5 text-black/58">
-                              {notification.notificacao_descricao || 'Sem descricao disponivel.'}
+                            <div className="mt-1.5 text-[13px] leading-5 text-muted" style={{ fontWeight: 500 }}>
+                              {notification.notificacao_descricao || 'Sem descrição disponível.'}
                             </div>
 
-                            <div className="mt-3 text-[12px] font-medium text-black/42">
+                            <div className="mt-3 text-[11.5px] text-muted-soft" style={{ fontWeight: 500 }}>
                               {formatNotificationDate(notification.criado_em)}
                             </div>
                           </div>
@@ -349,11 +385,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                             }}
                             aria-label="Abrir atendimento"
                             disabled={!notification.atendimento_id}
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-black/8 bg-[#F8FAFC] transition-colors ${
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-line bg-stone transition-colors ${
                               notification.atendimento_id
-                                ? 'text-black/55 hover:bg-black/[0.04] hover:text-black'
-                                : 'cursor-not-allowed text-black/25'
+                                ? 'text-muted hover:bg-stone-deep hover:text-ink'
+                                : 'cursor-not-allowed text-muted-soft/60'
                             }`}
+                            style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
                           >
                             <ArrowUpRight size={15} />
                           </button>
@@ -368,18 +405,20 @@ const Sidebar: React.FC<SidebarProps> = ({
         </aside>
       )}
 
-      <div 
-        className={`${sidebarWidth} fixed left-4 top-4 bottom-4 bg-primary rounded-2xl flex flex-col justify-between py-8 px-4 z-20 transition-all duration-300 ease-in-out shadow-[0_10px_26px_rgba(0,0,0,0.10)]`}
+      <div
+        className={`${sidebarWidth} fixed left-4 top-4 bottom-4 bg-ink rounded-card flex flex-col justify-between py-8 px-4 z-20 transition-all duration-300 font-sans`}
+        style={{ transitionTimingFunction: EASE, boxShadow: '0 34px 64px -34px rgba(20,20,20,.6)' }}
       >
         <div>
           <div className={`flex items-center ${isCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'} mb-10 px-1`}>
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-transform hover:scale-105 overflow-hidden bg-black">
-              <img src="/logo-worklivoo-fundo-preto.png" alt="Logo" className="w-full h-full object-cover" />
+            <div className="w-12 h-12 rounded-tile flex items-center justify-center shrink-0 overflow-hidden">
+              <img src="/Símbolo_Worklivoo_Fundo_Amarelo.png" alt="Logo" className="w-full h-full object-cover" />
             </div>
 
-            <button 
+            <button
               onClick={toggleCollapse}
-              className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-black hover:bg-gray-50 transition-colors shadow-sm"
+              className="w-10 h-10 rounded-tile flex items-center justify-center text-white bg-white/10 hover:bg-white/16 transition-colors"
+              style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
             >
               {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
             </button>
@@ -396,17 +435,21 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   key={item.path}
                   onClick={() => onNavigate(item.path)}
-                  className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all w-full ${
+                  className={`flex items-center gap-3 px-4 py-3.5 rounded-tile transition-all w-full ${
                     isCollapsed ? 'justify-center' : ''
                   } ${
                     isActive
-                      ? 'bg-white text-black shadow-sm'
-                      : 'text-black hover:bg-white/10'
+                      ? 'bg-white/8 text-lime'
+                      : 'text-white/55 hover:bg-white/8 hover:text-white'
                   }`}
+                  style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
                 >
-                  <Icon size={22} className="shrink-0" />
+                  <Icon size={22} className="shrink-0" strokeWidth={isActive ? 2.25 : 2} />
                   {!isCollapsed && (
-                    <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">
+                    <span
+                      className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200 text-[14px]"
+                      style={{ fontWeight: 700 }}
+                    >
                       {item.label}
                     </span>
                   )}
@@ -422,37 +465,56 @@ const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => setIsNotificationsOpen((current) => !current)}
             aria-expanded={isNotificationsOpen}
             aria-haspopup="dialog"
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-black hover:bg-white/10 transition-all w-full ${
+            className={`flex items-center gap-3 px-4 py-3.5 rounded-tile transition-all w-full ${
               isCollapsed ? 'justify-center' : ''
-            } ${isNotificationsOpen ? 'bg-white/10 shadow-sm' : ''}`}
+            } ${
+              isNotificationsOpen
+                ? 'bg-white/8 text-lime'
+                : 'text-white/55 hover:bg-white/8 hover:text-white'
+            }`}
+            style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
           >
             <div className="relative shrink-0">
-              <Bell size={22} className="shrink-0" />
+              <Bell size={22} className="shrink-0" strokeWidth={isNotificationsOpen ? 2.25 : 2} />
               {unreadCount > 0 && (
-                <span className="absolute -right-2 -top-2 flex min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow-[0_6px_18px_rgba(220,38,38,0.32)]">
+                <span
+                  className="absolute -right-2 -top-2 flex min-w-[20px] items-center justify-center rounded-pill bg-red-500 px-1.5 py-0.5 text-[10px] leading-none text-white"
+                  style={{ fontWeight: 700, boxShadow: '0 6px 18px rgba(220,38,38,.4)' }}
+                >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </div>
             {!isCollapsed && (
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <div className="font-medium whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">
-                  Notificacoes
+              <div className="min-w-0 flex-1 overflow-hidden text-left">
+                <div
+                  className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200 text-[14px]"
+                  style={{ fontWeight: 700 }}
+                >
+                  Notificações
                 </div>
-                <div className="text-xs text-black/55">
+                <div className="text-[11.5px] text-white/45" style={{ fontWeight: 500 }}>
                   {unreadCount > 0
                     ? `${unreadCount} nova${unreadCount > 1 ? 's' : ''}`
-                    : 'Sem pendencias'}
+                    : 'Sem pendências'}
                 </div>
               </div>
             )}
           </button>
-          <button 
+          <button
             onClick={onLogout}
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-red-600 hover:bg-red-500/10 transition-all group w-full ${isCollapsed ? 'justify-center' : ''}`}
+            className={`flex items-center gap-3 px-4 py-3.5 rounded-tile text-red-400/90 hover:bg-red-500/15 hover:text-red-300 transition-all w-full ${isCollapsed ? 'justify-center' : ''}`}
+            style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
           >
             <LogOut size={22} className="shrink-0" />
-            {!isCollapsed && <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200">Sair</span>}
+            {!isCollapsed && (
+              <span
+                className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200 text-[14px]"
+                style={{ fontWeight: 700 }}
+              >
+                Sair
+              </span>
+            )}
           </button>
         </div>
       </div>
