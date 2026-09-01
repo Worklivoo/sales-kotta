@@ -21,6 +21,7 @@ interface ManageMemberServiceOptions {
 export interface TeamMemberRecord {
   membro_id: string;
   empresa_id: string | null;
+  user_id: string | null;
   nome: string | null;
   email: string | null;
   telefone: string | null;
@@ -97,9 +98,9 @@ const getValidatedContext = async ({
   }
 
   const { data: requesterMember, error: requesterMemberError } = await adminClient
-    .from('sales_membros_empresa')
-    .select('empresa_id, cargo')
-    .eq('membro_id', requesterUser.id)
+    .from('sales_membros_v2')
+    .select('membro_id, empresa_id, cargo')
+    .eq('user_id', requesterUser.id)
     .maybeSingle();
 
   if (requesterMemberError) {
@@ -115,7 +116,7 @@ const getValidatedContext = async ({
   }
 
   const { data: targetMember, error: targetMemberError } = await adminClient
-    .from('sales_membros_empresa')
+    .from('sales_membros_v2')
     .select('*')
     .eq('membro_id', memberId)
     .maybeSingle();
@@ -135,7 +136,7 @@ const getValidatedContext = async ({
   return {
     publicClient,
     adminClient,
-    requesterUserId: requesterUser.id,
+    requesterMemberId: requesterMember.membro_id as string,
     targetMember: targetMember as TeamMemberRecord,
   };
 };
@@ -153,7 +154,7 @@ export const manageMemberService = async ({
     throw new HttpError(400, 'Informe a acao que deve ser executada para o membro.');
   }
 
-  const { publicClient, adminClient, requesterUserId, targetMember } = await getValidatedContext({
+  const { publicClient, adminClient, requesterMemberId, targetMember } = await getValidatedContext({
     supabaseUrl,
     supabaseAnonKey,
     supabaseServiceRoleKey,
@@ -191,7 +192,7 @@ export const manageMemberService = async ({
     }
 
     const { data, error } = await adminClient
-      .from('sales_membros_empresa')
+      .from('sales_membros_v2')
       .update({
         nome,
         telefone: `55${telefoneDigits}`,
@@ -211,12 +212,12 @@ export const manageMemberService = async ({
   }
 
   if (action === 'deactivate') {
-    if (targetMember.membro_id === requesterUserId) {
+    if (targetMember.membro_id === requesterMemberId) {
       throw new HttpError(400, 'Voce nao pode desativar o seu proprio usuario.');
     }
 
     const { data, error } = await adminClient
-      .from('sales_membros_empresa')
+      .from('sales_membros_v2')
       .update({ status: 'INATIVO' })
       .eq('membro_id', targetMember.membro_id)
       .select('membro_id, empresa_id, nome, email, telefone, cargo, status')
@@ -234,7 +235,7 @@ export const manageMemberService = async ({
 
   if (action === 'activate') {
     const { data, error } = await adminClient
-      .from('sales_membros_empresa')
+      .from('sales_membros_v2')
       .update({ status: 'ATIVO' })
       .eq('membro_id', targetMember.membro_id)
       .select('membro_id, empresa_id, nome, email, telefone, cargo, status')
@@ -251,12 +252,12 @@ export const manageMemberService = async ({
   }
 
   if (action === 'delete') {
-    if (targetMember.membro_id === requesterUserId) {
+    if (targetMember.membro_id === requesterMemberId) {
       throw new HttpError(400, 'Voce nao pode excluir o seu proprio usuario.');
     }
 
     const { error: deleteMemberError } = await adminClient
-      .from('sales_membros_empresa')
+      .from('sales_membros_v2')
       .delete()
       .eq('membro_id', targetMember.membro_id);
 
@@ -264,11 +265,13 @@ export const manageMemberService = async ({
       throw new HttpError(400, deleteMemberError.message);
     }
 
-    const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(targetMember.membro_id);
+    if (targetMember.user_id) {
+      const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(targetMember.user_id);
 
-    if (deleteAuthError) {
-      await adminClient.from('sales_membros_empresa').insert(targetMember);
-      throw new HttpError(400, deleteAuthError.message);
+      if (deleteAuthError) {
+        await adminClient.from('sales_membros_v2').insert(targetMember);
+        throw new HttpError(400, deleteAuthError.message);
+      }
     }
 
     return {

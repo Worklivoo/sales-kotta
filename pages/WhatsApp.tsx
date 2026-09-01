@@ -1,14 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Search,
-  SlidersHorizontal,
-  Tag,
-  User,
-  Zap,
-} from 'lucide-react';
+import { Check, MessageCircle, Search, SlidersHorizontal, Zap } from 'lucide-react';
 import {
   sanitizeHtmlContent,
   stripAttachmentAnalysisFromContent,
@@ -35,6 +26,7 @@ const CATEGORY_OPTIONS = [
 type AtendimentoCategory = (typeof CATEGORY_OPTIONS)[number];
 
 interface CurrentMemberRecord {
+  membro_id: string;
   empresa_id: string;
   cargo: string | null;
 }
@@ -49,8 +41,7 @@ interface AtendimentoRecord {
   assunto: string | null;
   numero_ticket: number | null;
   membro_id: string | null;
-  atendimento_origem: string | null;
-  provedor_thread_id: string | null;
+  telefone_lead: string | null;
   cliente_id: string | null;
 }
 
@@ -268,13 +259,17 @@ const formatInboxDate = (value: string) => {
 };
 
 const normalizeMessageAuthor = (value: string | null): MessageAuthor => {
-  const normalized = (value || 'HUMANO').toUpperCase();
+  const normalized = (value || '').toUpperCase();
 
-  if (normalized === 'CLIENTE' || normalized === 'IA') {
-    return normalized;
+  if (normalized === 'IA') {
+    return 'IA';
   }
 
-  return 'HUMANO';
+  if (normalized === 'HUMANO') {
+    return 'HUMANO';
+  }
+
+  return 'CLIENTE';
 };
 
 const extractSenderEmail = (metadata: Record<string, unknown> | null) => {
@@ -353,9 +348,9 @@ const WhatsAppPage: React.FC = () => {
         }
 
         const { data: currentMemberRows, error: currentMemberError } = await supabase
-          .from('sales_membros_empresa')
-          .select('empresa_id, cargo')
-          .eq('membro_id', session.user.id)
+          .from('sales_membros_v2')
+          .select('membro_id, empresa_id, cargo')
+          .eq('user_id', session.user.id)
           .limit(1);
 
         if (currentMemberError) {
@@ -369,16 +364,16 @@ const WhatsAppPage: React.FC = () => {
         }
 
         let atendimentosQuery = supabase
-          .from('sales_atendimento')
+          .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id, atendimento_origem, provedor_thread_id, cliente_id',
+            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id, telefone_lead, cliente_id',
           )
           .eq('empresa_id', currentMember.empresa_id)
-          .eq('atendimento_origem', 'WhatsApp')
+          .eq('origem', 'WHATSAPP')
           .order('created_at', { ascending: false });
 
         if (currentMember.cargo !== 'ADMIN') {
-          atendimentosQuery = atendimentosQuery.eq('membro_id', session.user.id);
+          atendimentosQuery = atendimentosQuery.eq('membro_id', currentMember.membro_id);
         }
 
         const { data: atendimentosData, error: atendimentosError } = await atendimentosQuery;
@@ -417,28 +412,28 @@ const WhatsAppPage: React.FC = () => {
 
         const [messagesResponse, membersResponse, companyResponse, clientesResponse] = await Promise.all([
           supabase
-            .from('sales_mensagens')
+            .from('sales_mensagens_v2')
             .select('mensagem_id, atendimento_id, created_at, origem, conteudo, metadata, anexos')
             .eq('empresa_id', currentMember.empresa_id)
             .in('atendimento_id', atendimentoIds)
             .order('created_at', { ascending: false }),
           responsibleIds.length > 0
             ? supabase
-                .from('sales_membros_empresa')
+                .from('sales_membros_v2')
                 .select('membro_id, nome')
                 .eq('empresa_id', currentMember.empresa_id)
                 .in('membro_id', responsibleIds)
             : Promise.resolve({ data: [], error: null }),
           currentMember.cargo === 'ADMIN'
             ? supabase
-                .from('sales_empresa')
+                .from('sales_empresas_v2')
                 .select('razao_social')
                 .eq('empresa_id', currentMember.empresa_id)
                 .limit(1)
             : Promise.resolve({ data: null, error: null }),
           clienteIds.length > 0
             ? supabase
-                .from('sales_clientes_finais')
+                .from('sales_clientes_v2')
                 .select('cliente_id, nome')
                 .eq('empresa_id', currentMember.empresa_id)
                 .in('cliente_id', clienteIds)
@@ -530,7 +525,7 @@ const WhatsAppPage: React.FC = () => {
             subject,
             customer: buildCustomerLabel(senderEmail),
             email: senderEmail || 'Contato não identificado',
-            phoneFormatted: formatBrazilianPhone(atendimento.provedor_thread_id),
+            phoneFormatted: formatBrazilianPhone(atendimento.telefone_lead),
             customerName:
               atendimento.cliente_id && customerNameById.has(atendimento.cliente_id)
                 ? customerNameById.get(atendimento.cliente_id) || ''
@@ -630,16 +625,19 @@ const WhatsAppPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-2 border-black/10 border-t-black animate-spin" />
+      <div className="flex h-full w-full items-center justify-center font-sans">
+        <div className="h-10 w-10 rounded-full border-2 border-ink/15 border-t-ink animate-spin" />
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="h-full w-full">
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-medium text-red-600">
+      <div className="h-full w-full font-sans">
+        <div
+          className="rounded-tile border border-red-100 bg-red-50 px-5 py-4 text-[13px] text-red-600"
+          style={{ fontWeight: 500 }}
+        >
           {loadError}
         </div>
       </div>
@@ -647,181 +645,212 @@ const WhatsAppPage: React.FC = () => {
   }
 
   return (
-    <div className="h-full w-full overflow-y-auto xl:overflow-hidden">
-      <div className="flex h-full min-h-full flex-col gap-4">
-        <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-black/5 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.06)] xl:overflow-hidden">
-          <div className="grid min-h-0 grid-cols-1 xl:h-full xl:grid-cols-[360px_minmax(0,1fr)]">
-            <aside className="flex min-h-0 flex-col border-b border-black/5 xl:border-b-0 xl:border-r">
-              <div className="border-b border-black/5 px-5 py-4">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <h1 className="text-sm font-semibold tracking-tight text-gray-900 sm:text-base">
-                      WhatsApp
-                    </h1>
-                    <p className="text-xs text-gray-500">
-                      Visualize suas conversas e acompanhe o histórico de cada atendimento.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-                    {filteredAtendimentos.length}
+    <div className="h-full w-full font-sans">
+      <div className="flex h-full min-h-0 flex-col gap-4">
+        <section className="flex flex-wrap items-center justify-between gap-4 px-1 pt-1">
+          <div className="space-y-1">
+            <h1 className="text-[22px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
+              WhatsApp
+            </h1>
+            <p className="text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
+              Visualize suas conversas e acompanhe o histórico de cada atendimento.
+            </p>
+          </div>
+        </section>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col rounded-panel border border-line-soft bg-card">
+            <div className="border-b border-line-soft px-4 py-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-ink">
+                  <MessageCircle size={15} className="text-muted-soft" />
+                  <span className="text-[13px]" style={{ fontWeight: 800 }}>
+                    Conversas
                   </span>
                 </div>
+                <span
+                  className="rounded-pill bg-stone px-2.5 py-0.5 text-[11px] text-muted"
+                  style={{ fontWeight: 700 }}
+                >
+                  {filteredAtendimentos.length}
+                </span>
+              </div>
 
-                <div className="relative">
-                  <div className="flex items-center gap-2">
-                    <label className="flex h-10 flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-[#FAFAFA] px-3 transition-colors focus-within:border-gray-300">
-                      <Search size={15} className="text-gray-400" />
-                      <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Buscar conversa"
-                        className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
-                      />
-                    </label>
+              <div className="relative">
+                <div className="flex items-center gap-2">
+                  <label className="flex h-10 flex-1 items-center gap-2.5 rounded-pill border border-line bg-paper px-3.5">
+                    <Search size={14} className="shrink-0 text-muted-soft" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Buscar conversa"
+                      className="w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-muted-soft"
+                      style={{ fontWeight: 500 }}
+                    />
+                  </label>
 
-                    <button
-                      type="button"
-                      onClick={() => setIsCategoryFilterOpen((currentValue) => !currentValue)}
-                      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                        isCategoryFilterOpen || selectedCategories.length !== CATEGORY_OPTIONS.length
-                          ? 'border-[#EBF57D] bg-[#EBF57D] text-gray-900'
-                          : 'border-gray-200 bg-[#FAFAFA] text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                      }`}
-                      aria-label="Filtrar categorias"
-                      aria-expanded={isCategoryFilterOpen}
-                    >
-                      <SlidersHorizontal size={16} />
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryFilterOpen((currentValue) => !currentValue)}
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border transition-colors ${
+                      isCategoryFilterOpen || selectedCategories.length !== CATEGORY_OPTIONS.length
+                        ? 'border-lime bg-lime text-ink'
+                        : 'border-line bg-paper text-muted hover:text-ink'
+                    }`}
+                    style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                    aria-label="Filtrar categorias"
+                    aria-expanded={isCategoryFilterOpen}
+                  >
+                    <SlidersHorizontal size={15} />
+                  </button>
+                </div>
+
+                {isCategoryFilterOpen ? (
+                  <div
+                    className="absolute right-0 top-full z-20 mt-2 w-full max-w-[290px] rounded-panel border border-line-soft bg-card p-3"
+                    style={{ boxShadow: '0 18px 40px -18px rgba(20,20,20,.35)' }}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[12px] text-ink" style={{ fontWeight: 700 }}>
+                          Filtrar categorias
+                        </p>
+                        <p className="text-[10.5px] text-muted-soft" style={{ fontWeight: 500 }}>
+                          Selecione uma ou mais categorias
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategories([...CATEGORY_OPTIONS])}
+                        className="text-[11px] text-muted-soft transition-colors hover:text-ink"
+                        style={{ fontWeight: 700, transitionDuration: '.22s' }}
+                      >
+                        Todas
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {CATEGORY_OPTIONS.map((category) => {
+                        const isSelected = selectedCategories.includes(category);
+
+                        return (
+                          <button
+                            key={category}
+                            type="button"
+                            onClick={() =>
+                              setSelectedCategories((currentSelectedCategories) => {
+                                if (currentSelectedCategories.includes(category)) {
+                                  return currentSelectedCategories.filter(
+                                    (item) => item !== category,
+                                  );
+                                }
+
+                                return [...currentSelectedCategories, category];
+                              })
+                            }
+                            className={`flex w-full items-center justify-between rounded-tile px-3 py-2 text-left text-[12px] transition-colors ${
+                              isSelected ? 'bg-lime text-ink' : 'bg-paper text-muted hover:bg-stone'
+                            }`}
+                            style={{ fontWeight: 700, transitionDuration: '.22s' }}
+                            aria-pressed={isSelected}
+                          >
+                            <span>{formatCategoryLabel(category)}</span>
+                            {isSelected ? <Check size={14} /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+                ) : null}
+              </div>
+            </div>
 
-                  {isCategoryFilterOpen ? (
-                    <div className="absolute right-0 top-full z-20 mt-2 w-full max-w-[290px] rounded-2xl border border-black/10 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.10)]">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold text-gray-900">Filtrar categorias</p>
-                          <p className="text-[11px] text-gray-500">
-                            Selecione uma ou mais categorias
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <div className="space-y-2">
+                {filteredAtendimentos.map((atendimento) => {
+                  const isActive = atendimento.atendimentoId === selectedAtendimento?.atendimentoId;
+
+                  return (
+                    <button
+                      key={atendimento.atendimentoId}
+                      type="button"
+                      onClick={() => setSelectedAtendimentoId(atendimento.atendimentoId)}
+                      className={`w-full rounded-tile border px-3.5 py-3 text-left transition-all ${
+                        isActive
+                          ? 'border-ink/15 bg-paper'
+                          : 'border-line-soft bg-card hover:border-ink/15 hover:bg-paper'
+                      }`}
+                      style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+                      aria-pressed={isActive}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <p
+                            className="min-w-0 truncate text-[12.5px] text-ink"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {atendimento.phoneFormatted}
+                          </p>
+                          <span
+                            className="shrink-0 whitespace-nowrap text-[10.5px] text-muted-soft"
+                            style={{ fontWeight: 600 }}
+                          >
+                            {atendimento.createdAt}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <h3
+                            className="line-clamp-1 text-[13px] leading-5 text-ink"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {atendimento.subject}
+                          </h3>
+                          <p
+                            className="line-clamp-1 text-[11.5px] leading-5 text-muted"
+                            style={{ fontWeight: 500 }}
+                          >
+                            {atendimento.preview}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCategories([...CATEGORY_OPTIONS])}
-                          className="text-[11px] font-semibold text-gray-500 transition-colors hover:text-gray-800"
-                        >
-                          Todas
-                        </button>
-                      </div>
 
-                      <div className="space-y-1.5">
-                        {CATEGORY_OPTIONS.map((category) => {
-                          const isSelected = selectedCategories.includes(category);
-
-                          return (
-                            <button
-                              key={category}
-                              type="button"
-                              onClick={() =>
-                                setSelectedCategories((currentSelectedCategories) => {
-                                  if (currentSelectedCategories.includes(category)) {
-                                    return currentSelectedCategories.filter(
-                                      (item) => item !== category,
-                                    );
-                                  }
-
-                                  return [...currentSelectedCategories, category];
-                                })
-                              }
-                              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium transition-colors ${
-                                isSelected
-                                  ? 'bg-[#EBF57D] text-gray-900'
-                                  : 'bg-[#FAFAFA] text-gray-600 hover:bg-gray-100'
-                              }`}
-                              aria-pressed={isSelected}
-                            >
-                              <span>{formatCategoryLabel(category)}</span>
-                              {isSelected ? <Check size={14} /> : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-                <div className="space-y-2">
-                  {filteredAtendimentos.map((atendimento) => {
-                    const isActive = atendimento.atendimentoId === selectedAtendimento?.atendimentoId;
-
-                    return (
-                      <button
-                        key={atendimento.atendimentoId}
-                        type="button"
-                        onClick={() => setSelectedAtendimentoId(atendimento.atendimentoId)}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                          isActive
-                            ? 'border-black/10 bg-[#F5F5F5] shadow-[0_8px_20px_rgba(15,23,42,0.06)]'
-                            : 'border-transparent bg-white hover:border-black/5 hover:bg-[#FAFAFA]'
-                        }`}
-                        aria-pressed={isActive}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="break-words text-sm font-semibold text-gray-900 sm:truncate">
-                                {atendimento.phoneFormatted}
-                              </p>
-                            </div>
-
-                            <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400">
-                              {atendimento.createdAt}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <h3 className="line-clamp-1 text-[13px] font-semibold leading-5 text-gray-800">
-                              {atendimento.subject}
-                            </h3>
-                            <p className="line-clamp-1 text-[12px] leading-5 text-gray-500">
-                              {atendimento.preview}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-3 pt-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex max-w-full items-center gap-1.5 break-words rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
-                                  atendimento.categoryKey === 'COTACAO'
-                                    ? 'bg-[#EBF57D] text-gray-900'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}
-                              >
-                                {atendimento.categoryKey === 'COTACAO' ? <Zap size={10} /> : null}
-                                {atendimento.category}
-                              </span>
-                            </div>
-                            <span className="shrink-0 text-[11px] font-medium text-gray-400">
-                              {atendimento.ticketLabel}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-3 pt-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[9.5px] ${
+                              atendimento.categoryKey === 'COTACAO'
+                                ? 'bg-lime text-ink'
+                                : 'bg-stone text-muted'
+                            }`}
+                            style={{ fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase' }}
+                          >
+                            {atendimento.categoryKey === 'COTACAO' ? <Zap size={10} /> : null}
+                            {atendimento.category}
+                          </span>
+                          <span
+                            className="shrink-0 text-[10.5px] text-muted-soft"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {atendimento.ticketLabel}
+                          </span>
                         </div>
-                      </button>
-                    );
-                  })}
+                      </div>
+                    </button>
+                  );
+                })}
 
-                  {filteredAtendimentos.length === 0 ? (
-                    <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-[#FAFAFA] px-6 text-center">
-                      <p className="text-sm font-medium text-gray-400">
-                        Nenhuma conversa encontrada para esta busca.
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
+                {filteredAtendimentos.length === 0 ? (
+                  <div className="flex h-40 items-center justify-center rounded-tile border border-dashed border-line px-6 text-center">
+                    <p className="text-[12px] text-muted-soft" style={{ fontWeight: 500 }}>
+                      Nenhuma conversa encontrada para esta busca.
+                    </p>
+                  </div>
+                ) : null}
               </div>
-            </aside>
+            </div>
+          </aside>
 
+          <section className="min-h-0 overflow-hidden rounded-panel border border-line-soft bg-card">
             {selectedAtendimento ? (
               React.createElement(WhatsAppChatView, {
                 header: {
@@ -841,21 +870,21 @@ const WhatsAppPage: React.FC = () => {
                 })),
               })
             ) : (
-              <section className="min-h-0 flex flex-col bg-[#efeae2]">
-                <div className="relative z-10 flex h-full items-center justify-center px-6">
-                  <div className="max-w-md rounded-3xl border border-dashed border-gray-200 bg-white/95 px-8 py-10 text-center shadow-[0_8px_24px_rgba(15,23,42,0.04)] backdrop-blur">
-                    <p className="text-lg font-semibold text-gray-800">
+              <div className="flex h-full flex-col bg-[#efeae2]">
+                <div className="flex h-full items-center justify-center px-6">
+                  <div className="max-w-md rounded-panel border border-dashed border-line bg-card/95 px-8 py-10 text-center backdrop-blur">
+                    <p className="text-[16px] text-ink" style={{ fontWeight: 800 }}>
                       Nenhuma conversa selecionada
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-gray-500">
+                    <p className="mt-2 text-[13px] leading-6 text-muted" style={{ fontWeight: 500 }}>
                       Escolha uma conversa na lista para visualizar o histórico.
                     </p>
                   </div>
                 </div>
-              </section>
+              </div>
             )}
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   );

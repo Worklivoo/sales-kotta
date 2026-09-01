@@ -213,9 +213,9 @@ const MembrosTab: React.FC = () => {
         }
 
         const { data: currentMember, error: currentMemberError } = await supabase
-          .from('sales_membros_empresa')
+          .from('sales_membros_v2')
           .select('empresa_id')
-          .eq('membro_id', session.user.id)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (currentMemberError) {
@@ -233,7 +233,7 @@ const MembrosTab: React.FC = () => {
         setCompanyId(currentMember.empresa_id);
 
         const { data, error } = await supabase
-          .from('sales_membros_empresa')
+          .from('sales_membros_v2')
           .select('membro_id, empresa_id, nome, email, telefone, cargo, status')
           .eq('empresa_id', currentMember.empresa_id)
           .order('nome', { ascending: true });
@@ -732,16 +732,16 @@ const MembrosTab: React.FC = () => {
       <div className="space-y-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
-            <h2 className="text-[22px] font-semibold tracking-tight text-gray-900">
+            <h2 className="text-[22px] font-semibold tracking-tight text-ink">
               Membros da Equipe
             </h2>
-            <p className="text-sm text-gray-500">Gerencie os membros da sua equipe</p>
+            <p className="text-sm text-muted">Gerencie os membros da sua equipe</p>
           </div>
 
           <button
             type="button"
             onClick={handleOpenCreateMemberModal}
-            className="inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-[#F5F5F5] px-5 text-sm font-semibold text-gray-900 transition-colors hover:bg-[#EEEEEE]"
+            className="inline-flex h-11 items-center gap-2 self-start rounded-pill bg-lime px-5 text-sm font-semibold text-ink transition-colors hover:opacity-90"
           >
             <Plus size={18} />
             Adicionar Membro
@@ -749,14 +749,14 @@ const MembrosTab: React.FC = () => {
         </div>
 
         {membersError ? (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+          <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
             {membersError}
           </div>
         ) : null}
 
         {memberActionFeedback ? (
           <div
-            className={`rounded-2xl px-4 py-3 text-sm font-medium ${
+            className={`rounded-panel px-4 py-3 text-sm font-medium ${
               memberActionFeedback.type === 'success'
                 ? 'border border-emerald-100 bg-emerald-50 text-emerald-700'
                 : 'border border-red-100 bg-red-50 text-red-600'
@@ -767,7 +767,7 @@ const MembrosTab: React.FC = () => {
         ) : null}
 
         {isLoadingMembers ? (
-          <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] px-5 py-6 text-sm font-medium text-gray-500">
+          <div className="rounded-panel border border-line-soft bg-paper px-5 py-6 text-sm font-medium text-muted">
             Carregando membros da equipe...
           </div>
         ) : memberCards.length > 0 ? (
@@ -775,10 +775,10 @@ const MembrosTab: React.FC = () => {
             {memberCards.map((member) => (
               <article
                 key={member.id}
-                className="w-full rounded-[20px] border border-black/5 bg-[#FCFCFC] px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:w-[260px]"
+                className="w-full rounded-[20px] border border-line-soft bg-paper px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:w-[260px]"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-[14px] font-semibold text-gray-900">{member.name}</h3>
+                  <h3 className="text-[14px] font-semibold text-ink">{member.name}</h3>
 
                   <div className="relative" data-member-menu-root={member.id}>
                     <button
@@ -787,7 +787,7 @@ const MembrosTab: React.FC = () => {
                       aria-haspopup="menu"
                       aria-expanded={openMemberMenuId === member.id}
                       onClick={() => handleToggleMemberMenu(member.id)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-card hover:text-ink"
                     >
                       <MoreVertical size={16} />
                     </button>
@@ -796,7 +796,7 @@ const MembrosTab: React.FC = () => {
                       <div
                         role="menu"
                         aria-label={`Ações do membro ${member.name}`}
-                        className="absolute right-0 top-9 z-20 min-w-[190px] rounded-2xl border border-black/5 bg-white p-1.5 shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
+                        className="absolute right-0 top-9 z-20 min-w-[190px] rounded-panel border border-line-soft bg-card p-1.5 shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
                       >
                         {getMemberCardActions(member.status).map((action) => (
                           <button
@@ -805,10 +805,10 @@ const MembrosTab: React.FC = () => {
                             role="menuitem"
                             onClick={() => handleMemberMenuAction(action.key, member.id)}
                             disabled={memberActionInProgressId === member.id}
-                            className={`flex w-full items-center rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-colors ${
+                            className={`flex w-full items-center rounded-tile px-3 py-2.5 text-left text-[13px] font-medium transition-colors ${
                               action.key === 'delete'
                                 ? 'text-red-600 hover:bg-red-50 hover:text-red-700'
-                                : 'text-gray-700 hover:bg-[#F7F7F7] hover:text-gray-900'
+                                : 'text-ink hover:bg-paper hover:text-ink'
                             } disabled:cursor-not-allowed disabled:opacity-60`}
                           >
                             {memberActionInProgressId === member.id &&
@@ -823,17 +823,17 @@ const MembrosTab: React.FC = () => {
                 </div>
 
                 <div className="mt-5 flex flex-col items-center text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-[#F0F0F0] text-[17px] font-semibold text-gray-900">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-stone text-[17px] font-semibold text-ink">
                     {member.initials}
                   </div>
 
                   <div className="mt-4 space-y-0.5">
-                    <p className="text-[13px] font-medium text-[#5B6477]">{member.email}</p>
-                    <p className="text-[13px] font-medium text-[#5B6477]">{member.phone}</p>
+                    <p className="text-[13px] font-medium text-muted">{member.email}</p>
+                    <p className="text-[13px] font-medium text-muted">{member.phone}</p>
                   </div>
 
-                  <div className="mt-3 inline-flex min-w-[108px] items-center justify-center gap-1.5 rounded-full border border-black/8 bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-900">
-                    <User size={13} className="text-gray-500" />
+                  <div className="mt-3 inline-flex min-w-[108px] items-center justify-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-[12px] font-semibold text-ink">
+                    <User size={13} className="text-muted" />
                     {member.role}
                   </div>
                 </div>
@@ -841,9 +841,9 @@ const MembrosTab: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-black/10 bg-[#FCFCFC] px-5 py-8 text-center">
-            <p className="text-sm font-semibold text-gray-900">Nenhum membro encontrado</p>
-            <p className="mt-1 text-sm text-gray-500">
+          <div className="rounded-panel border border-dashed border-line bg-paper px-5 py-8 text-center">
+            <p className="text-sm font-semibold text-ink">Nenhum membro encontrado</p>
+            <p className="mt-1 text-sm text-muted">
               Quando houver membros cadastrados na empresa, eles aparecerão aqui.
             </p>
           </div>
@@ -862,17 +862,17 @@ const MembrosTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="adicionar-membro-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-3xl border border-black/5 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <h2
                   id="adicionar-membro-modal-title"
-                  className="text-base font-semibold tracking-tight text-gray-900"
+                  className="text-base font-semibold tracking-tight text-ink"
                 >
                   Adicionar Membro
                 </h2>
-                <p className="mt-1 text-sm leading-5 text-gray-500">
+                <p className="mt-1 text-sm leading-5 text-muted">
                   Cadastre um novo membro da equipe com acesso individual ao sistema.
                 </p>
               </div>
@@ -880,7 +880,7 @@ const MembrosTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseCreateMemberModal}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAFAFA] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="flex h-9 w-9 items-center justify-center rounded-tile bg-paper text-muted transition-colors hover:bg-stone hover:text-ink"
                 aria-label="Fechar popup de adicionar membro"
               >
                 <X size={18} />
@@ -889,7 +889,7 @@ const MembrosTab: React.FC = () => {
 
             <div className="space-y-4">
               {createMemberError ? (
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                   {createMemberError}
                 </div>
               ) : null}
@@ -897,7 +897,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="novo-membro-nome"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Nome Completo
                 </label>
@@ -906,7 +906,7 @@ const MembrosTab: React.FC = () => {
                   type="text"
                   value={createMemberForm.nome}
                   onChange={handleCreateMemberInputChange('nome')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                  className="mt-2 w-full rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                   placeholder="Digite o nome completo"
                 />
               </div>
@@ -914,7 +914,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="novo-membro-email"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   E-mail
                 </label>
@@ -923,7 +923,7 @@ const MembrosTab: React.FC = () => {
                   type="email"
                   value={createMemberForm.email}
                   onChange={handleCreateMemberInputChange('email')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                  className="mt-2 w-full rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                   placeholder="Digite o e-mail"
                 />
               </div>
@@ -931,7 +931,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="novo-membro-telefone"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Telefone
                 </label>
@@ -940,7 +940,7 @@ const MembrosTab: React.FC = () => {
                   type="text"
                   value={createMemberForm.telefone}
                   onChange={handleCreateMemberInputChange('telefone')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                  className="mt-2 w-full rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                   placeholder="(11) 99999-9999"
                 />
               </div>
@@ -948,7 +948,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="novo-membro-senha"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Senha
                 </label>
@@ -958,7 +958,7 @@ const MembrosTab: React.FC = () => {
                     type={isCreateMemberPasswordVisible ? 'text' : 'password'}
                     value={createMemberForm.senha}
                     onChange={handleCreateMemberInputChange('senha')}
-                    className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="w-full rounded-panel border border-line bg-paper px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="Digite a senha inicial"
                   />
                   <button
@@ -966,7 +966,7 @@ const MembrosTab: React.FC = () => {
                     onClick={() =>
                       setIsCreateMemberPasswordVisible((current) => !current)
                     }
-                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-gray-400 transition-colors hover:text-gray-700"
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-soft transition-colors hover:text-ink"
                     aria-label={
                       isCreateMemberPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'
                     }
@@ -986,7 +986,7 @@ const MembrosTab: React.FC = () => {
                 type="button"
                 onClick={handleCloseCreateMemberModal}
                 disabled={isCreatingMember}
-                className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancelar
               </button>
@@ -994,7 +994,7 @@ const MembrosTab: React.FC = () => {
                 type="button"
                 onClick={handleCreateMember}
                 disabled={isCreatingMember}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Plus size={16} />
                 {isCreatingMember ? 'Adicionando...' : 'Adicionar Membro'}
@@ -1016,17 +1016,17 @@ const MembrosTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="editar-membro-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-3xl border border-black/5 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <h2
                   id="editar-membro-modal-title"
-                  className="text-base font-semibold tracking-tight text-gray-900"
+                  className="text-base font-semibold tracking-tight text-ink"
                 >
                   Editar Informações
                 </h2>
-                <p className="mt-1 text-sm leading-5 text-gray-500">
+                <p className="mt-1 text-sm leading-5 text-muted">
                   Atualize apenas o nome e o telefone do membro selecionado.
                 </p>
               </div>
@@ -1034,7 +1034,7 @@ const MembrosTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseEditMemberModal}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAFAFA] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="flex h-9 w-9 items-center justify-center rounded-tile bg-paper text-muted transition-colors hover:bg-stone hover:text-ink"
                 aria-label="Fechar popup de editar membro"
               >
                 <X size={18} />
@@ -1043,7 +1043,7 @@ const MembrosTab: React.FC = () => {
 
             <div className="space-y-4">
               {editMemberError ? (
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                   {editMemberError}
                 </div>
               ) : null}
@@ -1051,7 +1051,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="editar-membro-nome"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Nome
                 </label>
@@ -1060,7 +1060,7 @@ const MembrosTab: React.FC = () => {
                   type="text"
                   value={editMemberForm.nome}
                   onChange={handleEditMemberInputChange('nome')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                  className="mt-2 w-full rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                   placeholder="Digite o nome do membro"
                 />
               </div>
@@ -1068,7 +1068,7 @@ const MembrosTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="editar-membro-telefone"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Telefone
                 </label>
@@ -1077,7 +1077,7 @@ const MembrosTab: React.FC = () => {
                   type="text"
                   value={editMemberForm.telefone}
                   onChange={handleEditMemberInputChange('telefone')}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                  className="mt-2 w-full rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                   placeholder="(11) 99999-9999"
                 />
               </div>
@@ -1088,7 +1088,7 @@ const MembrosTab: React.FC = () => {
                 type="button"
                 onClick={handleCloseEditMemberModal}
                 disabled={isSavingMemberEdit}
-                className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancelar
               </button>
@@ -1096,7 +1096,7 @@ const MembrosTab: React.FC = () => {
                 type="button"
                 onClick={handleSaveMemberEdit}
                 disabled={isSavingMemberEdit}
-                className="rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingMemberEdit ? 'Salvando...' : 'Salvar Alterações'}
               </button>

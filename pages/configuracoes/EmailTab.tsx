@@ -2,18 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Mail, Pencil, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-const SMTP_VALIDATION_WEBHOOK_URL =
-  'https://primary-systec.up.railway.app/webhook/f76854a9-c075-4945-820e-b5bcb92ddafd';
+interface CanalEmailConfig {
+  email_integracao?: string | null;
+  smtp_email?: string | null;
+  smtp_senha?: string | null;
+  smtp_host?: string | null;
+  smtp_port?: string | null;
+  smtp_ssl?: boolean | null;
+}
 
 interface MemberEmailConfigRecord {
   membro_id: string;
   nome: string | null;
-  email_integracao: string | null;
-  smtp_email: string | null;
-  smtp_senha: string | null;
-  smtp_host: string | null;
-  smtp_port: string | null;
-  smtp_ssl: boolean | null;
+  canal_email: CanalEmailConfig | null;
 }
 
 interface EmailConfigFormState {
@@ -34,47 +35,28 @@ const EMPTY_EMAIL_CONFIG_FORM: EmailConfigFormState = {
 
 const createEmailConfigForm = (
   memberConfig?: MemberEmailConfigRecord | null,
-): EmailConfigFormState => ({
-  smtp_email: memberConfig?.smtp_email?.trim() || '',
-  smtp_senha: memberConfig?.smtp_senha?.trim() || '',
-  smtp_host: memberConfig?.smtp_host?.trim() || '',
-  smtp_port: memberConfig?.smtp_port?.trim() || '',
-  smtp_ssl: Boolean(memberConfig?.smtp_ssl),
-});
+): EmailConfigFormState => {
+  const canalEmail = memberConfig?.canal_email || {};
 
-const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) =>
-  Boolean(
-    memberConfig?.smtp_email?.trim() ||
-      memberConfig?.smtp_senha?.trim() ||
-      memberConfig?.smtp_host?.trim() ||
-      memberConfig?.smtp_port?.trim() ||
-      memberConfig?.smtp_ssl,
+  return {
+    smtp_email: canalEmail.smtp_email?.trim() || '',
+    smtp_senha: canalEmail.smtp_senha?.trim() || '',
+    smtp_host: canalEmail.smtp_host?.trim() || '',
+    smtp_port: canalEmail.smtp_port?.trim() || '',
+    smtp_ssl: Boolean(canalEmail.smtp_ssl),
+  };
+};
+
+const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) => {
+  const canalEmail = memberConfig?.canal_email;
+
+  return Boolean(
+    canalEmail?.smtp_email?.trim() ||
+      canalEmail?.smtp_senha?.trim() ||
+      canalEmail?.smtp_host?.trim() ||
+      canalEmail?.smtp_port?.trim() ||
+      canalEmail?.smtp_ssl,
   );
-
-const extractWebhookResultado = (responseBody: unknown) => {
-  if (Array.isArray(responseBody)) {
-    const firstItem = responseBody[0];
-
-    if (
-      firstItem &&
-      typeof firstItem === 'object' &&
-      'resultado' in firstItem &&
-      typeof firstItem.resultado === 'string'
-    ) {
-      return firstItem.resultado;
-    }
-  }
-
-  if (
-    responseBody &&
-    typeof responseBody === 'object' &&
-    'resultado' in responseBody &&
-    typeof responseBody.resultado === 'string'
-  ) {
-    return responseBody.resultado;
-  }
-
-  return '';
 };
 
 const EmailTab: React.FC = () => {
@@ -112,11 +94,9 @@ const EmailTab: React.FC = () => {
         }
 
         const { data, error } = await supabase
-          .from('sales_membros_empresa')
-          .select(
-            'membro_id, nome, email_integracao, smtp_email, smtp_senha, smtp_host, smtp_port, smtp_ssl',
-          )
-          .eq('membro_id', session.user.id)
+          .from('sales_membros_v2')
+          .select('membro_id, nome, canal_email')
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (error) {
@@ -241,7 +221,8 @@ const EmailTab: React.FC = () => {
     setSaveSuccess(null);
 
     try {
-      const payload = {
+      const nextCanalEmail: CanalEmailConfig = {
+        ...(memberConfig.canal_email || {}),
         smtp_email: smtpEmail,
         smtp_senha: smtpSenha,
         smtp_host: smtpHost,
@@ -249,45 +230,9 @@ const EmailTab: React.FC = () => {
         smtp_ssl: emailConfigForm.smtp_ssl,
       };
 
-      const validationResponse = await fetch(SMTP_VALIDATION_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          nome: memberName,
-          ...payload,
-        }),
-      });
-
-      const validationText = await validationResponse.text();
-      let validationBody: unknown = null;
-
-      try {
-        validationBody = validationText ? JSON.parse(validationText) : null;
-      } catch {
-        validationBody = null;
-      }
-
-      const validationResultado = extractWebhookResultado(validationBody);
-
-      if (!validationResponse.ok) {
-        throw new Error(
-          validationResultado || 'Não foi possível validar as configurações SMTP.',
-        );
-      }
-
-      if (validationResultado !== 'VALIDADO') {
-        setSaveError(
-          validationResultado ||
-            'Não foi possível validar as configurações SMTP. Revise os dados e tente novamente.',
-        );
-        return;
-      }
-
       const { error } = await supabase
-        .from('sales_membros_empresa')
-        .update(payload)
+        .from('sales_membros_v2')
+        .update({ canal_email: nextCanalEmail })
         .eq('membro_id', memberConfig.membro_id);
 
       if (error) {
@@ -298,12 +243,12 @@ const EmailTab: React.FC = () => {
         current
           ? {
               ...current,
-              ...payload,
+              canal_email: nextCanalEmail,
             }
           : {
               membro_id: memberConfig.membro_id,
               nome: memberConfig.nome,
-              ...payload,
+              canal_email: nextCanalEmail,
             },
       );
       setIsEditingConfig(false);
@@ -320,44 +265,46 @@ const EmailTab: React.FC = () => {
   return (
     <div className="min-h-[520px]">
       <div className="space-y-5">
-        <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
+        <section className="rounded-[28px] border border-line-soft bg-paper p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F6] text-gray-700">
+            <div className="flex h-12 w-12 items-center justify-center rounded-panel bg-stone text-ink">
               <Mail size={20} />
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
+              <h2 className="text-[20px] font-semibold tracking-tight text-ink">
                 Envio de E-mails
               </h2>
-              <p className="max-w-2xl text-sm leading-6 text-gray-500">
+              <p className="max-w-2xl text-sm leading-6 text-muted">
                 Este é o e-mail de integração usado para o envio das mensagens da sua operação.
               </p>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-black/5 bg-white px-4 py-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
+          <div className="mt-6 rounded-panel border border-line-soft bg-card px-4 py-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft">
               E-mail de integração
             </p>
-            <p className="mt-2 break-all text-sm font-semibold text-gray-900">
-              {isLoadingConfig ? 'Carregando...' : memberConfig?.email_integracao?.trim() || '-'}
+            <p className="mt-2 break-all text-sm font-semibold text-ink">
+              {isLoadingConfig
+                ? 'Carregando...'
+                : memberConfig?.canal_email?.email_integracao?.trim() || '-'}
             </p>
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
+        <section className="rounded-[28px] border border-line-soft bg-paper p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F6] text-gray-700">
+              <div className="flex h-12 w-12 items-center justify-center rounded-panel bg-stone text-ink">
                 <Mail size={20} />
               </div>
 
               <div className="space-y-1">
-                <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
+                <h2 className="text-[20px] font-semibold tracking-tight text-ink">
                   Recebimento de E-mails
                 </h2>
-                <p className="max-w-2xl text-sm leading-6 text-gray-500">
+                <p className="max-w-2xl text-sm leading-6 text-muted">
                   Configure os dados SMTP que serão usados para receber e responder as cotações pelo
                   seu próprio e-mail.
                 </p>
@@ -368,7 +315,7 @@ const EmailTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStartEditing}
-                className="inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-[#F5F5F5] px-5 text-sm font-semibold text-gray-900 transition-colors hover:bg-[#EEEEEE]"
+                className="inline-flex h-11 items-center gap-2 self-start rounded-panel bg-stone px-5 text-sm font-semibold text-ink transition-colors hover:bg-stone"
               >
                 <Pencil size={16} />
                 Editar
@@ -378,19 +325,19 @@ const EmailTab: React.FC = () => {
 
           <div className="mt-6 space-y-4">
             {loadError ? (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {loadError}
               </div>
             ) : null}
 
             {saveError ? (
-              <div className="whitespace-pre-line rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium leading-6 text-red-600">
+              <div className="whitespace-pre-line rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium leading-6 text-red-600">
                 {saveError}
               </div>
             ) : null}
 
             {saveSuccess ? (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              <div className="rounded-panel border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
                 {saveSuccess}
               </div>
             ) : null}
@@ -399,7 +346,7 @@ const EmailTab: React.FC = () => {
               <div className="md:col-span-2">
                 <label
                   htmlFor="smtp-email"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   E-mail SMTP
                 </label>
@@ -409,7 +356,7 @@ const EmailTab: React.FC = () => {
                   value={emailConfigForm.smtp_email}
                   onChange={handleInputChange('smtp_email')}
                   disabled={!isEditingConfig || isLoadingConfig}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                  className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                   placeholder={isLoadingConfig ? 'Carregando...' : 'exemplo@empresa.com'}
                 />
               </div>
@@ -417,7 +364,7 @@ const EmailTab: React.FC = () => {
               <div className="md:col-span-2">
                 <label
                   htmlFor="smtp-senha"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Senha SMTP
                 </label>
@@ -428,14 +375,14 @@ const EmailTab: React.FC = () => {
                     value={emailConfigForm.smtp_senha}
                     onChange={handleInputChange('smtp_senha')}
                     disabled={!isEditingConfig || isLoadingConfig}
-                    className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                    className="w-full rounded-panel border border-line bg-card px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                     placeholder={isLoadingConfig ? 'Carregando...' : 'Digite a senha do SMTP'}
                   />
                   <button
                     type="button"
                     onClick={() => setIsPasswordVisible((current) => !current)}
                     disabled={isLoadingConfig}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-[#F5F5F5] hover:text-gray-700 disabled:cursor-default disabled:opacity-60"
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-tile text-muted-soft transition-colors hover:bg-stone hover:text-ink disabled:cursor-default disabled:opacity-60"
                     aria-label={isPasswordVisible ? 'Ocultar senha SMTP' : 'Mostrar senha SMTP'}
                   >
                     {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -446,7 +393,7 @@ const EmailTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="smtp-host"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Host SMTP
                 </label>
@@ -456,7 +403,7 @@ const EmailTab: React.FC = () => {
                   value={emailConfigForm.smtp_host}
                   onChange={handleInputChange('smtp_host')}
                   disabled={!isEditingConfig || isLoadingConfig}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                  className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                   placeholder={isLoadingConfig ? 'Carregando...' : 'smtp.empresa.com'}
                 />
               </div>
@@ -464,7 +411,7 @@ const EmailTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="smtp-port"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Porta SMTP
                 </label>
@@ -474,17 +421,17 @@ const EmailTab: React.FC = () => {
                   value={emailConfigForm.smtp_port}
                   onChange={handleInputChange('smtp_port')}
                   disabled={!isEditingConfig || isLoadingConfig}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                  className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                   placeholder={isLoadingConfig ? 'Carregando...' : '587'}
                 />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+            <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-gray-900">SSL do servidor</p>
-                  <p className="text-sm leading-6 text-gray-500">
+                  <p className="text-sm font-semibold text-ink">SSL do servidor</p>
+                  <p className="text-sm leading-6 text-muted">
                     Ative esta opção quando o seu provedor SMTP exigir conexão segura via SSL.
                   </p>
                 </div>
@@ -495,12 +442,12 @@ const EmailTab: React.FC = () => {
                   aria-checked={emailConfigForm.smtp_ssl}
                   disabled={!isEditingConfig || isLoadingConfig}
                   onClick={handleToggleSsl}
-                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors ${
-                    emailConfigForm.smtp_ssl ? 'bg-[#D9F06B]' : 'bg-[#E5E7EB]'
+                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
+                    emailConfigForm.smtp_ssl ? 'bg-lime' : 'bg-stone'
                   } disabled:cursor-default disabled:opacity-60`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                    className={`inline-block h-5 w-5 transform rounded-pill bg-card shadow-sm transition-transform ${
                       emailConfigForm.smtp_ssl ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -515,7 +462,7 @@ const EmailTab: React.FC = () => {
                     type="button"
                     onClick={handleCancelEditing}
                     disabled={isSavingConfig}
-                    className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
                   </button>
@@ -525,7 +472,7 @@ const EmailTab: React.FC = () => {
                   type="button"
                   onClick={handleSaveConfig}
                   disabled={isSavingConfig || isLoadingConfig}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={16} />
                   {isSavingConfig ? 'Salvando...' : 'Salvar configurações'}

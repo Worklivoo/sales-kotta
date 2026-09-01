@@ -53,9 +53,9 @@ const ConfiguracoesPage: React.FC = () => {
         }
 
         const { data, error } = await supabase
-          .from('sales_membros_empresa')
+          .from('sales_membros_v2')
           .select('cargo')
-          .eq('membro_id', session.user.id)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (error) {
@@ -101,62 +101,59 @@ const ConfiguracoesPage: React.FC = () => {
   );
 
   return (
-    <div className="h-full w-full overflow-y-auto">
+    <div className="h-full w-full overflow-y-auto font-sans">
       <div className="flex min-h-full flex-col gap-4">
-        <section className="rounded-2xl border border-black/5 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-black/5 px-5 py-5 sm:px-6">
-            <div className="space-y-1">
-              <h1 className="text-lg font-semibold tracking-tight text-gray-900">Configurações</h1>
-              <p className="text-sm text-gray-500">
-                Gerencie as configurações gerais da sua conta e operação.
-              </p>
-            </div>
+        <section className="flex flex-wrap items-center justify-between gap-4 px-1 pt-1">
+          <div className="space-y-1">
+            <h1 className="text-[22px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
+              Configurações
+            </h1>
+            <p className="text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
+              Gerencie as configurações gerais da sua conta e operação.
+            </p>
           </div>
+        </section>
 
-          <div className="border-b border-black/5 px-5 py-4 sm:px-6">
-            <div
-              className="flex flex-wrap items-center gap-2"
-              role="tablist"
-              aria-label="Abas de configurações"
-            >
-              {visibleTabs.map((tab) => {
-                const isActive = activeTab === tab.key;
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-panel border border-line-soft bg-card p-2"
+          role="tablist"
+          aria-label="Abas de configurações"
+        >
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.key;
 
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls={`configuracoes-tabpanel-${tab.key}`}
-                    id={`configuracoes-tab-${tab.key}`}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-[#EBF57D] text-gray-900'
-                        : 'bg-[#FAFAFA] text-gray-500 hover:bg-gray-100 hover:text-gray-800'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`configuracoes-tabpanel-${tab.key}`}
+                id={`configuracoes-tab-${tab.key}`}
+                onClick={() => setActiveTab(tab.key)}
+                className={`inline-flex items-center rounded-pill px-4 py-2.5 text-[13px] transition-colors ${
+                  isActive ? 'bg-lime text-ink' : 'bg-paper text-muted hover:text-ink'
+                }`}
+                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
-          <div
-            id={`configuracoes-tabpanel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`configuracoes-tab-${activeTab}`}
-            className="px-5 py-5 sm:px-6"
-          >
-            {activeTab === 'geral' ? <GeralTab /> : null}
-            {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}
-            {activeTab === 'email' ? <EmailTab /> : null}
-            {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
-            {activeTab === 'produtos' ? <ProdutosTab /> : null}
-            {activeTab === 'clientes' ? <ClientesTab /> : null}
-          </div>
+        <section
+          id={`configuracoes-tabpanel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`configuracoes-tab-${activeTab}`}
+          className="rounded-panel border border-line-soft bg-card p-5 sm:p-6"
+        >
+          {activeTab === 'geral' ? <GeralTab /> : null}
+          {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}
+          {activeTab === 'email' ? <EmailTab /> : null}
+          {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
+          {activeTab === 'produtos' ? <ProdutosTab /> : null}
+          {activeTab === 'clientes' ? <ClientesTab /> : null}
         </section>
       </div>
     </div>

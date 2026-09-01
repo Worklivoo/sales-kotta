@@ -2,15 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Bell, Pencil, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
+interface NotificationPreferences {
+  ativada?: boolean;
+  email?: string | null;
+  whatsapp?: string | null;
+  nova_mensagem?: boolean;
+  modo_semi?: boolean;
+  novo_cliente?: boolean;
+  nenhum_item?: boolean;
+}
+
 interface MemberNotificationRecord {
   membro_id: string;
-  notificacao_ativada: boolean | null;
-  notificacao_email: string | null;
-  notificacao_whatsapp: string | null;
-  notificacao_nova_mensagem: boolean | null;
-  notificacao_modo_semi: boolean | null;
-  notificacao_novo_cliente: boolean | null;
-  notificacao_nenhum_item: boolean | null;
+  preferencias_notificacao: NotificationPreferences | null;
 }
 
 interface NotificationFormState {
@@ -123,26 +127,33 @@ const isValidWhatsappDigits = (value: string) => normalizeWhatsappDigits(value).
 
 const createNotificationForm = (
   memberConfig?: MemberNotificationRecord | null,
-): NotificationFormState => ({
-  notificacao_ativada: Boolean(memberConfig?.notificacao_ativada),
-  notificacao_email: memberConfig?.notificacao_email?.trim() || '',
-  notificacao_whatsapp: formatWhatsappInput(memberConfig?.notificacao_whatsapp),
-  notificacao_nova_mensagem: Boolean(memberConfig?.notificacao_nova_mensagem),
-  notificacao_modo_semi: Boolean(memberConfig?.notificacao_modo_semi),
-  notificacao_novo_cliente: Boolean(memberConfig?.notificacao_novo_cliente),
-  notificacao_nenhum_item: Boolean(memberConfig?.notificacao_nenhum_item),
-});
+): NotificationFormState => {
+  const prefs = memberConfig?.preferencias_notificacao || {};
 
-const hasAnyNotificationConfig = (memberConfig?: MemberNotificationRecord | null) =>
-  Boolean(
-    memberConfig?.notificacao_ativada ||
-      memberConfig?.notificacao_email?.trim() ||
-      memberConfig?.notificacao_whatsapp?.trim() ||
-      memberConfig?.notificacao_nova_mensagem ||
-      memberConfig?.notificacao_modo_semi ||
-      memberConfig?.notificacao_novo_cliente ||
-      memberConfig?.notificacao_nenhum_item,
+  return {
+    notificacao_ativada: Boolean(prefs.ativada),
+    notificacao_email: prefs.email?.trim() || '',
+    notificacao_whatsapp: formatWhatsappInput(prefs.whatsapp),
+    notificacao_nova_mensagem: Boolean(prefs.nova_mensagem),
+    notificacao_modo_semi: Boolean(prefs.modo_semi),
+    notificacao_novo_cliente: Boolean(prefs.novo_cliente),
+    notificacao_nenhum_item: Boolean(prefs.nenhum_item),
+  };
+};
+
+const hasAnyNotificationConfig = (memberConfig?: MemberNotificationRecord | null) => {
+  const prefs = memberConfig?.preferencias_notificacao;
+
+  return Boolean(
+    prefs?.ativada ||
+      prefs?.email?.trim() ||
+      prefs?.whatsapp?.trim() ||
+      prefs?.nova_mensagem ||
+      prefs?.modo_semi ||
+      prefs?.novo_cliente ||
+      prefs?.nenhum_item,
   );
+};
 
 const NotificacoesTab: React.FC = () => {
   const [memberConfig, setMemberConfig] = useState<MemberNotificationRecord | null>(null);
@@ -177,11 +188,9 @@ const NotificacoesTab: React.FC = () => {
         }
 
         const { data, error } = await supabase
-          .from('sales_membros_empresa')
-          .select(
-            'membro_id, notificacao_ativada, notificacao_email, notificacao_whatsapp, notificacao_nova_mensagem, notificacao_modo_semi, notificacao_novo_cliente, notificacao_nenhum_item',
-          )
-          .eq('membro_id', session.user.id)
+          .from('sales_membros_v2')
+          .select('membro_id, preferencias_notificacao')
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (error) {
@@ -278,14 +287,14 @@ const NotificacoesTab: React.FC = () => {
       return;
     }
 
-    const payload = {
-      notificacao_ativada: notificationForm.notificacao_ativada,
-      notificacao_email: notificationForm.notificacao_email.trim() || null,
-      notificacao_whatsapp: notificationForm.notificacao_whatsapp.trim() ? whatsappDigits : null,
-      notificacao_nova_mensagem: notificationForm.notificacao_nova_mensagem,
-      notificacao_modo_semi: notificationForm.notificacao_modo_semi,
-      notificacao_novo_cliente: notificationForm.notificacao_novo_cliente,
-      notificacao_nenhum_item: notificationForm.notificacao_nenhum_item,
+    const preferencias: NotificationPreferences = {
+      ativada: notificationForm.notificacao_ativada,
+      email: notificationForm.notificacao_email.trim() || null,
+      whatsapp: notificationForm.notificacao_whatsapp.trim() ? whatsappDigits : null,
+      nova_mensagem: notificationForm.notificacao_nova_mensagem,
+      modo_semi: notificationForm.notificacao_modo_semi,
+      novo_cliente: notificationForm.notificacao_novo_cliente,
+      nenhum_item: notificationForm.notificacao_nenhum_item,
     };
 
     setIsSavingConfig(true);
@@ -294,8 +303,8 @@ const NotificacoesTab: React.FC = () => {
 
     try {
       const { error } = await supabase
-        .from('sales_membros_empresa')
-        .update(payload)
+        .from('sales_membros_v2')
+        .update({ preferencias_notificacao: preferencias })
         .eq('membro_id', memberConfig.membro_id);
 
       if (error) {
@@ -306,11 +315,11 @@ const NotificacoesTab: React.FC = () => {
         current
           ? {
               ...current,
-              ...payload,
+              preferencias_notificacao: preferencias,
             }
           : {
               membro_id: memberConfig.membro_id,
-              ...payload,
+              preferencias_notificacao: preferencias,
             },
       );
       setIsEditingConfig(false);
@@ -326,18 +335,18 @@ const NotificacoesTab: React.FC = () => {
   return (
     <div className="min-h-[520px]">
       <div>
-        <section className="rounded-[28px] border border-black/5 bg-[#FCFCFC] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
+        <section className="rounded-[28px] border border-line-soft bg-paper p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F3F4F6] text-gray-700">
+              <div className="flex h-12 w-12 items-center justify-center rounded-panel bg-stone text-ink">
                 <Bell size={20} />
               </div>
 
               <div className="space-y-1">
-                <h2 className="text-[20px] font-semibold tracking-tight text-gray-900">
+                <h2 className="text-[20px] font-semibold tracking-tight text-ink">
                   Configuração de Notificações
                 </h2>
-                <p className="max-w-2xl text-sm leading-6 text-gray-500">
+                <p className="max-w-2xl text-sm leading-6 text-muted">
                   Configure como e onde você deseja receber os alertas mais importantes da operação.
                 </p>
               </div>
@@ -347,7 +356,7 @@ const NotificacoesTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStartEditing}
-                className="inline-flex h-11 items-center gap-2 self-start rounded-2xl bg-[#F5F5F5] px-5 text-sm font-semibold text-gray-900 transition-colors hover:bg-[#EEEEEE]"
+                className="inline-flex h-11 items-center gap-2 self-start rounded-pill bg-lime px-5 text-sm font-semibold text-ink transition-colors hover:opacity-90"
               >
                 <Pencil size={16} />
                 Editar
@@ -357,28 +366,28 @@ const NotificacoesTab: React.FC = () => {
 
           <div className="mt-6 space-y-4">
             {loadError ? (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {loadError}
               </div>
             ) : null}
 
             {saveError ? (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {saveError}
               </div>
             ) : null}
 
             {saveSuccess ? (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              <div className="rounded-panel border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
                 {saveSuccess}
               </div>
             ) : null}
 
-            <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+            <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-gray-900">Notificações gerais</p>
-                  <p className="text-sm leading-6 text-gray-500">
+                  <p className="text-sm font-semibold text-ink">Notificações gerais</p>
+                  <p className="text-sm leading-6 text-muted">
                     Ative ou desative o recebimento de notificações da plataforma.
                   </p>
                 </div>
@@ -389,12 +398,12 @@ const NotificacoesTab: React.FC = () => {
                   aria-checked={notificationForm.notificacao_ativada}
                   disabled={!isEditingConfig || isLoadingConfig}
                   onClick={() => handleToggleField('notificacao_ativada')}
-                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors ${
-                    notificationForm.notificacao_ativada ? 'bg-[#D9F06B]' : 'bg-[#E5E7EB]'
+                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
+                    notificationForm.notificacao_ativada ? 'bg-lime' : 'bg-stone'
                   } disabled:cursor-default disabled:opacity-60`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                    className={`inline-block h-5 w-5 transform rounded-pill bg-card shadow-sm transition-transform ${
                       notificationForm.notificacao_ativada ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -406,7 +415,7 @@ const NotificacoesTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="notificacao-email"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   E-mail para notificações
                 </label>
@@ -416,7 +425,7 @@ const NotificacoesTab: React.FC = () => {
                   value={notificationForm.notificacao_email}
                   onChange={handleInputChange('notificacao_email')}
                   disabled={!isEditingConfig || isLoadingConfig}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                  className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                   placeholder={isLoadingConfig ? 'Carregando...' : 'exemplo@empresa.com'}
                 />
               </div>
@@ -424,7 +433,7 @@ const NotificacoesTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="notificacao-whatsapp"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   WhatsApp para notificações
                 </label>
@@ -434,16 +443,16 @@ const NotificacoesTab: React.FC = () => {
                   value={notificationForm.notificacao_whatsapp}
                   onChange={handleInputChange('notificacao_whatsapp')}
                   disabled={!isEditingConfig || isLoadingConfig}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-default disabled:bg-[#F7F7F7] disabled:text-gray-500"
+                  className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
                   placeholder={isLoadingConfig ? 'Carregando...' : '+55 (11) 99999-9999'}
                 />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-black/5 bg-white p-4">
+            <div className="rounded-panel border border-line-soft bg-card p-4">
               <div className="mb-4">
-                <p className="text-sm font-semibold text-gray-900">Tipos de notificação</p>
-                <p className="mt-1 text-sm leading-6 text-gray-500">
+                <p className="text-sm font-semibold text-ink">Tipos de notificação</p>
+                <p className="mt-1 text-sm leading-6 text-muted">
                   Escolha quais eventos devem gerar notificações para você.
                 </p>
               </div>
@@ -452,11 +461,11 @@ const NotificacoesTab: React.FC = () => {
                 {NOTIFICATION_TOGGLES.map((item) => (
                   <div
                     key={item.key}
-                    className="flex items-start justify-between gap-4 rounded-2xl border border-black/5 bg-[#FCFCFC] px-4 py-4"
+                    className="flex items-start justify-between gap-4 rounded-panel border border-line-soft bg-paper px-4 py-4"
                   >
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-gray-900">{item.title}</p>
-                      <p className="text-sm leading-6 text-gray-500">{item.description}</p>
+                      <p className="text-sm font-semibold text-ink">{item.title}</p>
+                      <p className="text-sm leading-6 text-muted">{item.description}</p>
                     </div>
 
                     <button
@@ -465,12 +474,12 @@ const NotificacoesTab: React.FC = () => {
                       aria-checked={notificationForm[item.key]}
                       disabled={!isEditingConfig || isLoadingConfig}
                       onClick={() => handleToggleField(item.key)}
-                      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors ${
-                        notificationForm[item.key] ? 'bg-[#D9F06B]' : 'bg-[#E5E7EB]'
+                      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
+                        notificationForm[item.key] ? 'bg-lime' : 'bg-stone'
                       } disabled:cursor-default disabled:opacity-60`}
                     >
                       <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                        className={`inline-block h-5 w-5 transform rounded-pill bg-card shadow-sm transition-transform ${
                           notificationForm[item.key] ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
@@ -487,7 +496,7 @@ const NotificacoesTab: React.FC = () => {
                     type="button"
                     onClick={handleCancelEditing}
                     disabled={isSavingConfig}
-                    className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
                   </button>
@@ -497,7 +506,7 @@ const NotificacoesTab: React.FC = () => {
                   type="button"
                   onClick={handleSaveConfig}
                   disabled={isSavingConfig || isLoadingConfig}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={16} />
                   {isSavingConfig ? 'Salvando...' : 'Salvar configurações'}

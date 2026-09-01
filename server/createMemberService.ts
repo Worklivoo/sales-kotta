@@ -18,6 +18,7 @@ interface CreateMemberServiceOptions {
 interface TeamMemberRecord {
   membro_id: string;
   empresa_id: string | null;
+  user_id: string;
   nome: string;
   email: string;
   telefone: string;
@@ -140,9 +141,9 @@ export const createMemberService = async ({
   }
 
   const { data: requesterMember, error: requesterMemberError } = await adminClient
-    .from('sales_membros_empresa')
+    .from('sales_membros_v2')
     .select('empresa_id, cargo')
-    .eq('membro_id', requesterUser.id)
+    .eq('user_id', requesterUser.id)
     .maybeSingle();
 
   console.log('[createMemberService][requester-member]', {
@@ -185,18 +186,18 @@ export const createMemberService = async ({
     throw new HttpError(500, 'Nao foi possivel obter o ID do usuario criado.');
   }
 
-  const memberRecord: TeamMemberRecord = {
-    membro_id: createdAuthUser.user.id,
-    empresa_id: requesterMember.empresa_id,
-    nome,
-    email,
-    telefone,
-    cargo: 'VENDEDOR',
-  };
-
-  const { error: insertMemberError } = await adminClient
-    .from('sales_membros_empresa')
-    .insert(memberRecord);
+  const { data: insertedMember, error: insertMemberError } = await adminClient
+    .from('sales_membros_v2')
+    .insert({
+      empresa_id: requesterMember.empresa_id,
+      user_id: createdAuthUser.user.id,
+      nome,
+      email,
+      telefone,
+      cargo: 'VENDEDOR',
+    })
+    .select('membro_id, empresa_id, user_id, nome, email, telefone, cargo')
+    .single();
 
   console.log('[createMemberService][member-insert]', {
     createdUserId: createdAuthUser.user.id,
@@ -204,13 +205,15 @@ export const createMemberService = async ({
     insertMemberErrorMessage: insertMemberError?.message || null,
   });
 
-  if (insertMemberError) {
+  if (insertMemberError || !insertedMember) {
     await adminClient.auth.admin.deleteUser(createdAuthUser.user.id);
     console.warn('[createMemberService][rollback-delete-auth-user]', {
       createdUserId: createdAuthUser.user.id,
     });
-    throw new HttpError(400, insertMemberError.message);
+    throw new HttpError(400, insertMemberError?.message || 'Nao foi possivel criar o membro.');
   }
+
+  const memberRecord = insertedMember as TeamMemberRecord;
 
   console.log('[createMemberService][success]', {
     createdUserId: memberRecord.membro_id,

@@ -20,7 +20,6 @@ import {
 import { supabase } from '../../lib/supabase';
 
 type BudgetMode = 'AUTO' | 'SEMI';
-type ScrapperType = 'API' | 'XML' | 'HTML' | 'PLANILHA' | 'SITE';
 type QuoteRuleLevel = 'OBRIGATORIO' | 'DESEJAVEL';
 
 interface MemberAccountRecord {
@@ -28,12 +27,12 @@ interface MemberAccountRecord {
   empresa_id: string | null;
   nome: string | null;
   email: string | null;
-  email_integracao: string | null;
   telefone: string | null;
   status: string | null;
   cargo: string | null;
   modo_orcamento: BudgetMode | null;
   orcamento_novos_clientes: boolean | null;
+  canal_email: Record<string, unknown> | null;
 }
 
 interface AccountFormState {
@@ -72,14 +71,6 @@ interface QuoteRuleFormState {
   descricao: string;
 }
 
-interface SourceDataFormState {
-  scrapper_tipo: ScrapperType | null;
-  scrapper_link: string;
-  scrapper_body: string;
-  scrapper_query: string;
-  scrapper_headers: string;
-}
-
 interface CompanyPlanRecord {
   plano: string | null;
   plano_ciclo: string | null;
@@ -87,15 +78,8 @@ interface CompanyPlanRecord {
   plano_status: string | null;
   enviar_proposta: boolean | null;
   regras_cotacao: unknown;
-  scrapper_tipo: ScrapperType | null;
-  scrapper_link: string | null;
-  scrapper_body: unknown;
-  scrapper_query: unknown;
-  scrapper_headers: unknown;
-  cliente_api_link: string | null;
-  cliente_api_body: unknown;
-  cliente_api_query: unknown;
-  cliente_api_header: unknown;
+  integracao_produtos: Record<string, unknown> | null;
+  integracao_clientes: Record<string, unknown> | null;
 }
 
 const generalShortcutItems = [
@@ -115,7 +99,6 @@ const SHOW_TERMS_SHORTCUT = false;
 const SHOW_USER_PLAN_SECTION = false;
 
 const QUOTE_RULE_LEVEL_OPTIONS: QuoteRuleLevel[] = ['OBRIGATORIO', 'DESEJAVEL'];
-const SCRAPPER_TYPE_OPTIONS: ScrapperType[] = ['API', 'XML', 'HTML', 'PLANILHA', 'SITE'];
 
 const PROTECTED_QUOTE_RULE_KEYS: readonly string[] = ['Item'];
 
@@ -147,52 +130,6 @@ const formatBudgetModeLabel = (value: BudgetMode | null) => {
 
   return '-';
 };
-
-const formatJsonEditorValue = (value: unknown) => {
-  if (value === null || value === undefined || value === '') {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2);
-    } catch {
-      return value;
-    }
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return '';
-  }
-};
-
-const parseOptionalJsonEditorValue = (value: string) => {
-  const trimmedValue = value.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  return JSON.parse(trimmedValue);
-};
-
-const createSourceDataForm = (companyData?: CompanyPlanRecord | null): SourceDataFormState => ({
-  scrapper_tipo: companyData?.scrapper_tipo ?? null,
-  scrapper_link: companyData?.scrapper_link ?? '',
-  scrapper_body: formatJsonEditorValue(companyData?.scrapper_body),
-  scrapper_query: formatJsonEditorValue(companyData?.scrapper_query),
-  scrapper_headers: formatJsonEditorValue(companyData?.scrapper_headers),
-});
-
-const createClientSourceDataForm = (companyData?: CompanyPlanRecord | null): SourceDataFormState => ({
-  scrapper_tipo: 'API',
-  scrapper_link: companyData?.cliente_api_link ?? '',
-  scrapper_body: formatJsonEditorValue(companyData?.cliente_api_body),
-  scrapper_query: formatJsonEditorValue(companyData?.cliente_api_query),
-  scrapper_headers: formatJsonEditorValue(companyData?.cliente_api_header),
-});
 
 const formatMemberStatusLabel = (value: string | null) => {
   if (value === 'ATIVO') {
@@ -399,15 +336,6 @@ const GeralTab: React.FC = () => {
   const [newClientsBudgetError, setNewClientsBudgetError] = useState<string | null>(null);
   const [isSavingSendProposal, setIsSavingSendProposal] = useState(false);
   const [sendProposalError, setSendProposalError] = useState<string | null>(null);
-  const [isSourceDataModalOpen, setIsSourceDataModalOpen] = useState(false);
-  const [sourceDataForm, setSourceDataForm] = useState<SourceDataFormState>(createSourceDataForm());
-  const [sourceDataError, setSourceDataError] = useState<string | null>(null);
-  const [isSavingSourceData, setIsSavingSourceData] = useState(false);
-  const [isClientSourceDataModalOpen, setIsClientSourceDataModalOpen] = useState(false);
-  const [clientSourceDataForm, setClientSourceDataForm] =
-    useState<SourceDataFormState>(createClientSourceDataForm());
-  const [clientSourceDataError, setClientSourceDataError] = useState<string | null>(null);
-  const [isSavingClientSourceData, setIsSavingClientSourceData] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -451,11 +379,11 @@ const GeralTab: React.FC = () => {
         }
 
         const { data, error } = await supabase
-          .from('sales_membros_empresa')
+          .from('sales_membros_v2')
           .select(
-            'membro_id, empresa_id, nome, email, email_integracao, telefone, status, cargo, modo_orcamento, orcamento_novos_clientes',
+            'membro_id, empresa_id, nome, email, telefone, status, cargo, modo_orcamento, orcamento_novos_clientes, canal_email',
           )
-          .eq('membro_id', session.user.id)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (error) {
@@ -506,9 +434,9 @@ const GeralTab: React.FC = () => {
 
       try {
         const { data, error } = await supabase
-          .from('sales_empresa')
+          .from('sales_empresas_v2')
           .select(
-            'plano, plano_ciclo, valor_mensal, plano_status, enviar_proposta, regras_cotacao, scrapper_tipo, scrapper_link, scrapper_body, scrapper_query, scrapper_headers, cliente_api_link, cliente_api_body, cliente_api_query, cliente_api_header',
+            'plano, plano_ciclo, valor_mensal, plano_status, enviar_proposta, regras_cotacao, integracao_produtos, integracao_clientes',
           )
           .eq('empresa_id', memberAccount.empresa_id)
           .maybeSingle();
@@ -548,45 +476,48 @@ const GeralTab: React.FC = () => {
   const memberStatusLabel = formatMemberStatusLabel(memberAccount?.status || null);
   const memberStatusClassName =
     memberAccount?.status === 'ATIVO'
-      ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-      : 'border-black/10 bg-white text-gray-500';
+      ? 'border-lime bg-lime/15 text-ink'
+      : 'border-line bg-card text-muted';
   const memberName = memberAccount?.nome?.trim() || '-';
   const memberEmail = memberAccount?.email?.trim() || '-';
   const memberPhone = formatPhone(memberAccount?.telefone || null);
   const memberId = memberAccount?.membro_id?.trim() || '-';
-  const memberIntegrationEmail = memberAccount?.email_integracao?.trim() || '-';
+  const memberIntegrationEmail =
+    (typeof memberAccount?.canal_email?.email_integracao === 'string'
+      ? (memberAccount.canal_email.email_integracao as string).trim()
+      : '') || '-';
   const memberBudgetMode = memberAccount?.modo_orcamento ?? null;
   const isAutomaticBudgetMode = memberBudgetMode === 'AUTO';
   const budgetModeLabel = formatBudgetModeLabel(memberBudgetMode);
   const allowBudgetForNewClients = memberAccount?.orcamento_novos_clientes === true;
   const newClientsBudgetLabel = allowBudgetForNewClients ? 'Ativado' : 'Desativado';
   const newClientsBudgetStatusClassName = allowBudgetForNewClients
-    ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-    : 'border-black/10 bg-[#FAFAFA] text-gray-600';
+    ? 'border-lime bg-lime/15 text-ink'
+    : 'border-line bg-paper text-muted';
   const isSendProposalEnabled = companyPlan?.enviar_proposta === true;
   const sendProposalLabel = isSendProposalEnabled ? 'Ativado' : 'Desativado';
   const sendProposalStatusClassName = isSendProposalEnabled
-    ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-    : 'border-black/10 bg-[#FAFAFA] text-gray-600';
+    ? 'border-lime bg-lime/15 text-ink'
+    : 'border-line bg-paper text-muted';
   const companyPlanName = companyPlan?.plano?.trim() || '-';
   const companyPlanCycle = formatEnumLabel(companyPlan?.plano_ciclo || null);
   const companyPlanPrice = formatCurrency(companyPlan?.valor_mensal ?? null);
   const companyPlanStatus = formatEnumLabel(companyPlan?.plano_status || null);
-  const companySourceType = companyPlan?.scrapper_tipo ?? null;
-  const companySourceLink = companyPlan?.scrapper_link?.trim() || '';
+  const companySourceType =
+    typeof companyPlan?.integracao_produtos?.tipo === 'string'
+      ? (companyPlan.integracao_produtos.tipo as string)
+      : null;
+  const companySourceLink =
+    (typeof companyPlan?.integracao_produtos?.url === 'string'
+      ? (companyPlan.integracao_produtos.url as string).trim()
+      : '') || '';
   const companySourceStatusLabel = companySourceType ? formatEnumLabel(companySourceType) : '-';
-  const hasCompanySourceConfigured =
-    Boolean(companySourceType) ||
-    Boolean(companySourceLink) ||
-    Boolean(companyPlan?.scrapper_body) ||
-    Boolean(companyPlan?.scrapper_query) ||
-    Boolean(companyPlan?.scrapper_headers);
-  const companyClientSourceLink = companyPlan?.cliente_api_link?.trim() || '';
-  const hasCompanyClientSourceConfigured =
-    Boolean(companyClientSourceLink) ||
-    Boolean(companyPlan?.cliente_api_body) ||
-    Boolean(companyPlan?.cliente_api_query) ||
-    Boolean(companyPlan?.cliente_api_header);
+  const hasCompanySourceConfigured = Boolean(companySourceType) || Boolean(companySourceLink);
+  const companyClientSourceLink =
+    (typeof companyPlan?.integracao_clientes?.url === 'string'
+      ? (companyPlan.integracao_clientes.url as string).trim()
+      : '') || '';
+  const hasCompanyClientSourceConfigured = Boolean(companyClientSourceLink);
   const companyClientSourceStatusLabel = hasCompanyClientSourceConfigured ? 'API' : '-';
   const companyQuoteRules = useMemo(
     () => parseQuoteRules(companyPlan?.regras_cotacao),
@@ -609,10 +540,10 @@ const GeralTab: React.FC = () => {
     JSON.stringify(serializeQuoteRules(sortQuoteRules(quoteRulesDraft)));
   const companyPlanStatusClassName =
     companyPlan?.plano_status === 'ATIVO'
-      ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
+      ? 'border-lime bg-lime/15 text-ink'
       : companyPlan?.plano_status === 'EM_ATRASO'
         ? 'border-orange-200 bg-orange-50 text-orange-700'
-        : 'border-black/10 bg-white text-gray-500';
+        : 'border-line bg-card text-muted';
 
   const handleStartEditingAccount = () => {
     setAccountSaveError(null);
@@ -661,7 +592,7 @@ const GeralTab: React.FC = () => {
     try {
       const telefone = `55${normalizedPhoneDigits}`;
       const { error } = await supabase
-        .from('sales_membros_empresa')
+        .from('sales_membros_v2')
         .update({
           nome: normalizedName,
           telefone,
@@ -704,7 +635,7 @@ const GeralTab: React.FC = () => {
 
     try {
       const { error } = await supabase
-        .from('sales_membros_empresa')
+        .from('sales_membros_v2')
         .update({
           modo_orcamento: nextMode,
         })
@@ -743,7 +674,7 @@ const GeralTab: React.FC = () => {
 
     try {
       const { error } = await supabase
-        .from('sales_membros_empresa')
+        .from('sales_membros_v2')
         .update({
           orcamento_novos_clientes: nextValue,
         })
@@ -784,7 +715,7 @@ const GeralTab: React.FC = () => {
 
     try {
       const { error } = await supabase
-        .from('sales_empresa')
+        .from('sales_empresas_v2')
         .update({
           enviar_proposta: nextValue,
         })
@@ -1031,7 +962,7 @@ const GeralTab: React.FC = () => {
       }
 
       const { error } = await supabase
-        .from('sales_empresa')
+        .from('sales_empresas_v2')
         .update({
           regras_cotacao: serializedRules,
         })
@@ -1056,179 +987,6 @@ const GeralTab: React.FC = () => {
       setQuoteRulesError(error?.message || 'Não foi possível salvar as regras de cotação.');
     } finally {
       setIsSavingQuoteRules(false);
-    }
-  };
-
-  const handleOpenSourceDataModal = () => {
-    setSourceDataForm(createSourceDataForm(companyPlan));
-    setSourceDataError(null);
-    setIsSourceDataModalOpen(true);
-  };
-
-  const handleCloseSourceDataModal = () => {
-    setIsSourceDataModalOpen(false);
-  };
-
-  const handleOpenClientSourceDataModal = () => {
-    setClientSourceDataForm(createClientSourceDataForm(companyPlan));
-    setClientSourceDataError(null);
-    setIsClientSourceDataModalOpen(true);
-  };
-
-  const handleCloseClientSourceDataModal = () => {
-    setIsClientSourceDataModalOpen(false);
-  };
-
-  const handleSelectScrapperType = (type: ScrapperType) => {
-    if (type !== 'API') {
-      return;
-    }
-
-    setSourceDataForm((current) => ({
-      ...current,
-      scrapper_tipo: type,
-    }));
-    setSourceDataError(null);
-  };
-
-  const handleSourceDataInputChange =
-    (
-      field: keyof Pick<
-        SourceDataFormState,
-        'scrapper_link' | 'scrapper_body' | 'scrapper_query' | 'scrapper_headers'
-      >,
-    ) =>
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const nextValue = event.target.value;
-
-      setSourceDataForm((current) => ({
-        ...current,
-        [field]: nextValue,
-      }));
-      setSourceDataError(null);
-    };
-
-  const handleClientSourceDataInputChange =
-    (
-      field: keyof Pick<
-        SourceDataFormState,
-        'scrapper_link' | 'scrapper_body' | 'scrapper_query' | 'scrapper_headers'
-      >,
-    ) =>
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const nextValue = event.target.value;
-
-      setClientSourceDataForm((current) => ({
-        ...current,
-        [field]: nextValue,
-      }));
-      setClientSourceDataError(null);
-    };
-
-  const handleSaveSourceData = async () => {
-    if (!memberAccount?.empresa_id) {
-      setSourceDataError('Não foi possível identificar a empresa para salvar a fonte de dados.');
-      return;
-    }
-
-    if (sourceDataForm.scrapper_tipo !== 'API') {
-      setSourceDataError('Selecione a integracao API para configurar a fonte de dados.');
-      return;
-    }
-
-    setIsSavingSourceData(true);
-    setSourceDataError(null);
-
-    try {
-      const payload = {
-        scrapper_tipo: sourceDataForm.scrapper_tipo,
-        scrapper_link: sourceDataForm.scrapper_link.trim() || null,
-        scrapper_body: parseOptionalJsonEditorValue(sourceDataForm.scrapper_body),
-        scrapper_query: parseOptionalJsonEditorValue(sourceDataForm.scrapper_query),
-        scrapper_headers: parseOptionalJsonEditorValue(sourceDataForm.scrapper_headers),
-      };
-
-      const { error } = await supabase
-        .from('sales_empresa')
-        .update(payload)
-        .eq('empresa_id', memberAccount.empresa_id);
-
-      if (error) {
-        throw error;
-      }
-
-      setCompanyPlan((current) =>
-        current
-          ? {
-              ...current,
-              ...payload,
-            }
-          : current,
-      );
-      setIsSourceDataModalOpen(false);
-    } catch (error: any) {
-      console.error('Erro ao salvar fonte de dados:', error);
-      if (error instanceof SyntaxError) {
-        setSourceDataError('Body, Query e Header devem estar em JSON válido.');
-      } else {
-        setSourceDataError(error?.message || 'Não foi possível salvar a fonte de dados.');
-      }
-    } finally {
-      setIsSavingSourceData(false);
-    }
-  };
-
-  const handleSaveClientSourceData = async () => {
-    if (!memberAccount?.empresa_id) {
-      setClientSourceDataError(
-        'Não foi possível identificar a empresa para salvar a fonte de dados.',
-      );
-      return;
-    }
-
-    if (clientSourceDataForm.scrapper_tipo !== 'API') {
-      setClientSourceDataError('Selecione a integracao API para configurar a fonte de dados.');
-      return;
-    }
-
-    setIsSavingClientSourceData(true);
-    setClientSourceDataError(null);
-
-    try {
-      const payload = {
-        cliente_api_link: clientSourceDataForm.scrapper_link.trim() || null,
-        cliente_api_body: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_body),
-        cliente_api_query: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_query),
-        cliente_api_header: parseOptionalJsonEditorValue(clientSourceDataForm.scrapper_headers),
-      };
-
-      const { error } = await supabase
-        .from('sales_empresa')
-        .update(payload)
-        .eq('empresa_id', memberAccount.empresa_id);
-
-      if (error) {
-        throw error;
-      }
-
-      setCompanyPlan((current) =>
-        current
-          ? {
-              ...current,
-              ...payload,
-            }
-          : current,
-      );
-      setIsClientSourceDataModalOpen(false);
-    } catch (error: any) {
-      console.error('Erro ao salvar fonte de dados de clientes:', error);
-      if (error instanceof SyntaxError) {
-        setClientSourceDataError('Body, Query e Header devem estar em JSON válido.');
-      } else {
-        setClientSourceDataError(error?.message || 'Não foi possível salvar a fonte de dados.');
-      }
-    } finally {
-      setIsSavingClientSourceData(false);
     }
   };
 
@@ -1329,21 +1087,21 @@ const GeralTab: React.FC = () => {
     <>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4">
+          <div className="rounded-panel border border-line-soft bg-paper p-4">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                   <Settings2 size={16} />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-gray-900">Conta</h2>
-                  <p className="mt-1 text-xs leading-5 text-gray-500">Informações do seu usuário</p>
+                  <h2 className="text-sm font-semibold text-ink">Conta</h2>
+                  <p className="mt-1 text-xs leading-5 text-muted">Informações do seu usuário</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <span
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${memberStatusClassName}`}
+                  className={`rounded-pill border px-2.5 py-1 text-[11px] font-semibold ${memberStatusClassName}`}
                 >
                   {isAccountLoading ? 'Carregando...' : memberStatusLabel}
                 </span>
@@ -1352,7 +1110,7 @@ const GeralTab: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleStartEditingAccount}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-800"
+                    className="flex h-8 w-8 items-center justify-center rounded-tile bg-card text-muted shadow-sm transition-colors hover:bg-paper hover:text-ink"
                     aria-label="Editar conta"
                   >
                     <Pencil size={14} />
@@ -1361,76 +1119,76 @@ const GeralTab: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-black/5 bg-white p-4">
+            <div className="space-y-3 rounded-panel border border-line-soft bg-card p-4">
               {accountError ? (
-                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                <div className="rounded-tile border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
                   {accountError}
                 </div>
               ) : null}
 
               {accountSaveError ? (
-                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                <div className="rounded-tile border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
                   {accountSaveError}
                 </div>
               ) : null}
 
               {accountSaveSuccess ? (
-                <div className="rounded-xl border border-[#EBF57D] bg-[#F8FBCF] px-3 py-2 text-xs font-medium text-gray-700">
+                <div className="rounded-tile border border-lime bg-lime/15 px-3 py-2 text-xs font-medium text-ink">
                   {accountSaveSuccess}
                 </div>
               ) : null}
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">Nome do usuário</p>
+                <p className="text-[11px] font-medium text-muted-soft">Nome do usuário</p>
                 {isEditingAccount ? (
                   <input
                     type="text"
                     value={accountForm.nome}
                     onChange={handleAccountInputChange('nome')}
-                    className="mt-2 w-full rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2.5 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="mt-2 w-full rounded-tile border border-line bg-paper px-3 py-2.5 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="Digite o nome do usuário"
                   />
                 ) : (
-                  <p className="mt-1 text-lg font-semibold text-gray-900">
+                  <p className="mt-1 text-lg font-semibold text-ink">
                     {isAccountLoading ? 'Carregando...' : memberName}
                   </p>
                 )}
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">E-mail do usuário</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">
+                <p className="text-[11px] font-medium text-muted-soft">E-mail do usuário</p>
+                <p className="mt-1 text-sm font-semibold text-ink">
                   {isAccountLoading ? 'Carregando...' : memberEmail}
                 </p>
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">Telefone</p>
+                <p className="text-[11px] font-medium text-muted-soft">Telefone</p>
                 {isEditingAccount ? (
                   <input
                     type="text"
                     value={accountForm.telefone}
                     onChange={handleAccountInputChange('telefone')}
-                    className="mt-2 w-full rounded-xl border border-black/10 bg-[#FAFAFA] px-3 py-2.5 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="mt-2 w-full rounded-tile border border-line bg-paper px-3 py-2.5 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="(11) 99999-9999"
                   />
                 ) : (
-                  <p className="mt-1 text-sm font-semibold text-gray-900">
+                  <p className="mt-1 text-sm font-semibold text-ink">
                     {isAccountLoading ? 'Carregando...' : memberPhone}
                   </p>
                 )}
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">ID do usuário</p>
-                <p className="mt-1 break-all text-[11px] font-medium text-gray-400">
+                <p className="text-[11px] font-medium text-muted-soft">ID do usuário</p>
+                <p className="mt-1 break-all text-[11px] font-medium text-muted-soft">
                   {isAccountLoading ? 'Carregando...' : memberId}
                 </p>
               </div>
 
               <div>
-                <p className="text-[11px] font-medium text-gray-400">E-mail de integração</p>
-                <p className="mt-1 break-all text-[11px] font-medium text-gray-400">
+                <p className="text-[11px] font-medium text-muted-soft">E-mail de integração</p>
+                <p className="mt-1 break-all text-[11px] font-medium text-muted-soft">
                   {isAccountLoading ? 'Carregando...' : memberIntegrationEmail}
                 </p>
               </div>
@@ -1441,7 +1199,7 @@ const GeralTab: React.FC = () => {
                     type="button"
                     onClick={handleSaveAccount}
                     disabled={isSavingAccount}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-tile bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Check size={15} />
                     {isSavingAccount ? 'Salvando...' : 'Salvar'}
@@ -1452,49 +1210,49 @@ const GeralTab: React.FC = () => {
           </div>
 
           {isAdminMember && SHOW_USER_PLAN_SECTION ? (
-            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4">
+            <div className="rounded-panel border border-line-soft bg-paper p-4">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                     <Crown size={16} />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-900">Plano do usuário</h2>
+                    <h2 className="text-sm font-semibold text-ink">Plano do usuário</h2>
                   </div>
                 </div>
 
                 <span
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${companyPlanStatusClassName}`}
+                  className={`rounded-pill border px-2.5 py-1 text-[11px] font-semibold ${companyPlanStatusClassName}`}
                 >
                   {isCompanyPlanLoading ? 'Carregando...' : companyPlanStatus}
                 </span>
               </div>
 
-              <div className="space-y-3 rounded-2xl border border-black/5 bg-white p-4">
+              <div className="space-y-3 rounded-panel border border-line-soft bg-card p-4">
                 {companyPlanError ? (
-                  <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                  <div className="rounded-tile border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
                     {companyPlanError}
                   </div>
                 ) : null}
 
                 <div>
-                  <p className="text-[11px] font-medium text-gray-400">Plano</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">
+                  <p className="text-[11px] font-medium text-muted-soft">Plano</p>
+                  <p className="mt-1 text-sm font-semibold text-ink">
                     {isCompanyPlanLoading ? 'Carregando...' : companyPlanName}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">Ciclo</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">
+                    <p className="text-[11px] font-medium text-muted-soft">Ciclo</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
                       {isCompanyPlanLoading ? 'Carregando...' : companyPlanCycle}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">Valor mensal</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">
+                    <p className="text-[11px] font-medium text-muted-soft">Valor mensal</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">
                       {isCompanyPlanLoading ? 'Carregando...' : companyPlanPrice}
                     </p>
                   </div>
@@ -1520,7 +1278,7 @@ const GeralTab: React.FC = () => {
                         ? handleOpenTermsModal
                         : undefined
                   }
-                  className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-sm font-medium text-gray-500 transition-colors hover:bg-[#FAFAFA] hover:text-gray-800"
+                  className="flex w-full items-center gap-3 rounded-tile px-2 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-paper hover:text-ink"
                 >
                   <Icon size={15} />
                   <span>{item.label}</span>
@@ -1532,15 +1290,15 @@ const GeralTab: React.FC = () => {
 
         <section className="space-y-4">
           {isAdminMember ? (
-            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+            <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                     <ClipboardCheck size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Regras de Cotação</h3>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                    <h3 className="text-sm font-semibold text-ink">Regras de Cotação</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted">
                       Defina as orientações que a IA deve seguir ao validar a cotação do cliente.
                     </p>
                   </div>
@@ -1549,41 +1307,41 @@ const GeralTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleOpenQuoteRulesModal}
-                  className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                  className="rounded-tile bg-card px-4 py-2 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-paper"
                 >
                   Editar
                 </button>
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
+              <div className="space-y-4 rounded-panel border border-line-soft bg-card px-4 py-4">
                 {quoteRulesPreview.length > 0 ? (
                   <div className="space-y-2">
                     {quoteRulesPreview.map((rule) => (
                       <div
                         key={rule.name}
-                        className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-3"
+                        className="rounded-panel border border-line-soft bg-paper px-4 py-3"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900">{rule.name}</p>
-                            <p className="mt-1 text-xs leading-5 text-gray-500">{rule.descricao}</p>
+                            <p className="text-sm font-semibold text-ink">{rule.name}</p>
+                            <p className="mt-1 text-xs leading-5 text-muted">{rule.descricao}</p>
                           </div>
 
                           <div className="flex shrink-0 flex-col items-end gap-2">
                             <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              className={`rounded-pill px-2.5 py-1 text-[11px] font-semibold ${
                                 rule.nivel === 'OBRIGATORIO'
-                                  ? 'bg-[#EBF57D] text-gray-900'
-                                  : 'bg-white text-gray-500'
+                                  ? 'bg-lime text-ink'
+                                  : 'bg-card text-muted'
                               }`}
                             >
                               {formatEnumLabel(rule.nivel)}
                             </span>
                             <span
-                              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                              className={`rounded-pill border px-2.5 py-1 text-[11px] font-semibold ${
                                 rule.ativo
-                                  ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-                                  : 'border-black/10 bg-white text-gray-500'
+                                  ? 'border-lime bg-lime/15 text-ink'
+                                  : 'border-line bg-card text-muted'
                               }`}
                             >
                               {rule.ativo ? 'Ativa' : 'Desativada'}
@@ -1594,9 +1352,9 @@ const GeralTab: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAFAFA] px-4 py-6 text-center">
-                    <p className="text-sm font-medium text-gray-500">Nenhuma regra configurada ainda.</p>
-                    <p className="mt-1 text-xs text-gray-400">
+                  <div className="rounded-panel border border-dashed border-line bg-paper px-4 py-6 text-center">
+                    <p className="text-sm font-medium text-muted">Nenhuma regra configurada ainda.</p>
+                    <p className="mt-1 text-xs text-muted-soft">
                       Crie regras para orientar a IA sobre quais informações solicitar.
                     </p>
                   </div>
@@ -1605,14 +1363,14 @@ const GeralTab: React.FC = () => {
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+          <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
             <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                 <Split size={16} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Modo do Orçamento</h3>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
+                <h3 className="text-sm font-semibold text-ink">Modo do Orçamento</h3>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
                   Defina se a IA pode enviar o orçamento automaticamente ao cliente ou se ele sempre
                   deve passar por aprovação humana.
                 </p>
@@ -1620,24 +1378,24 @@ const GeralTab: React.FC = () => {
             </div>
 
             {budgetModeError ? (
-              <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="mb-4 rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {budgetModeError}
               </div>
             ) : null}
 
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
+            <div className="flex items-center justify-between gap-4 rounded-panel border border-line-soft bg-card px-4 py-4">
               <div>
-                <p className="text-xs font-medium text-gray-400">Modo atual</p>
+                <p className="text-xs font-medium text-muted-soft">Modo atual</p>
                 <span
-                  className={`mt-2 inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  className={`mt-2 inline-flex rounded-pill border px-3 py-1 text-[11px] font-semibold ${
                     memberBudgetMode === 'AUTO'
-                      ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-700'
-                      : 'border-black/10 bg-[#FAFAFA] text-gray-600'
+                      ? 'border-lime bg-lime/15 text-ink'
+                      : 'border-line bg-paper text-muted'
                   }`}
                 >
                   {isAccountLoading ? 'Carregando...' : budgetModeLabel}
                 </span>
-                <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
+                <p className="mt-3 max-w-xl text-xs leading-5 text-muted">
                   {isAccountLoading
                     ? 'Carregando configuração do modo de orçamento.'
                     : isAutomaticBudgetMode
@@ -1653,12 +1411,12 @@ const GeralTab: React.FC = () => {
                 aria-label="Alternar modo do orçamento"
                 onClick={handleToggleBudgetMode}
                 disabled={isAccountLoading || isSavingBudgetMode || Boolean(accountError)}
-                className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
-                  isAutomaticBudgetMode ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                className={`flex h-6 w-11 items-center rounded-pill px-1 transition-colors ${
+                  isAutomaticBudgetMode ? 'bg-lime' : 'bg-stone'
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 <div
-                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  className={`h-4 w-4 rounded-pill bg-card shadow-sm transition-transform ${
                     isAutomaticBudgetMode ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -1666,34 +1424,34 @@ const GeralTab: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+          <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
             <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+              <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                 <Sparkles size={16} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Orçamento para Novos Clientes</h3>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">
+                <h3 className="text-sm font-semibold text-ink">Orçamento para Novos Clientes</h3>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
                   Defina se a IA pode montar orçamentos para clientes que ainda não existem na base.
                 </p>
               </div>
             </div>
 
             {newClientsBudgetError ? (
-              <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="mb-4 rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                 {newClientsBudgetError}
               </div>
             ) : null}
 
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white px-4 py-4">
+            <div className="flex items-center justify-between gap-4 rounded-panel border border-line-soft bg-card px-4 py-4">
               <div>
-                <p className="text-xs font-medium text-gray-400">Status atual</p>
+                <p className="text-xs font-medium text-muted-soft">Status atual</p>
                 <span
-                  className={`mt-2 inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${newClientsBudgetStatusClassName}`}
+                  className={`mt-2 inline-flex rounded-pill border px-3 py-1 text-[11px] font-semibold ${newClientsBudgetStatusClassName}`}
                 >
                   {isAccountLoading ? 'Carregando...' : newClientsBudgetLabel}
                 </span>
-                <p className="mt-3 max-w-xl text-xs leading-5 text-gray-500">
+                <p className="mt-3 max-w-xl text-xs leading-5 text-muted">
                   {isAccountLoading
                     ? 'Carregando configuração de orçamento para novos clientes.'
                     : allowBudgetForNewClients
@@ -1709,12 +1467,12 @@ const GeralTab: React.FC = () => {
                 aria-label="Alternar orçamento para novos clientes"
                 onClick={handleToggleNewClientsBudget}
                 disabled={isAccountLoading || isSavingNewClientsBudget || Boolean(accountError)}
-                className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
-                  allowBudgetForNewClients ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                className={`flex h-6 w-11 items-center rounded-pill px-1 transition-colors ${
+                  allowBudgetForNewClients ? 'bg-lime' : 'bg-stone'
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 <div
-                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  className={`h-4 w-4 rounded-pill bg-card shadow-sm transition-transform ${
                     allowBudgetForNewClients ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
@@ -1723,34 +1481,26 @@ const GeralTab: React.FC = () => {
           </div>
 
           {isAdminMember ? (
-            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+            <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                     <Database size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Produtos</h3>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Configure de onde os itens da empresa serão coletados.
+                    <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Produtos</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted">
+                      De onde os itens da empresa são coletados. Configuração somente leitura.
                     </p>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleOpenSourceDataModal}
-                  className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
-                >
-                  Editar
-                </button>
               </div>
 
-              <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+              <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-400">Configuração atual</p>
-                    <p className="mt-2 text-sm font-semibold text-gray-900">
+                    <p className="text-xs font-medium text-muted-soft">Configuração atual</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">
                       {isCompanyPlanLoading
                         ? 'Carregando...'
                         : hasCompanySourceConfigured
@@ -1760,8 +1510,8 @@ const GeralTab: React.FC = () => {
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">URL</p>
-                    <p className="mt-1 break-all text-xs leading-5 text-gray-500">
+                    <p className="text-[11px] font-medium text-muted-soft">URL</p>
+                    <p className="mt-1 break-all text-xs leading-5 text-muted">
                       {companySourceLink || '-'}
                     </p>
                   </div>
@@ -1771,34 +1521,26 @@ const GeralTab: React.FC = () => {
           ) : null}
 
           {isAdminMember ? (
-            <div className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-4 sm:p-5">
+            <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                     <Database size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Fonte de Dados - Clientes</h3>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      Configure de onde os clientes da empresa serão coletados.
+                    <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Clientes</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted">
+                      De onde os clientes da empresa são coletados. Configuração somente leitura.
                     </p>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleOpenClientSourceDataModal}
-                  className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
-                >
-                  Editar
-                </button>
               </div>
 
-              <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+              <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-medium text-gray-400">Configuração atual</p>
-                    <p className="mt-2 text-sm font-semibold text-gray-900">
+                    <p className="text-xs font-medium text-muted-soft">Configuração atual</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">
                       {isCompanyPlanLoading
                         ? 'Carregando...'
                         : hasCompanyClientSourceConfigured
@@ -1808,8 +1550,8 @@ const GeralTab: React.FC = () => {
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-medium text-gray-400">URL</p>
-                    <p className="mt-1 break-all text-xs leading-5 text-gray-500">
+                    <p className="text-[11px] font-medium text-muted-soft">URL</p>
+                    <p className="mt-1 break-all text-xs leading-5 text-muted">
                       {companyClientSourceLink || '-'}
                     </p>
                   </div>
@@ -1820,376 +1562,6 @@ const GeralTab: React.FC = () => {
         </section>
       </div>
 
-      {isSourceDataModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
-          <div className="absolute inset-0" aria-hidden="true" onClick={handleCloseSourceDataModal} />
-
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fonte-dados-modal-title"
-            className="relative z-10 flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-black/5 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/5 px-6 py-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-600">
-                  <Database size={18} />
-                </div>
-                <div>
-                  <h2
-                    id="fonte-dados-modal-title"
-                    className="text-base font-semibold tracking-tight text-gray-900"
-                  >
-                    Fonte de Dados - Produtos
-                  </h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                    Escolha como os itens da empresa serão coletados. Neste momento, apenas a
-                    integração via API está disponível para configuração.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseSourceDataModal}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
-                >
-                  Fechar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveSourceData}
-                  disabled={isSavingSourceData || sourceDataForm.scrapper_tipo !== 'API'}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Save size={16} />
-                  {isSavingSourceData ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <div className="border-b border-black/5 bg-[#FCFCFC] px-6 py-5 lg:border-b-0 lg:border-r">
-                <p className="text-sm font-semibold text-gray-900">Integrações</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Selecione o formato de coleta disponível.
-                </p>
-
-                <div className="mt-5 space-y-2">
-                  {SCRAPPER_TYPE_OPTIONS.map((option) => {
-                    const isActive = sourceDataForm.scrapper_tipo === option;
-                    const isEnabled = option === 'API';
-
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => handleSelectScrapperType(option)}
-                        disabled={!isEnabled}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                          isActive
-                            ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-900'
-                            : 'border-black/5 bg-white text-gray-600'
-                        } ${!isEnabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-[#FAFAFA]'}`}
-                      >
-                        <span>{option}</span>
-                        {!isEnabled ? (
-                          <span className="text-[11px] font-medium text-gray-400">Em breve</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="min-h-0 overflow-y-auto px-6 py-5">
-                <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Configuração da API</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      URL, Body, Query e Header são opcionais. Os campos JSON serão salvos como JSONB
-                      no banco.
-                    </p>
-                  </div>
-
-                  <div className="mt-5 space-y-4">
-                    {sourceDataError ? (
-                      <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                        {sourceDataError}
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <label
-                        htmlFor="scrapper-link"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        URL
-                      </label>
-                      <input
-                        id="scrapper-link"
-                        type="text"
-                        value={sourceDataForm.scrapper_link}
-                        onChange={handleSourceDataInputChange('scrapper_link')}
-                        disabled={sourceDataForm.scrapper_tipo !== 'API'}
-                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder="https://api.exemplo.com/itens"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="scrapper-body"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Body
-                      </label>
-                      <textarea
-                        id="scrapper-body"
-                        value={sourceDataForm.scrapper_body}
-                        onChange={handleSourceDataInputChange('scrapper_body')}
-                        disabled={sourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"token":"abc"}'
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="scrapper-query"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Query
-                      </label>
-                      <textarea
-                        id="scrapper-query"
-                        value={sourceDataForm.scrapper_query}
-                        onChange={handleSourceDataInputChange('scrapper_query')}
-                        disabled={sourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"page":1}'
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="scrapper-headers"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Header
-                      </label>
-                      <textarea
-                        id="scrapper-headers"
-                        value={sourceDataForm.scrapper_headers}
-                        onChange={handleSourceDataInputChange('scrapper_headers')}
-                        disabled={sourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"Authorization":"Bearer ..."}'
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isClientSourceDataModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
-          <div
-            className="absolute inset-0"
-            aria-hidden="true"
-            onClick={handleCloseClientSourceDataModal}
-          />
-
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fonte-dados-clientes-modal-title"
-            className="relative z-10 flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-black/5 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/5 px-6 py-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-600">
-                  <Database size={18} />
-                </div>
-                <div>
-                  <h2
-                    id="fonte-dados-clientes-modal-title"
-                    className="text-base font-semibold tracking-tight text-gray-900"
-                  >
-                    Fonte de Dados - Clientes
-                  </h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                    Escolha como os clientes da empresa serão coletados. Neste momento, apenas a
-                    integração via API está disponível para configuração.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseClientSourceDataModal}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
-                >
-                  Fechar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveClientSourceData}
-                  disabled={
-                    isSavingClientSourceData || clientSourceDataForm.scrapper_tipo !== 'API'
-                  }
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Save size={16} />
-                  {isSavingClientSourceData ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <div className="border-b border-black/5 bg-[#FCFCFC] px-6 py-5 lg:border-b-0 lg:border-r">
-                <p className="text-sm font-semibold text-gray-900">Integrações</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Selecione o formato de coleta disponível.
-                </p>
-
-                <div className="mt-5 space-y-2">
-                  {SCRAPPER_TYPE_OPTIONS.map((option) => {
-                    const isActive = clientSourceDataForm.scrapper_tipo === option;
-                    const isEnabled = option === 'API';
-
-                    return (
-                      <button
-                        key={`clientes-${option}`}
-                        type="button"
-                        onClick={() =>
-                          isEnabled &&
-                          setClientSourceDataForm((current) => ({
-                            ...current,
-                            scrapper_tipo: option,
-                          }))
-                        }
-                        disabled={!isEnabled}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                          isActive
-                            ? 'border-[#EBF57D] bg-[#F8FBCF] text-gray-900'
-                            : 'border-black/5 bg-white text-gray-600'
-                        } ${!isEnabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-[#FAFAFA]'}`}
-                      >
-                        <span>{option}</span>
-                        {!isEnabled ? (
-                          <span className="text-[11px] font-medium text-gray-400">Em breve</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="min-h-0 overflow-y-auto px-6 py-5">
-                <div className="rounded-3xl border border-black/5 bg-[#FCFCFC] p-5">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Configuração da API</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      URL, Body, Query e Header são opcionais. Os campos JSON serão salvos como JSONB
-                      no banco.
-                    </p>
-                  </div>
-
-                  <div className="mt-5 space-y-4">
-                    {clientSourceDataError ? (
-                      <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                        {clientSourceDataError}
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <label
-                        htmlFor="cliente-api-link"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        URL
-                      </label>
-                      <input
-                        id="cliente-api-link"
-                        type="text"
-                        value={clientSourceDataForm.scrapper_link}
-                        onChange={handleClientSourceDataInputChange('scrapper_link')}
-                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
-                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder="https://api.exemplo.com/clientes"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="cliente-api-body"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Body
-                      </label>
-                      <textarea
-                        id="cliente-api-body"
-                        value={clientSourceDataForm.scrapper_body}
-                        onChange={handleClientSourceDataInputChange('scrapper_body')}
-                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"token":"abc"}'
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="cliente-api-query"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Query
-                      </label>
-                      <textarea
-                        id="cliente-api-query"
-                        value={clientSourceDataForm.scrapper_query}
-                        onChange={handleClientSourceDataInputChange('scrapper_query')}
-                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"page":1}'
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="cliente-api-headers"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
-                      >
-                        Header
-                      </label>
-                      <textarea
-                        id="cliente-api-headers"
-                        value={clientSourceDataForm.scrapper_headers}
-                        onChange={handleClientSourceDataInputChange('scrapper_headers')}
-                        disabled={clientSourceDataForm.scrapper_tipo !== 'API'}
-                        rows={5}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm text-gray-900 outline-none transition-colors focus:border-black/20 disabled:cursor-not-allowed disabled:bg-[#FAFAFA] disabled:text-gray-400"
-                        placeholder='{"Authorization":"Bearer ..."}'
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {isQuoteRulesModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
           <div className="absolute inset-0" aria-hidden="true" onClick={handleCloseQuoteRulesModal} />
@@ -2198,21 +1570,21 @@ const GeralTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="regras-cotacao-modal-title"
-            className="relative z-10 flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-black/5 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/5 px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line-soft px-6 py-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F8FBCF] text-gray-700">
+                <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime/20 text-ink">
                   <Sparkles size={18} />
                 </div>
                 <div>
                   <h2
                     id="regras-cotacao-modal-title"
-                    className="text-base font-semibold tracking-tight text-gray-900"
+                    className="text-base font-semibold tracking-tight text-ink"
                   >
                     Regras de Cotação
                   </h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
                     Configure quais informações a IA deve solicitar ao cliente para validar uma cotação
                     antes de avançar no atendimento.
                   </p>
@@ -2223,7 +1595,7 @@ const GeralTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCloseQuoteRulesModal}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
+                  className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper"
                 >
                   Fechar
                 </button>
@@ -2232,7 +1604,7 @@ const GeralTab: React.FC = () => {
                     type="button"
                     onClick={handleSaveQuoteRules}
                     disabled={isSavingQuoteRules}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Save size={16} />
                     {isSavingQuoteRules ? 'Salvando...' : 'Salvar alterações'}
@@ -2247,12 +1619,12 @@ const GeralTab: React.FC = () => {
               </div>
             ) : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-[#FCFCFC] px-6 py-5">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-paper px-6 py-5">
               <div className="mx-auto w-full max-w-4xl">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Regras atuais</p>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="text-sm font-semibold text-ink">Regras atuais</p>
+                    <p className="mt-1 text-xs text-muted">
                       {quoteRulesDraft.length} regra(s) cadastrada(s),{' '}
                       {quoteRulesDraft.filter((rule) => rule.ativo).length} ativa(s)
                     </p>
@@ -2264,7 +1636,7 @@ const GeralTab: React.FC = () => {
                       handleResetQuoteRuleForm();
                       handleOpenQuoteRuleEditorModal();
                     }}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                    className="inline-flex items-center gap-2 rounded-panel bg-card px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-paper"
                   >
                     <Plus size={15} />
                     Nova regra
@@ -2276,32 +1648,32 @@ const GeralTab: React.FC = () => {
                     quoteRulesDraft.map((rule) => (
                       <div
                         key={rule.name}
-                        className="rounded-3xl border border-black/5 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+                        className="rounded-card border border-line-soft bg-card p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
                       >
                         <div className="flex flex-col gap-4">
                           <div className="flex flex-wrap items-start justify-between gap-4">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-semibold text-gray-900">{rule.name}</p>
+                                <p className="text-sm font-semibold text-ink">{rule.name}</p>
                                 <span
-                                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                  className={`rounded-pill px-2.5 py-1 text-[11px] font-semibold ${
                                     rule.nivel === 'OBRIGATORIO'
-                                      ? 'bg-[#EBF57D] text-gray-900'
-                                      : 'bg-[#FAFAFA] text-gray-500'
+                                      ? 'bg-lime text-ink'
+                                      : 'bg-paper text-muted'
                                   }`}
                                 >
                                   {formatEnumLabel(rule.nivel)}
                                 </span>
                               </div>
-                              <p className="mt-2 text-sm leading-6 text-gray-500">{rule.descricao}</p>
+                              <p className="mt-2 text-sm leading-6 text-muted">{rule.descricao}</p>
                             </div>
 
-                            <div className="flex min-w-[140px] items-center justify-between gap-3 rounded-2xl border border-black/5 bg-[#FCFCFC] px-3 py-2">
+                            <div className="flex min-w-[140px] items-center justify-between gap-3 rounded-panel border border-line-soft bg-paper px-3 py-2">
                               <div>
-                                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft">
                                   Status
                                 </p>
-                                <p className="mt-1 text-xs font-semibold text-gray-900">
+                                <p className="mt-1 text-xs font-semibold text-ink">
                                   {rule.ativo ? 'Ativa' : 'Desativada'}
                                 </p>
                               </div>
@@ -2312,12 +1684,12 @@ const GeralTab: React.FC = () => {
                                 aria-checked={rule.ativo}
                                 aria-label={`Alternar status da regra ${rule.name}`}
                                 onClick={() => handleToggleQuoteRuleActive(rule.name)}
-                                className={`flex h-6 w-11 items-center rounded-full px-1 transition-colors ${
-                                  rule.ativo ? 'bg-[#EBF57D]' : 'bg-gray-200'
+                                className={`flex h-6 w-11 items-center rounded-pill px-1 transition-colors ${
+                                  rule.ativo ? 'bg-lime' : 'bg-stone'
                                 }`}
                               >
                                 <div
-                                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                                  className={`h-4 w-4 rounded-pill bg-card shadow-sm transition-transform ${
                                     rule.ativo ? 'translate-x-5' : 'translate-x-0'
                                   }`}
                                 />
@@ -2325,18 +1697,18 @@ const GeralTab: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-black/5 pt-4">
+                          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line-soft pt-4">
                             <button
                               type="button"
                               onClick={() => handleSelectQuoteRuleForEdit(rule)}
-                              className="rounded-2xl bg-[#FAFAFA] px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                              className="rounded-panel bg-paper px-3 py-2 text-xs font-semibold text-muted transition-colors hover:bg-stone hover:text-ink"
                             >
                               Editar
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteQuoteRule(rule.name)}
-                              className="inline-flex items-center gap-2 rounded-2xl bg-[#FFF1F1] px-3 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-[#FFE5E5]"
+                              className="inline-flex items-center gap-2 rounded-panel bg-[#FFF1F1] px-3 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-[#FFE5E5]"
                             >
                               <Trash2 size={14} />
                               Excluir
@@ -2346,9 +1718,9 @@ const GeralTab: React.FC = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-3xl border border-dashed border-black/10 bg-white px-6 py-10 text-center">
-                      <p className="text-sm font-semibold text-gray-900">Nenhuma regra cadastrada</p>
-                      <p className="mt-2 text-sm leading-6 text-gray-500">
+                    <div className="rounded-card border border-dashed border-line bg-card px-6 py-10 text-center">
+                      <p className="text-sm font-semibold text-ink">Nenhuma regra cadastrada</p>
+                      <p className="mt-2 text-sm leading-6 text-muted">
                         Crie a primeira regra para orientar a IA sobre o que deve ser solicitado ao
                         cliente na etapa de cotação.
                       </p>
@@ -2366,13 +1738,13 @@ const GeralTab: React.FC = () => {
                   onClick={handleCloseQuoteRuleEditorModal}
                 />
 
-                <div className="relative z-10 w-full max-w-lg rounded-3xl border border-black/5 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
+                <div className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">
+                      <p className="text-sm font-semibold text-ink">
                         {isEditingQuoteRule ? 'Editar regra' : 'Nova regra'}
                       </p>
-                      <p className="mt-1 text-xs leading-5 text-gray-500">
+                      <p className="mt-1 text-xs leading-5 text-muted">
                         Toda nova regra começa como ativa e passa a orientar a IA após salvar as
                         alterações.
                       </p>
@@ -2381,7 +1753,7 @@ const GeralTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleCloseQuoteRuleEditorModal}
-                      className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                      className="flex h-9 w-9 items-center justify-center rounded-panel bg-paper text-muted transition-colors hover:bg-stone hover:text-ink"
                       aria-label="Fechar edição da regra"
                     >
                       <X size={16} />
@@ -2390,7 +1762,7 @@ const GeralTab: React.FC = () => {
 
                   <div className="mt-5 space-y-4">
                     {quoteRulesError ? (
-                      <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                      <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                         {quoteRulesError}
                       </div>
                     ) : null}
@@ -2398,7 +1770,7 @@ const GeralTab: React.FC = () => {
                     <div>
                       <label
                         htmlFor="quote-rule-name"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                       >
                         Nome da regra
                       </label>
@@ -2407,7 +1779,7 @@ const GeralTab: React.FC = () => {
                         type="text"
                         value={quoteRuleForm.name}
                         onChange={handleQuoteRuleFormChange('name')}
-                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                        className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                         placeholder="Ex.: CNPJ, CEP de entrega, Indústria"
                       />
                     </div>
@@ -2415,7 +1787,7 @@ const GeralTab: React.FC = () => {
                     <div>
                       <label
                         htmlFor="quote-rule-level"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                       >
                         Nível
                       </label>
@@ -2423,7 +1795,7 @@ const GeralTab: React.FC = () => {
                         id="quote-rule-level"
                         value={quoteRuleForm.nivel}
                         onChange={handleQuoteRuleFormChange('nivel')}
-                        className="mt-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                        className="mt-2 w-full rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                       >
                         {QUOTE_RULE_LEVEL_OPTIONS.map((option) => (
                           <option key={option} value={option}>
@@ -2436,7 +1808,7 @@ const GeralTab: React.FC = () => {
                     <div>
                       <label
                         htmlFor="quote-rule-description"
-                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                        className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                       >
                         Descrição
                       </label>
@@ -2446,10 +1818,10 @@ const GeralTab: React.FC = () => {
                         onChange={handleQuoteRuleFormChange('descricao')}
                         rows={5}
                         maxLength={100}
-                        className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                        className="mt-2 w-full resize-none rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                         placeholder="Explique para a IA qual informação ela deve solicitar ao cliente e por que isso é necessário."
                       />
-                      <div className="mt-2 text-right text-[11px] font-medium text-gray-400">
+                      <div className="mt-2 text-right text-[11px] font-medium text-muted-soft">
                         {quoteRuleForm.descricao.length}/100
                       </div>
                     </div>
@@ -2458,14 +1830,14 @@ const GeralTab: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleCloseQuoteRuleEditorModal}
-                        className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
+                        className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper"
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         onClick={handleUpsertQuoteRule}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90"
+                        className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90"
                       >
                         <Plus size={15} />
                         {isEditingQuoteRule ? 'Atualizar regra' : 'Adicionar regra'}
@@ -2491,21 +1863,21 @@ const GeralTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="alterar-senha-modal-title"
-            className="relative z-10 w-full max-w-md rounded-3xl border border-black/5 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 w-full max-w-md rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-600">
+                <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-paper text-muted">
                   <KeyRound size={18} />
                 </div>
                 <div>
                   <h2
                     id="alterar-senha-modal-title"
-                    className="text-base font-semibold tracking-tight text-gray-900"
+                    className="text-base font-semibold tracking-tight text-ink"
                   >
                     Alterar senha
                   </h2>
-                  <p className="mt-1 text-sm leading-5 text-gray-500">
+                  <p className="mt-1 text-sm leading-5 text-muted">
                     Informe sua senha atual e defina uma nova senha para a conta.
                   </p>
                 </div>
@@ -2514,7 +1886,7 @@ const GeralTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseChangePasswordModal}
-                className="rounded-xl bg-[#FAFAFA] px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="rounded-tile bg-paper px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-stone hover:text-ink"
               >
                 Fechar
               </button>
@@ -2522,13 +1894,13 @@ const GeralTab: React.FC = () => {
 
             <div className="space-y-4">
               {passwordSaveError ? (
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
                   {passwordSaveError}
                 </div>
               ) : null}
 
               {passwordSaveSuccess ? (
-                <div className="rounded-2xl border border-[#EBF57D] bg-[#F8FBCF] px-4 py-3 text-sm font-medium text-gray-700">
+                <div className="rounded-panel border border-lime bg-lime/15 px-4 py-3 text-sm font-medium text-ink">
                   {passwordSaveSuccess}
                 </div>
               ) : null}
@@ -2536,7 +1908,7 @@ const GeralTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="current-password"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Senha atual
                 </label>
@@ -2546,13 +1918,13 @@ const GeralTab: React.FC = () => {
                     type={passwordVisibility.currentPassword ? 'text' : 'password'}
                     value={passwordForm.currentPassword}
                     onChange={handlePasswordInputChange('currentPassword')}
-                    className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="w-full rounded-panel border border-line bg-paper px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="Digite sua senha atual"
                   />
                   <button
                     type="button"
                     onClick={() => handleTogglePasswordVisibility('currentPassword')}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-400 transition-colors hover:text-gray-700"
+                    className="absolute inset-y-0 right-3 flex items-center text-muted-soft transition-colors hover:text-ink"
                     aria-label={
                       passwordVisibility.currentPassword ? 'Ocultar senha atual' : 'Mostrar senha atual'
                     }
@@ -2565,7 +1937,7 @@ const GeralTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="new-password"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Nova senha
                 </label>
@@ -2575,13 +1947,13 @@ const GeralTab: React.FC = () => {
                     type={passwordVisibility.newPassword ? 'text' : 'password'}
                     value={passwordForm.newPassword}
                     onChange={handlePasswordInputChange('newPassword')}
-                    className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="w-full rounded-panel border border-line bg-paper px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="Digite a nova senha"
                   />
                   <button
                     type="button"
                     onClick={() => handleTogglePasswordVisibility('newPassword')}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-400 transition-colors hover:text-gray-700"
+                    className="absolute inset-y-0 right-3 flex items-center text-muted-soft transition-colors hover:text-ink"
                     aria-label={
                       passwordVisibility.newPassword ? 'Ocultar nova senha' : 'Mostrar nova senha'
                     }
@@ -2594,7 +1966,7 @@ const GeralTab: React.FC = () => {
               <div>
                 <label
                   htmlFor="confirm-new-password"
-                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400"
+                  className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft"
                 >
                   Confirmar nova senha
                 </label>
@@ -2604,13 +1976,13 @@ const GeralTab: React.FC = () => {
                     type={passwordVisibility.confirmNewPassword ? 'text' : 'password'}
                     value={passwordForm.confirmNewPassword}
                     onChange={handlePasswordInputChange('confirmNewPassword')}
-                    className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 text-sm font-medium text-gray-900 outline-none transition-colors focus:border-black/20"
+                    className="w-full rounded-panel border border-line bg-paper px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
                     placeholder="Confirme a nova senha"
                   />
                   <button
                     type="button"
                     onClick={() => handleTogglePasswordVisibility('confirmNewPassword')}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-400 transition-colors hover:text-gray-700"
+                    className="absolute inset-y-0 right-3 flex items-center text-muted-soft transition-colors hover:text-ink"
                     aria-label={
                       passwordVisibility.confirmNewPassword
                         ? 'Ocultar confirmação da nova senha'
@@ -2627,7 +1999,7 @@ const GeralTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseChangePasswordModal}
-                className="rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-[#FAFAFA]"
+                className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper"
               >
                 Cancelar
               </button>
@@ -2635,7 +2007,7 @@ const GeralTab: React.FC = () => {
                 type="button"
                 onClick={handleSavePassword}
                 disabled={isSavingPassword}
-                className="rounded-2xl bg-[#EBF57D] px-4 py-2.5 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingPassword ? 'Salvando...' : 'Salvar'}
               </button>
@@ -2652,21 +2024,21 @@ const GeralTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="termos-modal-title"
-            className="relative z-10 flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-black/5 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 px-6 py-5">
+            <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FAFAFA] text-gray-600">
+                <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-paper text-muted">
                   <FileText size={18} />
                 </div>
                 <div>
                   <h2
                     id="termos-modal-title"
-                    className="text-base font-semibold tracking-tight text-gray-900"
+                    className="text-base font-semibold tracking-tight text-ink"
                   >
                     Termos de Uso
                   </h2>
-                  <p className="mt-1 text-sm leading-5 text-gray-500">
+                  <p className="mt-1 text-sm leading-5 text-muted">
                     Visualize os termos completos de uso da empresa.
                   </p>
                 </div>
@@ -2675,17 +2047,17 @@ const GeralTab: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseTermsModal}
-                className="rounded-xl bg-[#FAFAFA] px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="rounded-tile bg-paper px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-stone hover:text-ink"
               >
                 Fechar
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 bg-[#FAFAFA] p-3">
+            <div className="min-h-0 flex-1 bg-paper p-3">
               <iframe
                 src="/termos-de-uso.html"
                 title="Termos de Uso"
-                className="h-full w-full rounded-2xl border border-black/5 bg-white"
+                className="h-full w-full rounded-panel border border-line-soft bg-card"
               />
             </div>
           </div>

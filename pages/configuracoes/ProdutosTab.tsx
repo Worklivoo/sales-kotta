@@ -16,7 +16,7 @@ interface ProductRecord {
 
 const ITEMS_PER_PAGE = 20;
 const PRODUCTS_SYNC_WEBHOOK_URL =
-  'https://primary-systec.up.railway.app/webhook/1b18ba60-b692-42f0-addc-cb02819ec1b6';
+  'https://primary-production-b86f1.up.railway.app/webhook/sincronizar-produtos-manual';
 
 const normalizeSearchTerm = (value: string) => value.trim().replace(/[%(),]/g, ' ');
 
@@ -139,9 +139,9 @@ const ProdutosTab: React.FC = () => {
         }
 
         const { data: currentMember, error: currentMemberError } = await supabase
-          .from('sales_membros_empresa')
+          .from('sales_membros_v2')
           .select('empresa_id')
-          .eq('membro_id', session.user.id)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         if (currentMemberError) {
@@ -201,12 +201,13 @@ const ProdutosTab: React.FC = () => {
 
       try {
         let query = supabase
-          .from('sales_produtos')
+          .from('sales_produtos_v2')
           .select(
             'produto_id, codigo_sku, nome, descricao, preco_venda, unidade_medida, estoque, categoria, moeda',
             { count: 'exact' },
           )
-          .eq('empresa_id', companyId);
+          .eq('empresa_id', companyId)
+          .eq('ativo', true);
 
         if (debouncedSearchTerm) {
           query = query.or(
@@ -289,48 +290,20 @@ const ProdutosTab: React.FC = () => {
     setSyncSuccess(null);
 
     try {
-      const { data: companyData, error: companyError } = await supabase
-        .from('sales_empresa')
-        .select('*')
-        .eq('empresa_id', companyId)
-        .maybeSingle();
-
-      if (companyError) {
-        throw companyError;
-      }
-
-      if (!companyData) {
-        throw new Error('Não foi possível localizar os dados da empresa para sincronização.');
-      }
-
       const syncResponse = await fetch(PRODUCTS_SYNC_WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(companyData),
+        body: JSON.stringify({ empresa_id: companyId }),
       });
 
-      const syncResponseText = await syncResponse.text();
-      let syncResponseBody: unknown = null;
-
-      try {
-        syncResponseBody = syncResponseText ? JSON.parse(syncResponseText) : null;
-      } catch {
-        syncResponseBody = syncResponseText || null;
-      }
-
       if (!syncResponse.ok) {
-        const errorMessage =
-          typeof syncResponseBody === 'string' && syncResponseBody.trim()
-            ? syncResponseBody
-            : 'Não foi possível iniciar a sincronização dos produtos.';
-
-        throw new Error(errorMessage);
+        throw new Error('Não foi possível iniciar a sincronização dos produtos.');
       }
 
-      setSyncSuccess('Sincronização enviada com sucesso.');
-      handleRetry();
+      setSyncSuccess('Sincronização iniciada. Os produtos serão atualizados em instantes.');
+      window.setTimeout(() => handleRetry(), 8000);
     } catch (error: any) {
       console.error('Erro ao sincronizar produtos:', error);
       setSyncError(error?.message || 'Não foi possível sincronizar os produtos.');
@@ -358,57 +331,57 @@ const ProdutosTab: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-black/5 bg-[#FAFAFA] p-5">
+      <section className="rounded-panel border border-line-soft bg-paper p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EBF57D] text-gray-900">
+            <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
               <Package className="h-5 w-5" />
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-gray-900">Produtos</h2>
-              <p className="max-w-2xl text-sm leading-6 text-gray-500">
+              <h2 className="text-base font-semibold text-ink">Produtos</h2>
+              <p className="max-w-2xl text-sm leading-6 text-muted">
                 Visualize os produtos da empresa com carregamento paginado de 20 itens por página.
               </p>
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-1">
-            <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">
+            <div className="rounded-panel border border-line-soft bg-card px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-soft">
                 Total de produtos
               </p>
-              <p className="mt-2 text-lg font-semibold text-gray-900">{totalCount}</p>
+              <p className="mt-2 text-lg font-semibold text-ink">{totalCount}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-black/5 bg-white shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-3 border-b border-black/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="rounded-panel border border-line-soft bg-card shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-3 border-b border-line-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900">Lista de produtos</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="text-sm font-semibold text-ink">Lista de produtos</h3>
+            <p className="mt-1 text-sm text-muted">
               Exibindo {showingFrom} a {showingTo} de {totalCount} produtos.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="relative block min-w-[420px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-soft" />
               <input
                 type="text"
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="Buscar por SKU, nome ou descrição"
-                className="h-11 w-full rounded-xl border border-black/10 bg-white pl-10 pr-4 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-300"
+                className="h-11 w-full rounded-tile border border-line bg-card pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-muted-soft focus:border-ink/25"
               />
             </label>
 
             <button
               type="button"
               onClick={handleSyncProducts}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-black/10 px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-tile border border-line px-4 text-sm font-medium text-ink transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoading || isSyncingProducts}
             >
               <RefreshCw className={`h-4 w-4 ${isSyncingProducts ? 'animate-spin' : ''}`} />
@@ -418,16 +391,16 @@ const ProdutosTab: React.FC = () => {
         </div>
 
         {syncError ? (
-          <div className="border-b border-black/5 px-5 py-4">
-            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
+          <div className="border-b border-line-soft px-5 py-4">
+            <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
               {syncError}
             </div>
           </div>
         ) : null}
 
         {syncSuccess ? (
-          <div className="border-b border-black/5 px-5 py-4">
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
+          <div className="border-b border-line-soft px-5 py-4">
+            <div className="rounded-panel border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
               {syncSuccess}
             </div>
           </div>
@@ -435,14 +408,14 @@ const ProdutosTab: React.FC = () => {
 
         {loadError ? (
           <div className="px-5 py-10">
-            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
+            <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-700">
               {loadError}
             </div>
           </div>
         ) : isLoading ? (
-          <div className="px-5 py-10 text-sm text-gray-500">Carregando produtos...</div>
+          <div className="px-5 py-10 text-sm text-muted">Carregando produtos...</div>
         ) : products.length === 0 ? (
-          <div className="px-5 py-10 text-sm text-gray-500">
+          <div className="px-5 py-10 text-sm text-muted">
             {debouncedSearchTerm
               ? 'Nenhum produto encontrado para a busca informada.'
               : 'Nenhum produto encontrado para esta empresa.'}
@@ -452,7 +425,7 @@ const ProdutosTab: React.FC = () => {
             <div
               ref={topScrollRef}
               onScroll={(event) => syncHorizontalScroll(event, bottomScrollRef)}
-              className="overflow-x-auto border-b border-black/5"
+              className="overflow-x-auto border-b border-line-soft"
               aria-label="Barra de rolagem horizontal superior da tabela de produtos"
             >
               <div className="h-4 w-full min-w-[1180px]" />
@@ -465,20 +438,20 @@ const ProdutosTab: React.FC = () => {
             >
               <table className="w-full min-w-[1180px] table-fixed border-collapse">
                 <thead>
-                  <tr className="border-b border-black/5 bg-[#FAFAFA] text-left">
-                    <th className="w-[16%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                  <tr className="border-b border-line-soft bg-paper text-left">
+                    <th className="w-[16%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-soft">
                       SKU
                     </th>
-                    <th className="w-[36%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                    <th className="w-[36%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-soft">
                       Produto
                     </th>
-                    <th className="w-[22%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                    <th className="w-[22%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-soft">
                       Categoria
                     </th>
-                    <th className="w-[13%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                    <th className="w-[13%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-soft">
                       Preço
                     </th>
-                    <th className="w-[13%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                    <th className="w-[13%] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-soft">
                       Estoque
                     </th>
                   </tr>
@@ -488,32 +461,32 @@ const ProdutosTab: React.FC = () => {
                   {products.map((product) => (
                     <tr
                       key={product.produto_id}
-                      className="border-b border-black/5 align-top last:border-b-0"
+                      className="border-b border-line-soft align-top last:border-b-0"
                     >
-                      <td className="w-[16%] px-5 py-4 text-sm font-medium text-gray-900">
+                      <td className="w-[16%] px-5 py-4 text-sm font-medium text-ink">
                         {product.codigo_sku?.trim() || '-'}
                       </td>
 
                       <td className="w-[36%] px-5 py-4">
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-ink">
                             {product.nome?.trim() || 'Produto sem nome'}
                           </p>
-                          <p className="text-xs leading-5 text-gray-500">
+                          <p className="text-xs leading-5 text-muted">
                             {product.descricao?.trim() || 'Sem descrição cadastrada.'}
                           </p>
                         </div>
                       </td>
 
-                      <td className="w-[22%] px-5 py-4 text-xs text-gray-600">
+                      <td className="w-[22%] px-5 py-4 text-xs text-muted">
                         {product.categoria?.trim() || '-'}
                       </td>
 
-                      <td className="w-[13%] px-5 py-4 text-sm font-medium text-gray-900">
+                      <td className="w-[13%] px-5 py-4 text-sm font-medium text-ink">
                         {formatCurrency(product.preco_venda, product.moeda)}
                       </td>
 
-                      <td className="w-[13%] px-5 py-4 text-sm text-gray-600">
+                      <td className="w-[13%] px-5 py-4 text-sm text-muted">
                         {formatStock(product.estoque, product.unidade_medida)}
                       </td>
                     </tr>
@@ -522,8 +495,8 @@ const ProdutosTab: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-black/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-gray-500">
+            <div className="flex flex-col gap-3 border-t border-line-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted">
                 Página {currentPage} de {totalPages}
               </p>
 
@@ -532,7 +505,7 @@ const ProdutosTab: React.FC = () => {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentPage === 1 || isLoading}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-tile border border-line text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Página anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -547,10 +520,10 @@ const ProdutosTab: React.FC = () => {
                       type="button"
                       onClick={() => setCurrentPage(page)}
                       disabled={isLoading}
-                      className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-medium transition-colors ${
+                      className={`inline-flex h-10 min-w-10 items-center justify-center rounded-tile px-3 text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-[#EBF57D] text-gray-900'
-                          : 'border border-black/10 text-gray-600 hover:bg-gray-50'
+                          ? 'bg-lime text-ink'
+                          : 'border border-line text-muted hover:bg-paper'
                       } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       {page}
@@ -562,7 +535,7 @@ const ProdutosTab: React.FC = () => {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   disabled={currentPage === totalPages || isLoading}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-tile border border-line text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Próxima página"
                 >
                   <ChevronRight className="h-4 w-4" />
