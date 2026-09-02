@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import BaseConhecimentoTab from './configuracoes/BaseConhecimentoTab';
 import ClientesTab from './configuracoes/ClientesTab';
 import EmailTab from './configuracoes/EmailTab';
 import GeralTab from './configuracoes/GeralTab';
 import MembrosTab from './configuracoes/MembrosTab';
+import MensagensAutomaticasTab from './configuracoes/MensagensAutomaticasTab';
 import NotificacoesTab from './configuracoes/NotificacoesTab';
 import ProdutosTab from './configuracoes/ProdutosTab';
 import { supabase } from '../lib/supabase';
@@ -13,7 +15,9 @@ type ConfigTabKey =
   | 'email'
   | 'notificacoes'
   | 'produtos'
-  | 'clientes';
+  | 'clientes'
+  | 'conhecimento'
+  | 'mensagens_automaticas';
 
 const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
@@ -22,6 +26,8 @@ const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'notificacoes', label: 'Notificações' },
   { key: 'produtos', label: 'Produtos' },
   { key: 'clientes', label: 'Clientes' },
+  { key: 'conhecimento', label: 'Base de Conhecimento' },
+  { key: 'mensagens_automaticas', label: 'Mensagens Automáticas' },
 ];
 
 const ConfiguracoesPage: React.FC = () => {
@@ -154,6 +160,8 @@ const ConfiguracoesPage: React.FC = () => {
           {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
           {activeTab === 'produtos' ? <ProdutosTab /> : null}
           {activeTab === 'clientes' ? <ClientesTab /> : null}
+          {activeTab === 'conhecimento' ? <BaseConhecimentoTab /> : null}
+          {activeTab === 'mensagens_automaticas' ? <MensagensAutomaticasTab /> : null}
         </section>
       </div>
     </div>

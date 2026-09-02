@@ -41,6 +41,12 @@ interface NotificationToggleDefinition {
 
 const NOTIFICATION_TOGGLES: NotificationToggleDefinition[] = [
   {
+    key: 'notificacao_nova_mensagem',
+    title: 'Nova mensagem precisa de atenção',
+    description:
+      'Receber notificação quando o cliente mandar uma mensagem nova fora do fluxo automático, ou responder depois que o atendimento já foi finalizado.',
+  },
+  {
     key: 'notificacao_modo_semi',
     title: 'Modo semi-automático',
     description:
@@ -59,7 +65,7 @@ const NOTIFICATION_TOGGLES: NotificationToggleDefinition[] = [
     key: 'notificacao_nenhum_item',
     title: 'Nenhum item encontrado',
     description:
-      'Receber notificação quando um cliente solicitar um orçamento e a IA não encontrar nenhum item para aquela proposta.',
+      'Receber notificação quando um cliente solicitar um orçamento e a IA não encontrar nenhum (ou nenhum dos) item(ns) para aquela proposta no catálogo.',
   },
 ];
 
