@@ -67,6 +67,7 @@ const EmailTab: React.FC = () => {
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isEditingConfig, setIsEditingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isValidatingConfig, setIsValidatingConfig] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -219,8 +220,54 @@ const EmailTab: React.FC = () => {
     setIsSavingConfig(true);
     setSaveError(null);
     setSaveSuccess(null);
+    setIsValidatingConfig(true);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!session?.access_token) {
+        throw new Error('Não foi possível identificar a sessão atual do usuário.');
+      }
+
+      const validationResponse = await fetch('/api/validate-smtp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          smtp_email: smtpEmail,
+          smtp_senha: smtpSenha,
+          smtp_host: smtpHost,
+          smtp_port: smtpPort,
+          smtp_ssl: emailConfigForm.smtp_ssl,
+        }),
+      });
+
+      const validationBody = await validationResponse.json().catch(() => null);
+
+      if (!validationResponse.ok) {
+        throw new Error(validationBody?.error || 'Não foi possível validar as configurações SMTP.');
+      }
+
+      if (validationBody?.validated !== true) {
+        setIsValidatingConfig(false);
+        setSaveError(
+          validationBody?.resultado ||
+            'Não foi possível validar as configurações SMTP. Revise os dados e tente novamente.',
+        );
+        return;
+      }
+
+      setIsValidatingConfig(false);
+
       const nextCanalEmail: CanalEmailConfig = {
         ...(memberConfig.canal_email || {}),
         smtp_email: smtpEmail,
@@ -258,6 +305,7 @@ const EmailTab: React.FC = () => {
       console.error('Erro ao salvar configurações de email:', error);
       setSaveError(error?.message || 'Não foi possível salvar as configurações de email.');
     } finally {
+      setIsValidatingConfig(false);
       setIsSavingConfig(false);
     }
   };
@@ -475,7 +523,11 @@ const EmailTab: React.FC = () => {
                   className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={16} />
-                  {isSavingConfig ? 'Salvando...' : 'Salvar configurações'}
+                  {isValidatingConfig
+                    ? 'Validando conexão...'
+                    : isSavingConfig
+                      ? 'Salvando...'
+                      : 'Salvar configurações'}
                 </button>
               </div>
             ) : null}

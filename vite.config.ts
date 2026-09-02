@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { createMemberService, HttpError } from './server/createMemberService';
 import { manageMemberService } from './server/manageMemberService';
 import { validateSmtpService } from './server/validateSmtpService';
+import { registerCompanyService } from './server/registerCompanyService';
 
 interface DevCreateMemberPluginOptions {
   supabaseUrl: string;
@@ -120,11 +121,16 @@ const manageMemberDevPlugin = ({
   },
 });
 
+interface DevValidateSmtpPluginOptions extends DevCreateMemberPluginOptions {
+  anthropicApiKey: string;
+}
+
 const validateSmtpDevPlugin = ({
   supabaseUrl,
   supabaseAnonKey,
   supabaseServiceRoleKey,
-}: DevCreateMemberPluginOptions): Plugin => ({
+  anthropicApiKey,
+}: DevValidateSmtpPluginOptions): Plugin => ({
   name: 'validate-smtp-dev-api',
   configureServer(server) {
     server.middlewares.use('/api/validate-smtp', async (request, response, next) => {
@@ -139,6 +145,7 @@ const validateSmtpDevPlugin = ({
           supabaseUrl,
           supabaseAnonKey,
           supabaseServiceRoleKey,
+          anthropicApiKey,
           requesterAccessToken,
           payload,
         });
@@ -157,6 +164,48 @@ const validateSmtpDevPlugin = ({
 
         console.error('Erro na API local de validacao SMTP:', error);
         sendJson(response, 500, { error: 'Nao foi possivel validar as configuracoes SMTP.' });
+      }
+    });
+  },
+});
+
+const registerCompanyDevPlugin = ({
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  accessPassword,
+}: Pick<DevCreateMemberPluginOptions, 'supabaseUrl' | 'supabaseServiceRoleKey'> & {
+  accessPassword: string;
+}): Plugin => ({
+  name: 'register-company-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/register-company', async (request, response, next) => {
+      if (request.method !== 'POST') {
+        return next();
+      }
+
+      try {
+        const payload = await readJsonBody(request);
+        const result = await registerCompanyService({
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          accessPassword,
+          payload,
+        });
+
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error('Erro na API local de cadastro de empresa:', error);
+        sendJson(response, 500, { error: 'Nao foi possivel concluir o cadastro.' });
       }
     });
   },
@@ -186,6 +235,12 @@ export default defineConfig(({ mode }) => {
         supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
         supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
         supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+      }),
+      registerCompanyDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        accessPassword: env.VITE_REGISTER_ACCESS_PASSWORD || env.REGISTER_ACCESS_PASSWORD || '',
       }),
     ],
   };

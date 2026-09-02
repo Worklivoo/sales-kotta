@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 import { HttpError } from './createMemberService.js';
-
-const SMTP_VALIDATION_WEBHOOK_URL =
-  'https://primary-systec.up.railway.app/webhook/f76854a9-c075-4945-820e-b5bcb92ddafd';
 
 interface ValidateSmtpPayload {
   smtp_email: string;
@@ -16,6 +14,7 @@ interface ValidateSmtpServiceOptions {
   supabaseUrl: string;
   supabaseAnonKey: string;
   supabaseServiceRoleKey: string;
+  anthropicApiKey?: string;
   requesterAccessToken: string;
   payload: ValidateSmtpPayload;
 }
@@ -25,36 +24,99 @@ export interface ValidateSmtpServiceResult {
   resultado: string;
 }
 
-const extractResultado = (responseBody: unknown) => {
-  if (Array.isArray(responseBody)) {
-    const firstItem = responseBody[0];
+interface SmtpVerifyError extends Error {
+  code?: string;
+  responseCode?: number;
+  command?: string;
+}
 
-    if (
-      firstItem &&
-      typeof firstItem === 'object' &&
-      'resultado' in firstItem &&
-      typeof firstItem.resultado === 'string'
-    ) {
-      return firstItem.resultado;
-    }
+const findMappedErrorMessage = (error: SmtpVerifyError): string | null => {
+  const message = (error.message || '').toLowerCase();
+
+  if (error.responseCode === 535 || error.code === 'EAUTH') {
+    return 'E-mail ou senha incorretos. Confira as credenciais SMTP e tente novamente.';
   }
 
-  if (
-    responseBody &&
-    typeof responseBody === 'object' &&
-    'resultado' in responseBody &&
-    typeof responseBody.resultado === 'string'
-  ) {
-    return responseBody.resultado;
+  if (error.responseCode === 550 || error.responseCode === 553) {
+    return 'O servidor recusou o acesso a essa caixa. Confira se o e-mail informado está correto e ativo.';
   }
 
-  return '';
+  if (message.includes('wrong version number')) {
+    return 'A configuração de SSL não combina com a porta informada. Na porta 465 o SSL deve estar ativado; na porta 587 ou 25, desativado.';
+  }
+
+  if (message.includes('self signed certificate') || message.includes('certificate')) {
+    return 'Problema com o certificado de segurança do servidor. Confira se a opção SSL está configurada corretamente para essa porta.';
+  }
+
+  if (error.code === 'ENOTFOUND' || error.code === 'EDNS') {
+    return 'Não foi possível encontrar esse servidor. Confira se o host SMTP foi digitado corretamente.';
+  }
+
+  if (error.code === 'ETIMEDOUT') {
+    return 'O servidor não respondeu a tempo. A porta pode estar bloqueada ou o host informado está incorreto.';
+  }
+
+  if (error.code === 'ECONNECTION' || error.code === 'ESOCKET' || error.code === 'ECONNREFUSED') {
+    return 'Não foi possível conectar a esse servidor. Confira o host e a porta informados.';
+  }
+
+  return null;
+};
+
+const explainErrorWithAi = async (
+  apiKey: string,
+  error: SmtpVerifyError,
+  payload: ValidateSmtpPayload,
+): Promise<string> => {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      temperature: 0,
+      system:
+        'Voce explica, em uma frase curta e direta em portugues do Brasil, o que o usuario precisa checar ' +
+        'na configuracao SMTP dele para corrigir o erro. Nao invente causas que nao aparecem no erro. ' +
+        'Nao repita o erro tecnico literalmente, traduza para linguagem de usuario final leigo. ' +
+        'Responda so com a frase, sem saudacao e sem markdown.',
+      messages: [
+        {
+          role: 'user',
+          content:
+            `Host: ${payload.smtp_host}, Porta: ${payload.smtp_port}, SSL: ${payload.smtp_ssl}\n` +
+            `Erro retornado pelo servidor SMTP: ${error.message || 'erro desconhecido'}` +
+            (error.code ? ` (codigo: ${error.code})` : '') +
+            (error.responseCode ? ` (codigo SMTP: ${error.responseCode})` : ''),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Anthropic API respondeu ${response.status}`);
+  }
+
+  const body = (await response.json()) as { content?: Array<{ type: string; text?: string }> };
+  const text = body.content?.find((block) => block.type === 'text')?.text?.trim();
+
+  if (!text) {
+    throw new Error('Resposta vazia da IA');
+  }
+
+  return text;
 };
 
 export const validateSmtpService = async ({
   supabaseUrl,
   supabaseAnonKey,
   supabaseServiceRoleKey,
+  anthropicApiKey,
   requesterAccessToken,
   payload,
 }: ValidateSmtpServiceOptions): Promise<ValidateSmtpServiceResult> => {
@@ -72,20 +134,18 @@ export const validateSmtpService = async ({
   const smtpEmail = payload.smtp_email?.trim() || '';
   const smtpSenha = payload.smtp_senha?.trim() || '';
   const smtpHost = payload.smtp_host?.trim() || '';
-  const smtpPort = payload.smtp_port?.trim() || '';
+  const smtpPortRaw = payload.smtp_port?.trim() || '';
+  const smtpPort = Number(smtpPortRaw);
 
-  if (!smtpEmail || !smtpSenha || !smtpHost || !smtpPort) {
+  if (!smtpEmail || !smtpSenha || !smtpHost || !smtpPortRaw) {
     throw new HttpError(400, 'Preencha todos os campos SMTP antes de validar.');
   }
 
-  const publicClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
+  if (!Number.isInteger(smtpPort) || smtpPort <= 0) {
+    throw new HttpError(400, 'Informe uma porta SMTP valida.');
+  }
 
-  const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  const publicClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -101,70 +161,57 @@ export const validateSmtpService = async ({
     throw new HttpError(401, 'Nao foi possivel validar o usuario autenticado.');
   }
 
-  const { data: requesterMember, error: requesterMemberError } = await adminClient
-    .from('sales_membros_empresa')
-    .select('nome')
-    .eq('membro_id', requesterUser.id)
-    .maybeSingle();
-
-  if (requesterMemberError) {
-    throw new HttpError(500, requesterMemberError.message);
-  }
-
-  const nome = requesterMember?.nome?.trim() || '';
-
-  if (!nome) {
-    throw new HttpError(400, 'Nao foi possivel identificar o nome do usuario autenticado.');
-  }
-
-  const webhookPayload = {
-    nome,
-    smtp_email: smtpEmail,
-    smtp_senha: smtpSenha,
-    smtp_host: smtpHost,
-    smtp_port: smtpPort,
-    smtp_ssl: payload.smtp_ssl,
-  };
-
-  const webhookResponse = await fetch(SMTP_VALIDATION_WEBHOOK_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: payload.smtp_ssl === true,
+    auth: {
+      user: smtpEmail,
+      pass: smtpSenha,
     },
-    body: JSON.stringify(webhookPayload),
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   });
 
-  const responseText = await webhookResponse.text();
-  let responseBody: unknown = null;
-
   try {
-    responseBody = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    responseBody = null;
-  }
+    await transporter.verify();
 
-  const resultado = extractResultado(responseBody);
-
-  if (!webhookResponse.ok) {
-    throw new HttpError(
-      400,
-      resultado || 'Nao foi possivel validar as configuracoes SMTP no servico externo.',
-    );
-  }
-
-  if (resultado === 'VALIDADO') {
     return {
       validated: true,
-      resultado,
+      resultado: 'VALIDADO',
     };
-  }
+  } catch (error) {
+    const smtpError = error as SmtpVerifyError;
+    console.error('Erro ao validar conexao SMTP:', smtpError);
 
-  if (resultado) {
+    const mappedMessage = findMappedErrorMessage(smtpError);
+
+    if (mappedMessage) {
+      return {
+        validated: false,
+        resultado: mappedMessage,
+      };
+    }
+
+    if (anthropicApiKey) {
+      try {
+        const explanation = await explainErrorWithAi(anthropicApiKey, smtpError, payload);
+
+        return {
+          validated: false,
+          resultado: explanation,
+        };
+      } catch (aiError) {
+        console.error('Erro ao explicar falha de SMTP via IA:', aiError);
+      }
+    }
+
     return {
       validated: false,
-      resultado,
+      resultado:
+        smtpError.message ||
+        'Nao foi possivel conectar ao servidor SMTP com os dados informados. Confira host, porta, e-mail e senha.',
     };
   }
-
-  throw new HttpError(400, 'Resposta invalida recebida durante a validacao do SMTP.');
 };

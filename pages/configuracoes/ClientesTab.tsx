@@ -14,7 +14,7 @@ interface ClientRecord {
 
 const ITEMS_PER_PAGE = 20;
 const CLIENTS_SYNC_WEBHOOK_URL =
-  'https://primary-production-b86f1.up.railway.app/webhook/sincronizar-clientes-manual';
+  'https://primary-production-23d76b.up.railway.app/webhook/sincronizar-clientes-manual';
 
 const normalizeSearchTerm = (value: string) => value.trim().replace(/[%(),]/g, ' ');
 

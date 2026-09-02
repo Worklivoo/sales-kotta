@@ -84,7 +84,7 @@ const CLIENT_HTML_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = 
 };
 
 const APROVACAO_WEBHOOK_URL =
-  'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
+  'https://primary-production-23d76b.up.railway.app/webhook/aprovar-orcamento-v2';
 
 const ITEM_FIELD_LABELS: Record<
   Exclude<keyof OrcamentoItemRow, 'id' | 'itemId' | 'produtoId' | 'isManuallyAdded'>,

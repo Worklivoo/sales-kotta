@@ -1,14 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../server/createMemberService.js';
-import { validateSmtpService } from '../server/validateSmtpService.js';
-
-const getBearerToken = (authorizationHeader?: string) => {
-  if (!authorizationHeader?.startsWith('Bearer ')) {
-    return '';
-  }
-
-  return authorizationHeader.slice('Bearer '.length).trim();
-};
+import { registerCompanyService } from '../server/registerCompanyService.js';
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== 'POST') {
@@ -17,13 +9,10 @@ export default async function handler(request: VercelRequest, response: VercelRe
   }
 
   try {
-    const requesterAccessToken = getBearerToken(request.headers.authorization);
-    const result = await validateSmtpService({
+    const result = await registerCompanyService({
       supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
-      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
-      requesterAccessToken,
+      accessPassword: process.env.REGISTER_ACCESS_PASSWORD || '',
       payload: request.body,
     });
 
@@ -33,7 +22,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return response.status(error.statusCode).json({ error: error.message });
     }
 
-    console.error('Erro na API de validacao SMTP:', error);
-    return response.status(500).json({ error: 'Nao foi possivel validar as configuracoes SMTP.' });
+    console.error('Erro na API de cadastro de empresa:', error);
+    return response.status(500).json({ error: 'Nao foi possivel concluir o cadastro.' });
   }
 }
