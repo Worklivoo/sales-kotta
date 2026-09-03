@@ -1291,7 +1291,7 @@ const GeralTab: React.FC = () => {
         <section className="space-y-4">
           {isAdminMember ? (
             <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
-              <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="mb-4 flex items-start justify-between gap-3 max-lg:flex-wrap">
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
                     <ClipboardCheck size={16} />
@@ -1572,7 +1572,7 @@ const GeralTab: React.FC = () => {
             aria-labelledby="regras-cotacao-modal-title"
             className="relative z-10 flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line-soft px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line-soft px-6 py-5 max-lg:px-4 max-lg:py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime/20 text-ink">
                   <Sparkles size={18} />
@@ -1619,7 +1619,7 @@ const GeralTab: React.FC = () => {
               </div>
             ) : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-paper px-6 py-5">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-paper px-6 py-5 max-lg:px-4 max-lg:py-4">
               <div className="mx-auto w-full max-w-4xl">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1738,7 +1738,7 @@ const GeralTab: React.FC = () => {
                   onClick={handleCloseQuoteRuleEditorModal}
                 />
 
-                <div className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
+                <div className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 max-lg:p-4 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-ink">
@@ -1863,7 +1863,7 @@ const GeralTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="alterar-senha-modal-title"
-            className="relative z-10 w-full max-w-md rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 w-full max-w-md rounded-card border border-line-soft bg-card p-6 max-lg:p-4 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -2026,7 +2026,7 @@ const GeralTab: React.FC = () => {
             aria-labelledby="termos-modal-title"
             className="relative z-10 flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-5">
+            <div className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-5 max-lg:flex-col max-lg:items-stretch max-lg:px-4 max-lg:py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-paper text-muted">
                   <FileText size={18} />

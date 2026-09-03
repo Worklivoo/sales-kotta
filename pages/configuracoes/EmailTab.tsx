@@ -390,7 +390,7 @@ const EmailTab: React.FC = () => {
               </div>
             ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 max-lg:grid-cols-1 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label
                   htmlFor="smtp-email"
@@ -476,7 +476,7 @@ const EmailTab: React.FC = () => {
             </div>
 
             <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 max-lg:flex-col">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-ink">SSL do servidor</p>
                   <p className="text-sm leading-6 text-muted">
@@ -490,7 +490,7 @@ const EmailTab: React.FC = () => {
                   aria-checked={emailConfigForm.smtp_ssl}
                   disabled={!isEditingConfig || isLoadingConfig}
                   onClick={handleToggleSsl}
-                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
+                  className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors max-lg:mt-3 ${
                     emailConfigForm.smtp_ssl ? 'bg-lime' : 'bg-stone'
                   } disabled:cursor-default disabled:opacity-60`}
                 >
@@ -504,13 +504,13 @@ const EmailTab: React.FC = () => {
             </div>
 
             {isEditingConfig ? (
-              <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-2 max-lg:flex-col-reverse max-lg:items-stretch">
                 {hasSavedConfig ? (
                   <button
                     type="button"
                     onClick={handleCancelEditing}
                     disabled={isSavingConfig}
-                    className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60 max-lg:w-full max-lg:text-center"
                   >
                     Cancelar
                   </button>
@@ -520,7 +520,7 @@ const EmailTab: React.FC = () => {
                   type="button"
                   onClick={handleSaveConfig}
                   disabled={isSavingConfig || isLoadingConfig}
-                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 max-lg:w-full max-lg:justify-center"
                 >
                   <Save size={16} />
                   {isValidatingConfig

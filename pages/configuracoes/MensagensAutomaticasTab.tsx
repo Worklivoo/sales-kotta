@@ -216,7 +216,7 @@ const MensagensAutomaticasTab: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-panel border border-line-soft bg-paper p-5">
+      <section className="rounded-panel border border-line-soft bg-paper p-5 max-lg:p-4">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
             <MessageSquareText className="h-5 w-5" />
@@ -262,8 +262,8 @@ const MensagensAutomaticasTab: React.FC = () => {
               const config = mensagens[categoria.key] || { ativo: false, mensagem: '' };
 
               return (
-                <div key={categoria.key} className="space-y-3 px-5 py-5">
-                  <div className="flex items-start justify-between gap-4">
+                <div key={categoria.key} className="space-y-3 px-5 py-5 max-lg:px-4">
+                  <div className="flex items-start justify-between gap-4 max-lg:flex-wrap">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-ink">{categoria.titulo}</p>
                       <p className="text-sm leading-6 text-muted">{categoria.descricao}</p>

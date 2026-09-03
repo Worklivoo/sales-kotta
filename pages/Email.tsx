@@ -690,7 +690,11 @@ const EmailPage: React.FC = () => {
         </section>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col rounded-panel border border-line-soft bg-card">
+          <aside
+            className={`min-h-0 flex-col rounded-panel border border-line-soft bg-card lg:flex ${
+              selectedAtendimento ? 'max-lg:hidden' : 'max-lg:flex'
+            }`}
+          >
             <div className="border-b border-line-soft px-4 py-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-ink">
@@ -881,10 +885,23 @@ const EmailPage: React.FC = () => {
             </div>
           </aside>
 
-          <section className="min-h-0 overflow-hidden rounded-panel border border-line-soft bg-card">
+          <section
+            className={`min-h-0 overflow-hidden rounded-panel border border-line-soft bg-card lg:block ${
+              selectedAtendimento ? 'max-lg:block' : 'max-lg:hidden'
+            }`}
+          >
             {selectedAtendimento ? (
               <div className="flex h-full min-h-0 flex-col">
                 <header className="border-b border-line-soft px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAtendimentoId('')}
+                    className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] text-muted lg:hidden"
+                    style={{ fontWeight: 700 }}
+                  >
+                    <ChevronRight size={14} className="rotate-180" />
+                    Voltar para a caixa de entrada
+                  </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-paper px-2.5 py-1 text-[10.5px] text-muted"

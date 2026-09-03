@@ -180,9 +180,9 @@ function App() {
         onNavigate={handleNavigate}
       />
       
-      <main 
-        className={`min-h-0 flex-1 h-full overflow-hidden pr-6 lg:pr-10 py-3 lg:py-5 transition-all duration-300 ease-in-out w-full ${
-          isSidebarCollapsed ? 'pl-[120px]' : 'pl-[320px]'
+      <main
+        className={`min-h-0 flex-1 h-full overflow-hidden px-4 pt-[76px] pb-[88px] lg:pr-10 lg:pt-5 lg:pb-5 transition-all duration-300 ease-in-out w-full ${
+          isSidebarCollapsed ? 'lg:pl-[120px]' : 'lg:pl-[320px]'
         }`}
       >
         <div className="h-full min-h-0 w-full transition-all duration-300 ease-in-out">

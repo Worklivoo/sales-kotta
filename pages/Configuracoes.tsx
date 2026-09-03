@@ -121,7 +121,7 @@ const ConfiguracoesPage: React.FC = () => {
         </section>
 
         <div
-          className="flex flex-wrap items-center gap-2 rounded-panel border border-line-soft bg-card p-2"
+          className="flex flex-wrap items-center gap-2 overflow-x-auto rounded-panel border border-line-soft bg-card p-2 max-lg:flex-nowrap"
           role="tablist"
           aria-label="Abas de configurações"
         >
@@ -137,7 +137,7 @@ const ConfiguracoesPage: React.FC = () => {
                 aria-controls={`configuracoes-tabpanel-${tab.key}`}
                 id={`configuracoes-tab-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex items-center rounded-pill px-4 py-2.5 text-[13px] transition-colors ${
+                className={`inline-flex shrink-0 items-center rounded-pill px-4 py-2.5 text-[13px] transition-colors ${
                   isActive ? 'bg-lime text-ink' : 'bg-paper text-muted hover:text-ink'
                 }`}
                 style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
@@ -152,7 +152,7 @@ const ConfiguracoesPage: React.FC = () => {
           id={`configuracoes-tabpanel-${activeTab}`}
           role="tabpanel"
           aria-labelledby={`configuracoes-tab-${activeTab}`}
-          className="rounded-panel border border-line-soft bg-card p-5 sm:p-6"
+          className="rounded-panel border border-line-soft bg-card p-4 sm:p-6"
         >
           {activeTab === 'geral' ? <GeralTab /> : null}
           {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}

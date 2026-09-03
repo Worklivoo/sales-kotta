@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, MessageCircle, Search, SlidersHorizontal, Zap } from 'lucide-react';
+import { Check, ChevronLeft, MessageCircle, Search, SlidersHorizontal, Zap } from 'lucide-react';
 import {
   sanitizeHtmlContent,
   stripAttachmentAnalysisFromContent,
@@ -659,7 +659,11 @@ const WhatsAppPage: React.FC = () => {
         </section>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col rounded-panel border border-line-soft bg-card">
+          <aside
+            className={`min-h-0 flex-col rounded-panel border border-line-soft bg-card lg:flex ${
+              selectedAtendimento ? 'max-lg:hidden' : 'max-lg:flex'
+            }`}
+          >
             <div className="border-b border-line-soft px-4 py-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-ink">
@@ -850,25 +854,42 @@ const WhatsAppPage: React.FC = () => {
             </div>
           </aside>
 
-          <section className="min-h-0 overflow-hidden rounded-panel border border-line-soft bg-card">
+          <section
+            className={`min-h-0 overflow-hidden rounded-panel border border-line-soft bg-card lg:block ${
+              selectedAtendimento ? 'max-lg:block' : 'max-lg:hidden'
+            }`}
+          >
             {selectedAtendimento ? (
-              React.createElement(WhatsAppChatView, {
-                header: {
-                  phoneFormatted: selectedAtendimento.phoneFormatted,
-                  ticketLabel: selectedAtendimento.ticketLabel,
-                  category: selectedAtendimento.category,
-                  categoryKey: selectedAtendimento.categoryKey,
-                  customerName: selectedAtendimento.customerName,
-                },
-                messages: selectedAtendimento.messages.map<ChatMessage>((message) => ({
-                  id: message.id,
-                  author: message.author,
-                  time: message.time,
-                  createdAt: message.createdAt,
-                  contentHtml: message.contentHtml,
-                  attachments: message.attachments.map((url) => ({ url })),
-                })),
-              })
+              <div className="flex h-full min-h-0 flex-col">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAtendimentoId('')}
+                  className="flex shrink-0 items-center gap-1.5 border-b border-line-soft bg-card px-4 py-2.5 text-[12.5px] text-muted lg:hidden"
+                  style={{ fontWeight: 700 }}
+                >
+                  <ChevronLeft size={14} />
+                  Voltar para as conversas
+                </button>
+                <div className="min-h-0 flex-1">
+                  {React.createElement(WhatsAppChatView, {
+                    header: {
+                      phoneFormatted: selectedAtendimento.phoneFormatted,
+                      ticketLabel: selectedAtendimento.ticketLabel,
+                      category: selectedAtendimento.category,
+                      categoryKey: selectedAtendimento.categoryKey,
+                      customerName: selectedAtendimento.customerName,
+                    },
+                    messages: selectedAtendimento.messages.map<ChatMessage>((message) => ({
+                      id: message.id,
+                      author: message.author,
+                      time: message.time,
+                      createdAt: message.createdAt,
+                      contentHtml: message.contentHtml,
+                      attachments: message.attachments.map((url) => ({ url })),
+                    })),
+                  })}
+                </div>
+              </div>
             ) : (
               <div className="flex h-full flex-col bg-[#efeae2]">
                 <div className="flex h-full items-center justify-center px-6">

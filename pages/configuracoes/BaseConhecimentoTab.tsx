@@ -298,7 +298,7 @@ const BaseConhecimentoTab: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-panel border border-line-soft bg-paper p-5">
+      <section className="rounded-panel border border-line-soft bg-paper p-5 max-lg:p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
@@ -341,7 +341,7 @@ const BaseConhecimentoTab: React.FC = () => {
       ) : null}
 
       <section className="rounded-panel border border-line-soft bg-card shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-1 border-b border-line-soft px-5 py-4">
+        <div className="flex flex-col gap-1 border-b border-line-soft px-5 py-4 max-lg:px-4">
           <h3 className="text-sm font-semibold text-ink">Perguntas cadastradas</h3>
           <p className="text-sm text-muted">{items.length} pergunta(s) na base desta empresa.</p>
         </div>
@@ -368,7 +368,7 @@ const BaseConhecimentoTab: React.FC = () => {
         ) : (
           <ul className="divide-y divide-line-soft">
             {items.map((item) => (
-              <li key={item.item_id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+              <li key={item.item_id} className="flex flex-col gap-3 px-5 py-4 max-lg:px-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-ink">{item.pergunta}</p>
@@ -423,7 +423,7 @@ const BaseConhecimentoTab: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="base-conhecimento-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+            className="relative z-10 w-full max-w-lg rounded-card border border-line-soft bg-card p-6 max-lg:p-4 shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
           >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>

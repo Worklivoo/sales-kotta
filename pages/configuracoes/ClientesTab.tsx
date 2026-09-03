@@ -291,7 +291,7 @@ const ClientesTab: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-panel border border-line-soft bg-paper p-5">
+      <section className="rounded-panel border border-line-soft bg-paper p-5 max-lg:p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
@@ -318,7 +318,7 @@ const ClientesTab: React.FC = () => {
       </section>
 
       <section className="rounded-panel border border-line-soft bg-card shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-3 border-b border-line-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-line-soft px-5 py-4 max-lg:px-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-ink">Lista de clientes</h3>
             <p className="mt-1 text-sm text-muted">
@@ -327,7 +327,7 @@ const ClientesTab: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="relative block min-w-[420px]">
+            <label className="relative block min-w-[420px] max-lg:min-w-0 max-lg:w-full">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-soft" />
               <input
                 type="text"
@@ -450,7 +450,7 @@ const ClientesTab: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-line-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-line-soft px-5 py-4 max-lg:px-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted">
                 Página {currentPage} de {totalPages}
               </p>

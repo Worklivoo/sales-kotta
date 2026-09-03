@@ -1083,7 +1083,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             </section>
           </aside>
 
-          <section className="flex min-h-0 h-[720px] flex-col overflow-hidden rounded-panel border border-line-soft xl:h-auto">
+          <section className="flex min-h-0 h-[720px] max-lg:h-[70vh] flex-col overflow-hidden rounded-panel border border-line-soft xl:h-auto">
             {isWhatsAppLayout ? (
                 <WhatsAppChatView
                   header={{

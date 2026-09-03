@@ -1104,7 +1104,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       />
 
       <div className="relative z-10 flex h-screen w-screen flex-col overflow-hidden bg-paper">
-        <div className="flex items-center justify-between gap-4 border-b border-line-soft bg-card px-6 py-5">
+        <div className="flex items-center justify-between gap-4 border-b border-line-soft bg-card px-6 py-5 max-lg:flex-col max-lg:items-stretch max-lg:gap-3 max-lg:px-4 max-lg:py-4">
           <div className="min-w-0">
             <p
               className="text-[10.5px] text-muted-soft"
@@ -1127,12 +1127,12 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             ) : null}
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3 max-lg:w-full max-lg:flex-wrap max-lg:justify-between max-lg:gap-2">
             <button
               type="button"
               onClick={handleSaveHtml}
               disabled={!canSaveHtml}
-              className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10 max-lg:px-3 max-lg:text-[12px]"
               style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
             >
               {isSavingHtml ? 'Salvando...' : 'Salvar Alterações'}
@@ -1146,7 +1146,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
                 setIsApproveConfirmationOpen(true);
               }}
               disabled={!canApproveOrcamento}
-              className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-4 text-[13px] text-ink transition-colors hover:bg-lime-deep disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-4 text-[13px] text-ink transition-colors hover:bg-lime-deep disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10 max-lg:px-3 max-lg:text-[12px]"
               style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
             >
               {isApprovingOrcamento ? 'Aprovando...' : 'Aprovar e Enviar'}
@@ -1155,7 +1155,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink max-lg:h-10 max-lg:w-10"
               style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
               aria-label="Fechar modal do orçamento"
             >
@@ -1165,7 +1165,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         </div>
 
         {isBlankOrcamento ? (
-          <div className="flex items-start gap-3 border-b border-red-100 bg-red-50 px-6 py-3.5">
+          <div className="flex items-start gap-3 border-b border-red-100 bg-red-50 px-6 py-3.5 max-lg:px-4">
             <div className="mt-0.5 shrink-0 text-red-600">
               <AlertTriangle size={17} strokeWidth={2} />
             </div>
@@ -1182,7 +1182,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         ) : null}
 
         {hasUnlinkedManualItem ? (
-          <div className="flex items-start gap-3 border-b border-line-soft bg-stone px-6 py-3">
+          <div className="flex items-start gap-3 border-b border-line-soft bg-stone px-6 py-3 max-lg:px-4">
             <div className="mt-0.5 shrink-0 text-muted">
               <Package size={16} strokeWidth={2} />
             </div>
@@ -1194,7 +1194,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         ) : null}
 
         <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto border-b border-line-soft bg-card px-5 py-6 xl:border-b-0 xl:border-r">
+          <aside className="min-h-0 overflow-y-auto border-b border-line-soft bg-card px-5 py-6 xl:border-b-0 xl:border-r max-lg:px-4 max-lg:py-4">
             <div className="space-y-4">
               {/* Informações do Cliente */}
               <div className="rounded-panel border border-line-soft bg-paper">
@@ -1606,9 +1606,9 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             </div>
           </aside>
 
-          <section className="min-h-0 overflow-auto bg-stone p-5 pb-8">
+          <section className="min-h-0 overflow-auto bg-stone p-5 pb-8 max-lg:p-3">
             {hasOrcamentoHtml ? (
-              <div className="flex min-h-full w-full overflow-auto rounded-panel border border-line-soft bg-card p-6 pb-10">
+              <div className="flex min-h-full w-full overflow-auto rounded-panel border border-line-soft bg-card p-6 pb-10 max-lg:p-3">
                 <div className="mx-auto flex w-full min-w-[860px] max-w-[860px] justify-center pb-8">
                   <iframe
                     title="Visualização do orçamento"

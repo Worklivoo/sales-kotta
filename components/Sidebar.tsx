@@ -244,7 +244,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {isNotificationsOpen && (
         <aside
-          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-card border border-line-soft bg-card"
+          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-card border border-line-soft bg-card max-lg:!left-3 max-lg:right-3 max-lg:top-[72px] max-lg:bottom-[84px] max-lg:w-auto max-lg:max-w-none"
           style={{ left: notificationsPanelLeft, boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)' }}
         >
           <div className="flex h-full flex-col">
@@ -407,7 +407,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <div
-        className={`${sidebarWidth} fixed left-4 top-4 bottom-4 bg-ink rounded-card flex flex-col justify-between py-8 px-4 z-20 transition-all duration-300 font-sans`}
+        className={`${sidebarWidth} hidden lg:flex fixed left-4 top-4 bottom-4 bg-ink rounded-card flex-col justify-between py-8 px-4 z-20 transition-all duration-300 font-sans`}
         style={{ transitionTimingFunction: EASE, boxShadow: '0 34px 64px -34px rgba(20,20,20,.6)' }}
       >
         <div>
@@ -519,6 +519,76 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Mobile top bar (visible below lg only) */}
+      <header className="lg:hidden fixed top-0 inset-x-0 z-20 flex h-14 items-center justify-between bg-ink px-4 font-sans">
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-tile shrink-0">
+          <img src="/Símbolo_Worklivoo_Fundo_Amarelo.png" alt="Logo" className="w-full h-full object-cover" />
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIsNotificationsOpen((current) => !current)}
+            aria-expanded={isNotificationsOpen}
+            aria-haspopup="dialog"
+            aria-label="Notificações"
+            className={`relative flex h-9 w-9 items-center justify-center rounded-tile transition-colors ${
+              isNotificationsOpen ? 'bg-white/8 text-lime' : 'text-white/70 hover:bg-white/8 hover:text-white'
+            }`}
+            style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
+          >
+            <Bell size={20} strokeWidth={isNotificationsOpen ? 2.25 : 2} />
+            {unreadCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 flex min-w-[17px] items-center justify-center rounded-pill bg-red-500 px-1 py-0.5 text-[9px] leading-none text-white"
+                style={{ fontWeight: 700 }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            aria-label="Sair"
+            className="flex h-9 w-9 items-center justify-center rounded-tile text-red-400/90 transition-colors hover:bg-red-500/15 hover:text-red-300"
+            style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile bottom navigation (visible below lg only) */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-20 flex items-stretch justify-around bg-ink px-1 pt-1.5 font-sans"
+        style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
+      >
+        {navigationItems.map((item) => {
+          const Icon = item.icon;
+          const isActive =
+            currentPath === item.path ||
+            (item.path === '/cotacoes' && currentPath.startsWith('/cotacao/'));
+
+          return (
+            <button
+              key={item.path}
+              onClick={() => onNavigate(item.path)}
+              className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-tile px-1 py-2 transition-colors ${
+                isActive ? 'text-lime' : 'text-white/55 hover:text-white'
+              }`}
+              style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
+            >
+              <Icon size={20} strokeWidth={isActive ? 2.25 : 2} />
+              <span className="text-[10.5px] leading-none" style={{ fontWeight: 700 }}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </>
   );
 };

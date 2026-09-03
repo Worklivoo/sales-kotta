@@ -442,7 +442,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-2">
-            <div className="grid h-full min-h-0 min-w-max grid-flow-col auto-cols-[280px] gap-4 pr-2 md:auto-cols-[320px] xl:auto-cols-[340px]">
+            <div className="grid h-full min-h-0 min-w-max grid-flow-col auto-cols-[85vw] gap-3 pr-2 sm:auto-cols-[280px] sm:gap-4 md:auto-cols-[320px] xl:auto-cols-[340px]">
               {KANBAN_COLUMNS.map((column) => {
                 const columnItems = filteredCotacoes.filter(
                   (cotacao) => cotacao.status === column.key,
