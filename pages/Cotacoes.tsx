@@ -203,7 +203,8 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             .from('sales_notificacoes_v2')
             .select('atendimento_id')
             .eq('membro_id', currentMember.membro_id)
-            .eq('lida', false),
+            .eq('lida', false)
+            .neq('tipo', 'ERRO_AUTOMACAO'),
         ]);
 
         if (membersResponse.error) {

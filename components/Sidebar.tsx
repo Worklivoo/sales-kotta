@@ -112,6 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         .from('sales_notificacoes_v2')
         .select('notificacao_id, tipo, titulo, descricao, atendimento_id, created_at, lida')
         .eq('membro_id', memberRow.membro_id)
+        .neq('tipo', 'ERRO_AUTOMACAO')
         .order('created_at', { ascending: false });
 
       if (error) {

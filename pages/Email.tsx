@@ -51,6 +51,7 @@ interface AtendimentoRecord {
   assunto: string | null;
   numero_ticket: number | null;
   membro_id: string | null;
+  email_lead: string | null;
 }
 
 interface MemberRecord {
@@ -315,11 +316,16 @@ const buildMessageSenderEmail = (
   author: MessageAuthor,
   metadata: Record<string, unknown> | null,
   companyName: string,
+  atendimentoEmailLead: string,
 ) => {
   const senderEmail = extractSenderEmail(metadata);
 
   if (senderEmail) {
     return senderEmail;
+  }
+
+  if (author === 'CLIENTE' && atendimentoEmailLead) {
+    return atendimentoEmailLead;
   }
 
   if (author === 'IA') {
@@ -388,7 +394,7 @@ const EmailPage: React.FC = () => {
         let atendimentosQuery = supabase
           .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id',
+            'atendimento_id, empresa_id, created_at, updated_at, status, categoria, assunto, numero_ticket, membro_id, email_lead',
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('origem', 'EMAIL')
@@ -469,6 +475,13 @@ const EmailPage: React.FC = () => {
           (getFirstRow(companyResponse.data as EmpresaRecord[] | null)?.razao_social || '')
         ).trim();
 
+        const emailLeadByAtendimento = new Map<string, string>();
+        rawAtendimentos.forEach((atendimento) => {
+          if (atendimento.email_lead) {
+            emailLeadByAtendimento.set(atendimento.atendimento_id, atendimento.email_lead);
+          }
+        });
+
         const messagesByAtendimento = new Map<string, AtendimentoMessage[]>();
         const senderEmailByAtendimento = new Map<string, string>();
         const latestMessageAtByAtendimento = new Map<string, string>();
@@ -483,7 +496,12 @@ const EmailPage: React.FC = () => {
           const mappedMessage: AtendimentoMessage = {
             id: message.mensagem_id,
             author,
-            senderEmail: buildMessageSenderEmail(author, parsedMetadata, resolvedCompanyName),
+            senderEmail: buildMessageSenderEmail(
+              author,
+              parsedMetadata,
+              resolvedCompanyName,
+              emailLeadByAtendimento.get(message.atendimento_id) || '',
+            ),
             time: formatDateTime(message.created_at),
             contentHtml: sanitizeHtmlContent(rawContent),
             contentText,
@@ -511,7 +529,10 @@ const EmailPage: React.FC = () => {
           const messages = messagesByAtendimento.get(atendimento.atendimento_id) ?? [];
           const latestMessage = messages[0] ?? null;
           const orderedMessages = [...messages].reverse();
-          const senderEmail = senderEmailByAtendimento.get(atendimento.atendimento_id) || '';
+          const senderEmail =
+            senderEmailByAtendimento.get(atendimento.atendimento_id) ||
+            atendimento.email_lead ||
+            '';
           const subject = atendimento.assunto || 'Atendimento sem assunto';
           const lastActivityAt = latestMessage
             ? latestMessageAtByAtendimento.get(atendimento.atendimento_id) || atendimento.created_at
