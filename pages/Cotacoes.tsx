@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Mail, MessageCircle, Search, TrendingUp, UserRound, X, Zap } from 'lucide-react';
+import {
+  CalendarRange,
+  Mail,
+  MessageCircle,
+  Search,
+  SlidersHorizontal,
+  TrendingUp,
+  UserRound,
+  X,
+  Zap,
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type KanbanStatus =
@@ -129,6 +139,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -341,26 +352,27 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
 
   return (
     <div className="h-full min-h-0 w-full font-sans">
-      <div className="flex h-full min-h-0 flex-col gap-4">
-        <section className="flex flex-wrap items-end justify-between gap-4 px-1 pt-1">
-          <div className="space-y-1">
-            <h1 className="text-[23px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.025em' }}>
+      <div className="flex h-full min-h-0 flex-col gap-4 max-lg:gap-2">
+        <section className="flex flex-wrap items-end justify-between gap-4 px-1 pt-1 max-lg:items-center max-lg:gap-2">
+          <div className="space-y-1 max-lg:space-y-0">
+            <h1 className="text-[23px] text-ink max-lg:text-[18px]" style={{ fontWeight: 800, letterSpacing: '-.025em' }}>
               Funil de Cotações
             </h1>
-            <p className="text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
+            <p className="text-[13.5px] text-muted max-lg:hidden" style={{ fontWeight: 500 }}>
               Gerencie suas cotações e oportunidades de vendas.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 rounded-panel bg-ink px-5 py-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-tile bg-lime">
-              <TrendingUp size={16} className="text-ink" strokeWidth={2.25} />
+          <div className="flex items-center gap-3 rounded-panel bg-ink px-5 py-3 max-lg:gap-2 max-lg:px-3 max-lg:py-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-tile bg-lime max-lg:h-7 max-lg:w-7">
+              <TrendingUp size={16} className="text-ink max-lg:hidden" strokeWidth={2.25} />
+              <TrendingUp size={13} className="hidden text-ink max-lg:block" strokeWidth={2.25} />
             </div>
             <div className="leading-tight">
-              <p className="text-[10px] text-white/55" style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+              <p className="text-[10px] text-white/55 max-lg:hidden" style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
                 Em aberto no funil
               </p>
-              <p className="text-[15px] text-white" style={{ fontWeight: 800 }}>
+              <p className="text-[15px] text-white max-lg:text-[12.5px]" style={{ fontWeight: 800 }}>
                 {pipelineStat.valorFormatado}
                 <span className="ml-1.5 text-white/55" style={{ fontWeight: 500 }}>
                   · {pipelineStat.count} {pipelineStat.count === 1 ? 'cotação' : 'cotações'}
@@ -371,7 +383,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         </section>
 
         <section className="flex flex-wrap items-center gap-2 px-1">
-          <div className="flex h-10 min-w-[240px] flex-1 items-center gap-2.5 rounded-pill border border-line bg-card px-4">
+          <div className="flex h-10 min-w-[240px] flex-1 items-center gap-2.5 rounded-pill border border-line bg-card px-4 max-lg:min-w-0">
             <Search size={14} className="text-muted-soft shrink-0" />
             <input
               type="text"
@@ -383,55 +395,76 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             />
           </div>
 
-          <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5">
-            <CalendarRange size={14} className="text-muted-soft shrink-0" />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none"
-              style={{ fontWeight: 500 }}
-            />
-            <span className="text-muted-soft">–</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none"
-              style={{ fontWeight: 500 }}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileFiltersOpen((current) => !current)}
+            aria-expanded={isMobileFiltersOpen}
+            aria-label="Mostrar filtros"
+            className={`hidden h-10 w-10 shrink-0 items-center justify-center rounded-pill border transition-colors max-lg:flex ${
+              isMobileFiltersOpen || hasActiveFilters
+                ? 'border-lime bg-lime text-ink'
+                : 'border-line bg-card text-muted'
+            }`}
+            style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+          >
+            <SlidersHorizontal size={15} />
+          </button>
 
-          {isAdmin ? (
-            <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5">
-              <UserRound size={14} className="text-muted-soft shrink-0" />
-              <select
-                value={selectedMember}
-                onChange={(e) => setSelectedMember(e.target.value)}
-                className="bg-transparent text-[13px] text-ink outline-none"
+          <div
+            className={`flex w-full flex-wrap items-center gap-2 max-lg:mt-2 lg:contents ${
+              isMobileFiltersOpen ? '' : 'max-lg:hidden'
+            }`}
+          >
+            <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5 max-lg:w-full">
+              <CalendarRange size={14} className="text-muted-soft shrink-0" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none max-lg:w-full"
                 style={{ fontWeight: 500 }}
-              >
-                <option value="Todos">Todos</option>
-                {memberOptions.map((member) => (
-                  <option key={member.membro_id} value={member.membro_id}>
-                    {member.nome}
-                  </option>
-                ))}
-              </select>
+              />
+              <span className="text-muted-soft">–</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-[112px] bg-transparent text-[12.5px] text-ink outline-none max-lg:w-full"
+                style={{ fontWeight: 500 }}
+              />
             </div>
-          ) : null}
 
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="flex h-10 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] text-muted hover:text-ink"
-              style={{ fontWeight: 700, transition: 'color .22s var(--ease)' }}
-            >
-              <X size={13} />
-              Limpar
-            </button>
-          ) : null}
+            {isAdmin ? (
+              <div className="flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-4 pr-3.5 max-lg:w-full">
+                <UserRound size={14} className="text-muted-soft shrink-0" />
+                <select
+                  value={selectedMember}
+                  onChange={(e) => setSelectedMember(e.target.value)}
+                  className="bg-transparent text-[13px] text-ink outline-none max-lg:w-full"
+                  style={{ fontWeight: 500 }}
+                >
+                  <option value="Todos">Todos</option>
+                  {memberOptions.map((member) => (
+                    <option key={member.membro_id} value={member.membro_id}>
+                      {member.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="flex h-10 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] text-muted hover:text-ink"
+                style={{ fontWeight: 700, transition: 'color .22s var(--ease)' }}
+              >
+                <X size={13} />
+                Limpar
+              </button>
+            ) : null}
+          </div>
         </section>
 
         <section className="min-h-0 flex flex-1 flex-col overflow-hidden">

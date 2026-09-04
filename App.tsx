@@ -171,7 +171,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen h-dvh overflow-hidden bg-background">
       <Sidebar 
         isCollapsed={isSidebarCollapsed}
         toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -181,7 +181,7 @@ function App() {
       />
       
       <main
-        className={`min-h-0 flex-1 h-full overflow-hidden px-4 pt-[76px] pb-[88px] lg:pr-10 lg:pt-5 lg:pb-5 transition-all duration-300 ease-in-out w-full ${
+        className={`min-h-0 flex-1 h-full overflow-hidden px-4 pt-[calc(var(--mobile-header-h)_+_12px)] pb-[calc(var(--mobile-bottom-nav-h)_+_12px)] lg:pr-10 lg:pt-5 lg:pb-5 transition-all duration-300 ease-in-out w-full ${
           isSidebarCollapsed ? 'lg:pl-[120px]' : 'lg:pl-[320px]'
         }`}
       >

@@ -244,8 +244,17 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {isNotificationsOpen && (
         <aside
-          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-card border border-line-soft bg-card max-lg:!left-3 max-lg:right-3 max-lg:top-[72px] max-lg:bottom-[84px] max-lg:w-auto max-lg:max-w-none"
-          style={{ left: notificationsPanelLeft, boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)' }}
+          className="fixed top-4 bottom-4 z-30 w-[430px] max-w-[calc(100vw-8rem)] overflow-hidden rounded-card border border-line-soft bg-card max-lg:!left-3 max-lg:right-3 max-lg:w-auto max-lg:max-w-none"
+          style={{
+            left: notificationsPanelLeft,
+            boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)',
+            ...(typeof window !== 'undefined' && window.innerWidth < 1024
+              ? {
+                  top: 'calc(var(--mobile-header-h) + 12px)',
+                  bottom: 'calc(var(--mobile-bottom-nav-h) + 12px)',
+                }
+              : {}),
+          }}
         >
           <div className="flex h-full flex-col">
             <div className="border-b border-line-soft px-6 py-6">
@@ -521,7 +530,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Mobile top bar (visible below lg only) */}
-      <header className="lg:hidden fixed top-0 inset-x-0 z-20 flex h-14 items-center justify-between bg-ink px-4 font-sans">
+      <header
+        className="lg:hidden fixed top-0 inset-x-0 z-20 flex items-center justify-between bg-ink px-4 font-sans"
+        style={{ height: 'var(--mobile-header-h)', paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-tile shrink-0">
           <img src="/Símbolo_Worklivoo_Fundo_Amarelo.png" alt="Logo" className="w-full h-full object-cover" />
         </div>
@@ -564,7 +576,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile bottom navigation (visible below lg only) */}
       <nav
         className="lg:hidden fixed bottom-0 inset-x-0 z-20 flex items-stretch justify-around bg-ink px-1 pt-1.5 font-sans"
-        style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
+        style={{ minHeight: 'var(--mobile-bottom-nav-h)', paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
       >
         {navigationItems.map((item) => {
           const Icon = item.icon;

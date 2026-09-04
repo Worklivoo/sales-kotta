@@ -401,7 +401,7 @@ const getAttachmentLabel = (attachment: string) => {
 
 const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
 const APPROVE_ORCAMENTO_WEBHOOK_URL =
-  'https://primary-production-23d76b.up.railway.app/webhook/aprovar-orcamento-v2';
+  'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
 
 const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div>

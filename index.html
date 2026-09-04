@@ -76,6 +76,11 @@
       }
     </script>
     <style>
+      :root {
+        --mobile-header-h: calc(56px + env(safe-area-inset-top));
+        --mobile-bottom-nav-h: calc(64px + env(safe-area-inset-bottom));
+      }
+
       /* Custom scrollbar for better aesthetics */
       ::-webkit-scrollbar {
         width: 6px;

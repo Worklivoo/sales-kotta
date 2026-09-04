@@ -16,7 +16,7 @@ interface ProductRecord {
 
 const ITEMS_PER_PAGE = 20;
 const PRODUCTS_SYNC_WEBHOOK_URL =
-  'https://primary-production-23d76b.up.railway.app/webhook/sincronizar-produtos-manual';
+  'https://primary-production-b86f1.up.railway.app/webhook/sincronizar-produtos-manual';
 
 const normalizeSearchTerm = (value: string) => value.trim().replace(/[%(),]/g, ' ');
 
