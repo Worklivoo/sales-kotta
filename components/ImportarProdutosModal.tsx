@@ -3,6 +3,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
   Database,
   FileSpreadsheet,
   Loader2,
@@ -84,16 +87,13 @@ interface Props {
   aoConcluir: () => void;
 }
 
-const CORES_CONFIANCA: Record<Confianca, string> = {
-  alta: 'bg-lime/25 text-ink',
-  media: 'bg-paper text-muted',
-  baixa: 'bg-amber-100 text-amber-800',
-};
-
-const ROTULO_CONFIANCA: Record<Confianca, string> = {
-  alta: 'certo',
-  media: 'provável',
-  baixa: 'confira',
+/* O selo carrega o sinal pelo icone e pela cor, nao so pela palavra.
+   A aplicacao e de tema claro unico, entao cor semantica direta e
+   segura aqui - o lima da marca e acento, nao estado. */
+const SELO_CONFIANCA: Record<Confianca, { rotulo: string; classe: string; Icone: typeof CircleCheck }> = {
+  alta: { rotulo: 'certo', classe: 'text-emerald-600', Icone: CircleCheck },
+  media: { rotulo: 'provável', classe: 'text-muted-soft', Icone: CircleDashed },
+  baixa: { rotulo: 'confira', classe: 'text-amber-600', Icone: CircleAlert },
 };
 
 const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }) => {
@@ -457,12 +457,36 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
                               })}
                             </select>
                             {item.campo ? (
+                              (() => {
+                                const selo = SELO_CONFIANCA[item.confianca];
+                                return (
+                                  <span
+                                    className={`inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold ${selo.classe}`}
+                                    title={
+                                      item.confianca === 'alta'
+                                        ? 'O nome da coluna e o conteúdo dela concordam.'
+                                        : item.confianca === 'media'
+                                          ? 'Só um dos dois indica esse campo. Vale um olhar.'
+                                          : 'Palpite fraco. Confira antes de importar.'
+                                    }
+                                  >
+                                    <selo.Icone size={14} strokeWidth={2.4} />
+                                    {selo.rotulo}
+                                  </span>
+                                );
+                              })()
+                            ) : (
+                              /* Sobrar coluna e normal (fornecedor, codigo de
+                                 barras). O sinal existe para o estado ficar
+                                 visivel, mas neutro - alarme aqui seria falso. */
                               <span
-                                className={`shrink-0 rounded-pill px-2 py-0.5 text-[10px] font-semibold ${CORES_CONFIANCA[item.confianca]}`}
+                                className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-soft"
+                                title="Esta coluna não será importada."
                               >
-                                {ROTULO_CONFIANCA[item.confianca]}
+                                <CircleDashed size={14} strokeWidth={2} />
+                                fora
                               </span>
-                            ) : null}
+                            )}
                           </div>
                         </td>
                       </tr>
