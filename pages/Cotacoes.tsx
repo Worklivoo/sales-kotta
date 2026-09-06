@@ -484,7 +484,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                 return (
                   <div
                     key={column.key}
-                    className="flex h-full min-h-0 min-w-0 flex-col rounded-panel border border-line-soft bg-stone p-3"
+                    className="flex h-full min-h-0 min-w-0 flex-col rounded-panel border border-line-soft bg-paper p-3"
                   >
                     <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1 py-1">
                       <div className="min-w-0">
