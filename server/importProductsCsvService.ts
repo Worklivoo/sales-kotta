@@ -300,114 +300,75 @@ export const detectarFormatoNumero = (amostras: string[][]): FormatoNumero => {
 };
 
 /* ------------------------------------------------------------------ *
- * Analise por IA: recebe SO os cabecalhos e poucas linhas de amostra -
- * o arquivo inteiro nunca sai do navegador para a Anthropic.
+ * Analise por IA: NAO falamos com a Anthropic daqui. Quem fala e o
+ * fluxo do n8n "Analisar Planilha de Produtos (painel) - Kotta", que
+ * usa a credencial "Anthropic - Sales Kotta" ja comprovada em producao.
+ *
+ * Motivo: a ANTHROPIC_API_KEY deste projeto na Vercel respondia 401, e
+ * a convencao do produto e que a orquestracao de IA mora no n8n.
+ *
+ * Continua valendo o mesmo cuidado: sobem SO os cabecalhos e ate 5
+ * linhas de amostra - a planilha inteira nunca sai do navegador aqui.
  * ------------------------------------------------------------------ */
+const URL_ANALISE_N8N =
+  'https://primary-production-b86f1.up.railway.app/webhook/analisar-planilha-produtos';
+
 interface RetornoIa {
   mapeamento: MapeamentoColuna[];
   formato_numero: FormatoNumero;
   avisos: string[];
 }
 
-/* Guarda por que a IA nao respondeu, para a tela poder dizer o motivo em
-   vez de um generico "nao estava disponivel" - foi exatamente isso que
-   escondeu a causa no primeiro teste real. */
+/* Guarda por que a analise nao respondeu, para a tela poder dizer o
+   motivo em vez de um generico "nao estava disponivel" - foi exatamente
+   isso que escondeu a causa (401) no primeiro teste real. */
 export let ultimoMotivoFalhaIa = '';
 
 const analisarComIa = async (
-  anthropicApiKey: string,
+  tokenN8n: string,
   colunas: string[],
   amostras: string[][],
 ): Promise<RetornoIa | null> => {
-  const catalogo = CAMPOS_PRODUTO.map(
-    (c) => `- ${c.campo} (${c.rotulo})${c.obrigatorio ? ' [OBRIGATORIO]' : ''} - tipo ${c.tipo}`,
-  ).join('\n');
+  const controle = new AbortController();
+  const limite = setTimeout(() => controle.abort(), 60000);
 
-  const tabela = [colunas, ...amostras]
-    .map((linha) => linha.map((c) => String(c ?? '').slice(0, 60)).join(' | '))
-    .join('\n');
+  let resposta: Response;
 
-  const prompt = `Voce recebe as colunas de uma planilha de produtos enviada por uma empresa e precisa dizer qual coluna corresponde a qual campo do nosso catalogo.
-
-CAMPOS DO NOSSO CATALOGO:
-${catalogo}
-
-PLANILHA (primeira linha = cabecalho, demais = amostra real):
-${tabela}
-
-REGRAS:
-1. Cada campo do catalogo pode ser usado no maximo UMA vez.
-2. Coluna que nao corresponde a nenhum campo recebe campo: null. E normal sobrar coluna.
-3. Olhe o CONTEUDO das amostras, nao so o nome da coluna. Um cabecalho generico como "Codigo" pode ser SKU ou codigo de barras - o conteudo decide.
-4. codigo_sku e o identificador unico do produto. Se houver varios candidatos, prefira o que parece codigo interno, nao codigo de barras (EAN/GTIN tem 8, 12, 13 ou 14 digitos).
-5. nome e o texto que identifica o produto para uma pessoa.
-6. formato_numero: "BR" se os numeros usam virgula como decimal (1.234,56), "US" se usam ponto (1,234.56).
-7. confianca: "alta" se nome e conteudo concordam, "media" se so um deles, "baixa" se e chute.
-8. Em avisos, escreva em portugues qualquer coisa que a pessoa precise conferir (ex: dois candidatos a SKU, coluna de preco parecendo custo em vez de venda, campo obrigatorio ausente).
-
-Responda SOMENTE com JSON valido, sem texto antes ou depois:
-{"mapeamento":[{"coluna":"<nome exato da coluna>","campo":"<campo ou null>","confianca":"alta|media|baixa","motivo":"<curto, em portugues>"}],"formato_numero":"BR|US","avisos":["..."]}`;
-
-  const resposta = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': anthropicApiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      // mesmo modelo que os 5 nos de reserva do Worker Global ja usam em
-      // producao - a conta comprovadamente tem acesso a ele
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  try {
+    resposta = await fetch(URL_ANALISE_N8N, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-kotta-token': tokenN8n },
+      body: JSON.stringify({ colunas, amostras }),
+      signal: controle.signal,
+    });
+  } finally {
+    clearTimeout(limite);
+  }
 
   if (!resposta.ok) {
     const detalhe = await resposta.text().catch(() => '');
-    let mensagem = '';
-    try {
-      mensagem = (JSON.parse(detalhe) as { error?: { message?: string } })?.error?.message ?? '';
-    } catch {
-      mensagem = detalhe.slice(0, 200);
-    }
-    ultimoMotivoFalhaIa = `A Anthropic respondeu ${resposta.status}${mensagem ? ': ' + mensagem : ''}`;
-    console.error('[import-produtos] analise por IA falhou:', resposta.status, detalhe.slice(0, 500));
+    ultimoMotivoFalhaIa = `A automacao respondeu ${resposta.status}`;
+    console.error('[import-produtos] webhook de analise falhou:', resposta.status, detalhe.slice(0, 300));
     return null;
   }
 
-  const corpo = (await resposta.json()) as { content?: Array<{ type: string; text?: string }> };
-  // modelos recentes podem devolver um bloco de raciocinio antes do texto
-  const bloco = corpo.content?.find((c) => c.type === 'text' && typeof c.text === 'string');
-  if (!bloco?.text) {
-    ultimoMotivoFalhaIa = 'A Anthropic respondeu sem bloco de texto.';
+  const bruto = (await resposta.json().catch(() => null)) as
+    | { ok?: boolean; motivo?: string; mapeamento?: unknown; formato_numero?: string; avisos?: unknown[] }
+    | null;
+
+  if (!bruto || bruto.ok !== true || !Array.isArray(bruto.mapeamento)) {
+    ultimoMotivoFalhaIa = typeof bruto?.motivo === 'string' && bruto.motivo ? bruto.motivo : 'A automacao nao devolveu o mapeamento.';
+    console.error('[import-produtos] resposta inesperada da analise:', JSON.stringify(bruto).slice(0, 300));
     return null;
   }
 
-  const texto = bloco.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-
-  let bruto: unknown;
-  try {
-    bruto = JSON.parse(texto);
-  } catch {
-    ultimoMotivoFalhaIa = 'A resposta da IA nao veio em JSON valido.';
-    console.error('[import-produtos] resposta nao-JSON:', texto.slice(0, 400));
-    return null;
-  }
-
-  const dados = bruto as {
-    mapeamento?: Array<{ coluna?: string; campo?: string | null; confianca?: string; motivo?: string }>;
-    formato_numero?: string;
-    avisos?: unknown[];
-  };
-
-  if (!Array.isArray(dados.mapeamento)) {
-    ultimoMotivoFalhaIa = 'A IA respondeu sem a lista de mapeamento.';
-    return null;
-  }
-
-  const porColuna = new Map(dados.mapeamento.map((m) => [String(m.coluna ?? ''), m]));
+  /* O n8n ja garante campo unico e coluna existente, mas conferimos de
+     novo: quem valida o que entra e quem usa o dado. */
+  const porColuna = new Map(
+    (bruto.mapeamento as Array<{ coluna?: string; campo?: string | null; confianca?: string; motivo?: string }>).map(
+      (m) => [String(m.coluna ?? ''), m],
+    ),
+  );
   const jaUsados = new Set<string>();
 
   const mapeamento: MapeamentoColuna[] = colunas.map((coluna) => {
@@ -427,8 +388,8 @@ Responda SOMENTE com JSON valido, sem texto antes ou depois:
 
   return {
     mapeamento,
-    formato_numero: dados.formato_numero === 'US' ? 'US' : 'BR',
-    avisos: Array.isArray(dados.avisos) ? dados.avisos.map((a) => String(a).slice(0, 240)).slice(0, 8) : [],
+    formato_numero: bruto.formato_numero === 'US' ? 'US' : 'BR',
+    avisos: Array.isArray(bruto.avisos) ? bruto.avisos.map((a) => String(a).slice(0, 240)).slice(0, 8) : [],
   };
 };
 
@@ -443,7 +404,7 @@ interface ServiceOptions {
   supabaseUrl: string;
   supabaseAnonKey: string;
   supabaseServiceRoleKey: string;
-  anthropicApiKey?: string;
+  n8nToken?: string;
   requesterAccessToken: string;
   payload: {
     acao?: 'analisar' | 'importar';
@@ -483,16 +444,21 @@ export async function importProductsCsvService(options: ServiceOptions) {
 
     ultimoMotivoFalhaIa = '';
 
-    const daIa = options.anthropicApiKey
-      ? await analisarComIa(options.anthropicApiKey, colunas, amostras).catch((e) => {
-          ultimoMotivoFalhaIa = e instanceof Error ? e.message : 'Falha de rede ao chamar a IA.';
-          console.error('[import-produtos] excecao na analise por IA:', e);
+    const daIa = options.n8nToken
+      ? await analisarComIa(options.n8nToken, colunas, amostras).catch((e) => {
+          ultimoMotivoFalhaIa =
+            e instanceof Error && e.name === 'AbortError'
+              ? 'A automacao demorou mais de 60s para responder.'
+              : e instanceof Error
+                ? e.message
+                : 'Falha de rede ao chamar a automacao.';
+          console.error('[import-produtos] excecao na analise:', e);
           return null;
         })
       : null;
 
-    if (!options.anthropicApiKey) {
-      ultimoMotivoFalhaIa = 'A chave ANTHROPIC_API_KEY nao chegou ao servidor.';
+    if (!options.n8nToken) {
+      ultimoMotivoFalhaIa = 'A variavel N8N_KOTTA_TOKEN nao chegou ao servidor.';
     }
 
     if (daIa) {
@@ -502,7 +468,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
         mapeamento: mapearPorHeuristica(colunas),
         formato_numero: detectarFormatoNumero(amostras),
         avisos: [
-          `A leitura por IA nao respondeu${ultimoMotivoFalhaIa ? ' (' + ultimoMotivoFalhaIa + ')' : ''}. O de-para abaixo saiu apenas do nome das colunas - confira com atencao antes de importar.`,
+          `A leitura automatica das colunas nao respondeu${ultimoMotivoFalhaIa ? ' (' + ultimoMotivoFalhaIa + ')' : ''}. O de-para abaixo saiu apenas do nome das colunas - confira com atencao antes de importar.`,
         ],
         camposFaltando: [],
       };

@@ -22,7 +22,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
       supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+      n8nToken: process.env.N8N_KOTTA_TOKEN || '',
       requesterAccessToken,
       payload: request.body,
     });
