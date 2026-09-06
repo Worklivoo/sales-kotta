@@ -662,8 +662,11 @@ interface ArgsGravar {
    ordem, entao comparar JSON.stringify cru acusaria diferenca sempre e
    todo registro seria reescrito a cada importacao. */
 const canonico = (o: unknown) => {
-  if (!o || typeof o !== 'object') return '{}';
+  if (!o || typeof o !== 'object') return '[]';
   const obj = o as Record<string, unknown>;
+  /* Vazio precisa dar o MESMO texto vindo de null ou de {}: antes null
+     virava "{}" e {} virava "[]", entao registro sem informacoes extras
+     era reescrito a cada importacao, para sempre. */
   return JSON.stringify(
     Object.keys(obj)
       .sort()
@@ -912,6 +915,20 @@ const gravarClientes = async ({ adminClient, empresaId, registros, extrasPorChav
     criados: Number(c?.criados ?? 0),
     atualizados: Number(c?.atualizados ?? 0) + soNaSegundaPassada,
     desativados,
+    // TEMPORARIO: para achar por que 8 clientes foram reescritos sem ter
+    // mudado nada. Remover assim que a causa estiver identificada.
+    _diag: {
+      registros: registros.length,
+      criar: criar.length,
+      atualizar: atualizar.length,
+      extras: extras.length,
+      exemplo: extras[0]
+        ? {
+            banco: canonico(achar(registros.find((r) => (r.codigo_erp || r.cnpj) === extras[0].chave) ?? {})?.metadata),
+            planilha: canonico(extras[0].metadata),
+          }
+        : null,
+    },
   };
 };
 
