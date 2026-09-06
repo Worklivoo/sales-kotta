@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import ImportarProdutosModal from '../../components/ImportarProdutosModal';
+import ImportarPlanilhaModal from '../../components/ImportarPlanilhaModal';
 
 type BudgetMode = 'AUTO' | 'SEMI';
 type QuoteRuleLevel = 'OBRIGATORIO' | 'DESEJAVEL';
@@ -324,6 +324,7 @@ const GeralTab: React.FC = () => {
   const [accountSaveSuccess, setAccountSaveSuccess] = useState<string | null>(null);
   const [companyPlan, setCompanyPlan] = useState<CompanyPlanRecord | null>(null);
   const [isImportProdutosOpen, setIsImportProdutosOpen] = useState(false);
+  const [isImportClientesOpen, setIsImportClientesOpen] = useState(false);
   const [recarregarEmpresa, setRecarregarEmpresa] = useState(0);
   const [isCompanyPlanLoading, setIsCompanyPlanLoading] = useState(false);
   const [companyPlanError, setCompanyPlanError] = useState<string | null>(null);
@@ -532,8 +533,28 @@ const GeralTab: React.FC = () => {
     (typeof companyPlan?.integracao_clientes?.url === 'string'
       ? (companyPlan.integracao_clientes.url as string).trim()
       : '') || '';
-  const hasCompanyClientSourceConfigured = Boolean(companyClientSourceLink);
-  const companyClientSourceStatusLabel = hasCompanyClientSourceConfigured ? 'API' : '-';
+  const hasCompanyClientSourceConfigured = Boolean(companyClientSourceLink) || Boolean(companyPlan?.integracao_clientes?.tipo);
+  const companyClientSourceTipo =
+    typeof companyPlan?.integracao_clientes?.tipo === 'string'
+      ? (companyPlan.integracao_clientes.tipo as string)
+      : '';
+  const companyClientSourceArquivo =
+    typeof companyPlan?.integracao_clientes?.nome_arquivo === 'string'
+      ? (companyPlan.integracao_clientes.nome_arquivo as string)
+      : '';
+  const companyClientSourceImportadoEm = (() => {
+    const bruto = companyPlan?.integracao_clientes?.importado_em;
+    if (typeof bruto !== 'string') return '';
+    const data = new Date(bruto);
+    return Number.isNaN(data.getTime())
+      ? ''
+      : data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
+  })();
+  const companyClientSourceStatusLabel = companyClientSourceTipo
+    ? formatEnumLabel(companyClientSourceTipo)
+    : hasCompanyClientSourceConfigured
+      ? 'API'
+      : '-';
   const companyQuoteRules = useMemo(
     () => parseQuoteRules(companyPlan?.regras_cotacao),
     [companyPlan?.regras_cotacao],
@@ -1564,10 +1585,19 @@ const GeralTab: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Clientes</h3>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                      De onde os clientes da empresa são coletados. Configuração somente leitura.
+                      De onde o KOTTA IA reconhece quem está pedindo a cotação.
                     </p>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsImportClientesOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
+                >
+                  <Pencil size={13} />
+                  Editar
+                </button>
               </div>
 
               <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
@@ -1584,9 +1614,13 @@ const GeralTab: React.FC = () => {
                   </div>
 
                   <div>
-                    <p className="text-[11px] font-medium text-muted-soft">URL</p>
+                    <p className="text-[11px] font-medium text-muted-soft">
+                      {companyClientSourceTipo === 'PLANILHA' ? 'Arquivo' : 'URL'}
+                    </p>
                     <p className="mt-1 break-all text-xs leading-5 text-muted">
-                      {companyClientSourceLink || '-'}
+                      {companyClientSourceTipo === 'PLANILHA'
+                        ? `${companyClientSourceArquivo || '-'}${companyClientSourceImportadoEm ? ` · importado em ${companyClientSourceImportadoEm}` : ''}`
+                        : companyClientSourceLink || '-'}
                     </p>
                   </div>
                 </div>
@@ -2098,9 +2132,17 @@ const GeralTab: React.FC = () => {
         </div>
       ) : null}
 
-      <ImportarProdutosModal
+      <ImportarPlanilhaModal
+        tipo="produtos"
         aberto={isImportProdutosOpen}
         aoFechar={() => setIsImportProdutosOpen(false)}
+        aoConcluir={() => setRecarregarEmpresa((n) => n + 1)}
+      />
+
+      <ImportarPlanilhaModal
+        tipo="clientes"
+        aberto={isImportClientesOpen}
+        aoFechar={() => setIsImportClientesOpen(false)}
         aoConcluir={() => setRecarregarEmpresa((n) => n + 1)}
       />
     </>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Package, RefreshCw, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Package, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface ProductRecord {
@@ -10,6 +10,8 @@ interface ProductRecord {
   preco_venda: string | number | null;
   unidade_medida: string | null;
   estoque: string | number | null;
+  link_referencia?: string | null;
+  metadata?: Record<string, unknown> | null;
   categoria: string | null;
   moeda: string | null;
 }
@@ -203,7 +205,7 @@ const ProdutosTab: React.FC = () => {
         let query = supabase
           .from('sales_produtos_v2')
           .select(
-            'produto_id, codigo_sku, nome, descricao, preco_venda, unidade_medida, estoque, categoria, moeda',
+            'produto_id, codigo_sku, nome, descricao, preco_venda, unidade_medida, estoque, categoria, moeda, link_referencia, metadata',
             { count: 'exact' },
           )
           .eq('empresa_id', companyId)
@@ -475,6 +477,39 @@ const ProdutosTab: React.FC = () => {
                           <p className="text-xs leading-5 text-muted">
                             {product.descricao?.trim() || 'Sem descrição cadastrada.'}
                           </p>
+
+                          {product.metadata && Object.keys(product.metadata).length > 0 ? (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {Object.entries(product.metadata).map(([chave, valor]) => (
+                                <span
+                                  key={chave}
+                                  className="rounded-pill bg-paper px-2 py-0.5 text-[10px] text-muted"
+                                  title={`${chave}: ${String(valor)}`}
+                                >
+                                  {chave}: {String(valor).slice(0, 24)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {product.link_referencia?.trim() ? (
+                            <a
+                              href={product.link_referencia}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 pt-0.5 text-[11px] font-semibold text-ink underline decoration-line underline-offset-2 hover:decoration-ink"
+                            >
+                              <ExternalLink size={11} />
+                              {/* so o dominio: a URL inteira estoura a coluna */}
+                              {(() => {
+                                try {
+                                  return new URL(product.link_referencia).hostname.replace(/^www\./, '');
+                                } catch {
+                                  return 'link';
+                                }
+                              })()}
+                            </a>
+                          ) : null}
                         </div>
                       </td>
 

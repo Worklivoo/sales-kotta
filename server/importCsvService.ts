@@ -1,40 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
-
-/* ------------------------------------------------------------------ *
- * Campos da tabela sales_produtos_v2 que a planilha pode preencher.
- * codigo_sku e nome sao NOT NULL no banco - sem eles nao ha importacao.
- * ------------------------------------------------------------------ */
-export const CAMPOS_PRODUTO = [
-  { campo: 'codigo_sku', rotulo: 'Codigo / SKU', obrigatorio: true, tipo: 'texto', varias: false },
-  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, tipo: 'texto', varias: true },
-  { campo: 'descricao', rotulo: 'Descricao', obrigatorio: false, tipo: 'texto', varias: true },
-  { campo: 'preco_venda', rotulo: 'Preco de venda', obrigatorio: false, tipo: 'numero', varias: false },
-  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, tipo: 'texto', varias: false },
-  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, tipo: 'texto', varias: false },
-  { campo: 'estoque', rotulo: 'Quantidade em estoque', obrigatorio: false, tipo: 'numero', varias: false },
-  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, tipo: 'texto', varias: true },
-  // Nao e coluna da tabela: cai no jsonb metadata, uma chave por coluna.
-  // A busca de produtos devolve metadata junto, entao o agente de cotacao
-  // enxerga o que for guardado aqui.
-  { campo: 'metadata', rotulo: 'Informacoes extras', obrigatorio: false, tipo: 'texto', varias: true },
-] as const;
-
-type CampoProduto = (typeof CAMPOS_PRODUTO)[number]['campo'];
-
-const CAMPOS_VALIDOS = new Set<string>(CAMPOS_PRODUTO.map((c) => c.campo));
-const CAMPOS_NUMERICOS = new Set<string>(
-  CAMPOS_PRODUTO.filter((c) => c.tipo === 'numero').map((c) => c.campo),
-);
-const CAMPOS_VARIAS_COLUNAS = new Set<string>(
-  CAMPOS_PRODUTO.filter((c) => c.varias).map((c) => c.campo),
-);
+import {
+  catalogoParaIa,
+  pegarCatalogo,
+  type Catalogo,
+  type CampoCatalogo,
+  type TipoImportacao,
+} from './catalogosImportacao.js';
 
 export type FormatoNumero = 'BR' | 'US';
 
 export interface MapeamentoColuna {
   coluna: string;
-  campo: CampoProduto | null;
+  campo: string | null;
   confianca: 'alta' | 'media' | 'baixa';
   motivo: string;
 }
@@ -184,31 +162,15 @@ const validarChamador = async ({
 };
 
 /* ------------------------------------------------------------------ *
- * Reserva sem IA: casa pelo nome da coluna. Serve quando a chave da
- * Anthropic nao esta configurada ou a chamada falha - a importacao
- * nunca pode depender exclusivamente da IA.
+ * Reserva sem IA: casa pelo nome da coluna. Serve quando a analise nao
+ * responde - a importacao nunca pode depender exclusivamente dela.
  * ------------------------------------------------------------------ */
-const SINONIMOS: Record<CampoProduto, string[]> = {
-  codigo_sku: ['sku', 'codigo', 'cod', 'code', 'referencia', 'ref', 'interno'],
-  nome: ['nome', 'produto', 'item', 'name', 'title', 'titulo', 'mercadoria', 'material'],
-  descricao: ['descricao', 'description', 'detalhe', 'detalhamento', 'observacao', 'obs', 'especificacao', 'tecnico'],
-  preco_venda: ['preco', 'valor', 'vlr', 'price', 'venda'],
-  moeda: ['moeda', 'currency'],
-  unidade_medida: ['unidade', 'un', 'um', 'medida', 'unit', 'embalagem'],
-  estoque: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'stock', 'disponivel', 'disp'],
-  categoria: ['categoria', 'grupo', 'familia', 'linha', 'category', 'segmento', 'departamento'],
-  // De proposito vazio: mandar coluna para "informacoes extras" e uma
-  // escolha da pessoa, nao um palpite automatico.
-  metadata: [],
-};
-
-/* Palavras que aparecem em quase todo cabecalho e nao ajudam a decidir. */
 const RUIDO = new Set(['do', 'da', 'de', 'dos', 'das', 'e', 'o', 'a', 'no', 'na', 'por', 'p']);
 
 const normalizarNome = (valor: string) =>
   valor
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
 
 /* Quebra o cabecalho em palavras. "Vlr. Unit. Venda" -> [vlr, unit, venda].
@@ -237,27 +199,27 @@ const pontuar = (palavras: string[], termos: string[]) => {
   return total;
 };
 
-export const mapearPorHeuristica = (colunas: string[]): MapeamentoColuna[] => {
+export const mapearPorHeuristica = (colunas: string[], catalogo: Catalogo): MapeamentoColuna[] => {
   const palavrasPorColuna = colunas.map((c) => emPalavras(c));
 
   /* Pontua TODOS os pares coluna x campo antes de decidir. Atribuir na
      ordem das colunas deixava a primeira coluna "roubar" um campo que
      combinava muito mais com outra. */
-  const candidatos: Array<{ indice: number; campo: CampoProduto; nota: number }> = [];
+  const candidatos: Array<{ indice: number; campo: string; nota: number }> = [];
 
   colunas.forEach((_, indice) => {
-    for (const [campo, termos] of Object.entries(SINONIMOS) as [CampoProduto, string[]][]) {
-      const nota = pontuar(palavrasPorColuna[indice], termos);
-      if (nota > 0) candidatos.push({ indice, campo, nota });
+    for (const campo of catalogo.campos) {
+      if (campo.sinonimos.length === 0) continue; // metadata: so escolha manual
+      const nota = pontuar(palavrasPorColuna[indice], campo.sinonimos);
+      if (nota > 0) candidatos.push({ indice, campo: campo.campo, nota });
     }
   });
 
-  // maior nota primeiro; empate resolve pela ordem da planilha
   candidatos.sort((a, b) => b.nota - a.nota || a.indice - b.indice);
 
-  const campoDaColuna = new Map<number, { campo: CampoProduto; nota: number }>();
+  const campoDaColuna = new Map<number, { campo: string; nota: number }>();
   const colunasUsadas = new Set<number>();
-  const camposUsados = new Set<CampoProduto>();
+  const camposUsados = new Set<string>();
 
   for (const c of candidatos) {
     if (colunasUsadas.has(c.indice) || camposUsados.has(c.campo)) continue;
@@ -266,14 +228,12 @@ export const mapearPorHeuristica = (colunas: string[]): MapeamentoColuna[] => {
     campoDaColuna.set(c.indice, { campo: c.campo, nota: c.nota });
   }
 
-  /* Sem nome nao ha importacao. Se nenhuma coluna virou nome, a coluna de
-     texto que ficou com "descricao" e a candidata mais provavel - planilha
-     costuma chamar o nome do produto de "descricao do item". */
+  /* Sem nome nao ha importacao. Se nenhuma coluna virou nome, a que ficou
+     com "descricao" e a candidata mais provavel - planilha costuma chamar
+     o nome do produto de "descricao do item". */
   if (!camposUsados.has('nome')) {
     const daDescricao = [...campoDaColuna.entries()].find(([, v]) => v.campo === 'descricao');
-    if (daDescricao) {
-      campoDaColuna.set(daDescricao[0], { campo: 'nome', nota: 1 });
-    }
+    if (daDescricao) campoDaColuna.set(daDescricao[0], { campo: 'nome', nota: 1 });
   }
 
   return colunas.map((coluna, indice) => {
@@ -338,6 +298,7 @@ const analisarComIa = async (
   tokenN8n: string,
   colunas: string[],
   amostras: string[][],
+  catalogo: Catalogo,
 ): Promise<RetornoIa | null> => {
   const controle = new AbortController();
   const limite = setTimeout(() => controle.abort(), 60000);
@@ -348,7 +309,7 @@ const analisarComIa = async (
     resposta = await fetch(URL_ANALISE_N8N, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-kotta-token': tokenN8n },
-      body: JSON.stringify({ colunas, amostras }),
+      body: JSON.stringify({ colunas, amostras, assunto: catalogo.assunto, campos: catalogoParaIa(catalogo) }),
       signal: controle.signal,
     });
   } finally {
@@ -383,14 +344,15 @@ const analisarComIa = async (
 
   const mapeamento: MapeamentoColuna[] = colunas.map((coluna) => {
     const m = porColuna.get(coluna);
-    const campo = m?.campo && CAMPOS_VALIDOS.has(m.campo) && !jaUsados.has(m.campo) ? m.campo : null;
+    const valido = new Set(catalogo.campos.map((c) => c.campo));
+    const campo = m?.campo && valido.has(m.campo) && !jaUsados.has(m.campo) ? m.campo : null;
     if (campo) jaUsados.add(campo);
 
     const confianca = m?.confianca === 'alta' || m?.confianca === 'media' ? m.confianca : 'baixa';
 
     return {
       coluna,
-      campo: campo as CampoProduto | null,
+      campo,
       confianca,
       motivo: typeof m?.motivo === 'string' ? m.motivo.slice(0, 160) : '',
     };
@@ -406,7 +368,9 @@ const analisarComIa = async (
 /* ------------------------------------------------------------------ *
  * Servico principal. Duas acoes:
  *   analisar  -> propoe o de-para (IA, com heuristica de reserva)
- *   importar  -> aplica pela MESMA RPC usada pelas fontes API/HTML/XML
+ *   importar  -> grava, pela mesma RPC que a sincronizacao automatica usa
+ * Serve produtos e clientes: o que muda e o catalogo e o caminho de
+ * escrita, nao o fluxo.
  * ------------------------------------------------------------------ */
 export type ModoImportacao = 'mesclar' | 'substituir';
 
@@ -417,6 +381,7 @@ interface ServiceOptions {
   n8nToken?: string;
   requesterAccessToken: string;
   payload: {
+    tipo?: TipoImportacao;
     acao?: 'analisar' | 'importar';
     colunas?: string[];
     amostras?: string[][];
@@ -430,13 +395,18 @@ interface ServiceOptions {
 
 const LIMITE_LINHAS = 20000;
 
-export async function importProductsCsvService(options: ServiceOptions) {
+export async function importCsvService(options: ServiceOptions) {
   const { payload } = options;
   const acao = payload?.acao;
 
   if (acao !== 'analisar' && acao !== 'importar') {
     throw new HttpError(400, 'Acao invalida. Use "analisar" ou "importar".');
   }
+
+  const catalogo = pegarCatalogo(payload?.tipo);
+  const camposValidos = new Set(catalogo.campos.map((c) => c.campo));
+  const camposVarias = new Set(catalogo.campos.filter((c) => c.varias).map((c) => c.campo));
+  const camposNumericos = new Set(catalogo.campos.filter((c) => c.tipo === 'numero').map((c) => c.campo));
 
   const { adminClient, empresaId } = await validarChamador(options);
 
@@ -450,19 +420,17 @@ export async function importProductsCsvService(options: ServiceOptions) {
 
     const amostras = (payload.amostras ?? []).slice(0, 5).map((l) => (l ?? []).map((c) => String(c ?? '')));
 
-    let resultado: AnaliseResultado;
-
     ultimoMotivoFalhaIa = '';
 
     const daIa = options.n8nToken
-      ? await analisarComIa(options.n8nToken, colunas, amostras).catch((e) => {
+      ? await analisarComIa(options.n8nToken, colunas, amostras, catalogo).catch((e) => {
           ultimoMotivoFalhaIa =
             e instanceof Error && e.name === 'AbortError'
               ? 'A automacao demorou mais de 60s para responder.'
               : e instanceof Error
                 ? e.message
                 : 'Falha de rede ao chamar a automacao.';
-          console.error('[import-produtos] excecao na analise:', e);
+          console.error('[import-csv] excecao na analise:', e);
           return null;
         })
       : null;
@@ -471,11 +439,13 @@ export async function importProductsCsvService(options: ServiceOptions) {
       ultimoMotivoFalhaIa = 'A variavel N8N_KOTTA_TOKEN nao chegou ao servidor.';
     }
 
+    let resultado: AnaliseResultado;
+
     if (daIa) {
       resultado = { ...daIa, camposFaltando: [] };
     } else {
       resultado = {
-        mapeamento: mapearPorHeuristica(colunas),
+        mapeamento: mapearPorHeuristica(colunas, catalogo),
         formato_numero: detectarFormatoNumero(amostras),
         avisos: [
           `A leitura automatica das colunas nao respondeu${ultimoMotivoFalhaIa ? ' (' + ultimoMotivoFalhaIa + ')' : ''}. O de-para abaixo saiu apenas do nome das colunas - confira com atencao antes de importar.`,
@@ -484,40 +454,36 @@ export async function importProductsCsvService(options: ServiceOptions) {
       };
     }
 
-    const preenchidos = new Set(resultado.mapeamento.map((m) => m.campo).filter(Boolean) as string[]);
-    resultado.camposFaltando = CAMPOS_PRODUTO.filter((c) => c.obrigatorio && !preenchidos.has(c.campo)).map(
-      (c) => c.rotulo,
-    );
+    resultado.camposFaltando = faltando(resultado.mapeamento, catalogo);
 
     return resultado;
   }
 
   /* ---------------------------- IMPORTAR ---------------------------- */
   const mapeamento = (payload.mapeamento ?? []).filter(
-    (m) => m && typeof m.coluna === 'string' && m.campo && CAMPOS_VALIDOS.has(m.campo),
-  ) as Array<{ coluna: string; campo: CampoProduto }>;
+    (m) => m && typeof m.coluna === 'string' && m.campo && camposValidos.has(m.campo),
+  ) as Array<{ coluna: string; campo: string }>;
 
-  /* Um campo pode receber MAIS DE UMA coluna quando faz sentido juntar
-     (nome, descricao, categoria e informacoes extras). Preco, estoque,
-     SKU, moeda e unidade aceitam uma so - juntar dois precos nao quer
-     dizer nada. */
-  const porCampo = new Map<CampoProduto, string[]>();
+  const porCampo = new Map<string, string[]>();
   for (const m of mapeamento) {
     const jaTem = porCampo.get(m.campo) ?? [];
-    if (jaTem.length > 0 && !CAMPOS_VARIAS_COLUNAS.has(m.campo)) continue;
+    if (jaTem.length > 0 && !camposVarias.has(m.campo)) continue;
     porCampo.set(m.campo, [...jaTem, m.coluna]);
   }
 
-  for (const obrigatorio of CAMPOS_PRODUTO.filter((c) => c.obrigatorio)) {
-    if (!porCampo.has(obrigatorio.campo)) {
-      throw new HttpError(400, `O campo "${obrigatorio.rotulo}" precisa estar associado a uma coluna da planilha.`);
-    }
+  const pendentes = faltando(
+    mapeamento.map((m) => ({ coluna: m.coluna, campo: m.campo, confianca: 'alta' as const, motivo: '' })),
+    catalogo,
+  );
+
+  if (pendentes.length > 0) {
+    throw new HttpError(400, `Falta indicar qual coluna corresponde a: ${pendentes.join(', ')}.`);
   }
 
   const linhas = payload.linhas ?? [];
 
   if (linhas.length === 0) {
-    throw new HttpError(400, 'A planilha nao tem nenhuma linha de produto.');
+    throw new HttpError(400, 'A planilha nao tem nenhuma linha para importar.');
   }
 
   if (linhas.length > LIMITE_LINHAS) {
@@ -528,8 +494,8 @@ export async function importProductsCsvService(options: ServiceOptions) {
   const modo: ModoImportacao = payload.modo === 'substituir' ? 'substituir' : 'mesclar';
 
   const vistos = new Set<string>();
-  const metadataPorSku = new Map<string, Record<string, string>>();
-  const produtos: Array<Record<string, unknown>> = [];
+  const extrasPorChave = new Map<string, Record<string, string>>();
+  const registros: Array<Record<string, unknown>> = [];
   const ignoradas: Array<{ linha: number; motivo: string }> = [];
   let duplicadas = 0;
 
@@ -539,123 +505,209 @@ export async function importProductsCsvService(options: ServiceOptions) {
     /* Primeira coluna entra crua; as seguintes vao rotuladas com o nome
        do cabecalho, senao um codigo de barras solto no meio da descricao
        nao diria nada a ninguem (nem a IA). */
-    const valorDe = (campo: CampoProduto) => {
+    const valorDe = (campo: string) => {
       const colunas = porCampo.get(campo);
       if (!colunas || colunas.length === 0) return undefined;
       if (colunas.length === 1) return linha[colunas[0]];
 
       const partes = colunas
-        .map((coluna, indice) => {
+        .map((coluna, i) => {
           const valor = limparTexto(linha[coluna]);
           if (!valor) return null;
-          return indice === 0 ? valor : `${coluna}: ${valor}`;
+          return i === 0 ? valor : `${coluna}: ${valor}`;
         })
         .filter(Boolean);
 
       return partes.length > 0 ? partes.join(' · ') : undefined;
     };
 
-    /* Cada coluna mandada para "Informacoes extras" vira uma chave do
-       jsonb metadata. O padrao ja existe na base: os produtos vindos da
-       sincronizacao guardam idaux, observacoes e ncm assim. */
-    const metadataDaLinha = (() => {
+    const registro: Record<string, unknown> = {};
+
+    for (const campo of catalogo.campos) {
+      if (campo.campo === 'metadata') continue;
+      registro[campo.campo] = camposNumericos.has(campo.campo)
+        ? converterNumero(valorDe(campo.campo), formato)
+        : limparTexto(valorDe(campo.campo));
+    }
+
+    // nome e obrigatorio nos dois catalogos
+    if (!registro.nome) {
+      ignoradas.push({ linha: numeroLinha, motivo: 'Sem nome preenchido.' });
+      return;
+    }
+
+    /* A identidade e o que permite decidir criar x atualizar. Produtos tem
+       uma chave so; clientes tem duas e basta uma delas. */
+    const chave = catalogo.chaves.map((k) => registro[k]).find((v) => v) as string | undefined;
+
+    if (!chave) {
+      ignoradas.push({ linha: numeroLinha, motivo: `Sem ${catalogo.chaveTexto}.` });
+      return;
+    }
+
+    if (vistos.has(chave)) duplicadas += 1;
+    vistos.add(chave);
+
+    if (catalogo.tipo === 'produtos') {
+      registro.moeda = registro.moeda ?? 'BRL';
+      registro.texto_busca = [registro.nome, registro.descricao, registro.categoria].filter(Boolean).join(' ');
+    }
+
+    const extras = (() => {
       const colunas = porCampo.get('metadata') ?? [];
       const objeto: Record<string, string> = {};
-
       for (const coluna of colunas) {
         const valor = limparTexto(linha[coluna]);
         if (valor) objeto[coluna] = valor;
       }
-
       return Object.keys(objeto).length > 0 ? objeto : null;
     })();
 
-    const sku = limparTexto(valorDe('codigo_sku'));
-    const nome = limparTexto(valorDe('nome'));
+    if (extras) extrasPorChave.set(chave, extras);
 
-    if (!sku) {
-      ignoradas.push({ linha: numeroLinha, motivo: 'Sem codigo/SKU.' });
-      return;
-    }
-
-    if (!nome) {
-      ignoradas.push({ linha: numeroLinha, motivo: 'Sem nome do produto.' });
-      return;
-    }
-
-    // O banco tem unicidade em (empresa_id, codigo_sku): a ultima linha vence,
-    // mas registramos para a pessoa saber que a planilha repetia SKU.
-    if (vistos.has(sku)) {
-      duplicadas += 1;
-    }
-    vistos.add(sku);
-
-    const descricao = limparTexto(valorDe('descricao'));
-    const categoria = limparTexto(valorDe('categoria'));
-
-    const produto = {
-      codigo_sku: sku,
-      nome,
-      descricao,
-      preco_venda: CAMPOS_NUMERICOS.has('preco_venda') ? converterNumero(valorDe('preco_venda'), formato) : null,
-      moeda: limparTexto(valorDe('moeda')) ?? 'BRL',
-      unidade_medida: limparTexto(valorDe('unidade_medida')),
-      estoque: converterNumero(valorDe('estoque'), formato),
-      categoria,
-      texto_busca: [nome, descricao, categoria].filter(Boolean).join(' '),
-    };
-
-    // guardado fora do objeto que vai para a RPC - ela nao tem esse campo
-    if (metadataDaLinha) metadataPorSku.set(sku, metadataDaLinha);
-
-    const jaExiste = produtos.findIndex((p) => p.codigo_sku === sku);
+    const jaExiste = registros.findIndex((r) => catalogo.chaves.some((k) => r[k] && r[k] === registro[k]));
     if (jaExiste >= 0) {
-      produtos[jaExiste] = produto;
+      registros[jaExiste] = registro;
     } else {
-      produtos.push(produto);
+      registros.push(registro);
     }
   });
 
-  if (produtos.length === 0) {
+  if (registros.length === 0) {
     throw new HttpError(
       400,
-      'Nenhuma linha da planilha tinha codigo/SKU e nome preenchidos. Confira o de-para das colunas.',
+      `Nenhuma linha tinha ${catalogo.chaveTexto} e nome preenchidos. Confira o de-para das colunas.`,
     );
   }
 
-  /* Produtos que a empresa ja tem, para separar criar de atualizar.
-     Paginado: o PostgREST corta em 1000 linhas por resposta. */
-  const atuais: Array<{ produto_id: string; codigo_sku: string; [k: string]: unknown }> = [];
+  const resultado =
+    catalogo.tipo === 'produtos'
+      ? await gravarProdutos({ adminClient, empresaId, registros, extrasPorChave, vistos, modo })
+      : await gravarClientes({ adminClient, empresaId, registros, extrasPorChave, vistos, modo });
+
+  /* Registra a origem do cadastro, para a tela de Fonte de Dados refletir. */
+  const coluna = catalogo.tipo === 'produtos' ? 'integracao_produtos' : 'integracao_clientes';
+
+  await adminClient
+    .from('sales_empresas_v2')
+    .update({
+      [coluna]: {
+        tipo: 'PLANILHA',
+        origem: 'csv',
+        nome_arquivo: limparTexto(payload.nome_arquivo) ?? null,
+        modo,
+        linhas_arquivo: linhas.length,
+        importado_em: new Date().toISOString(),
+      },
+    })
+    .eq('empresa_id', empresaId);
+
+  return {
+    ...resultado,
+    lidas: linhas.length,
+    validas: registros.length,
+    ignoradas: ignoradas.slice(0, 50),
+    total_ignoradas: ignoradas.length,
+    duplicadas,
+    modo,
+  };
+}
+
+/* Campos obrigatorios que ficaram sem coluna. Para clientes, as duas
+   chaves contam como UMA exigencia: basta uma delas. */
+const faltando = (mapeamento: MapeamentoColuna[], catalogo: Catalogo) => {
+  const usados = new Set(mapeamento.map((m) => m.campo).filter(Boolean) as string[]);
+  const pendentes: string[] = [];
+
+  for (const campo of catalogo.campos) {
+    if (campo.obrigatorio && !usados.has(campo.campo)) pendentes.push(campo.rotulo);
+  }
+
+  if (!catalogo.chaves.some((k) => usados.has(k))) {
+    pendentes.push(catalogo.chaveTexto);
+  }
+
+  return pendentes;
+};
+
+/* ------------------------------------------------------------------ *
+ * Caminhos de escrita. Cada um usa a MESMA RPC que a sincronizacao
+ * automatica daquele cadastro ja usa, em vez de abrir um segundo
+ * caminho de escrita.
+ * ------------------------------------------------------------------ */
+/* O tipo vem de quem realmente cria o cliente, e nao de createClient
+   direto: assim acompanha o generico que o supabase-js infere ali. */
+type ClienteAdmin = Awaited<ReturnType<typeof validarChamador>>['adminClient'];
+
+interface ArgsGravar {
+  adminClient: ClienteAdmin;
+  empresaId: string;
+  registros: Array<Record<string, unknown>>;
+  extrasPorChave: Map<string, Record<string, string>>;
+  vistos: Set<string>;
+  modo: ModoImportacao;
+}
+
+/* Comparacao canonica: o jsonb do Postgres devolve as chaves em outra
+   ordem, entao comparar JSON.stringify cru acusaria diferenca sempre e
+   todo registro seria reescrito a cada importacao. */
+const canonico = (o: unknown) => {
+  if (!o || typeof o !== 'object') return '{}';
+  const obj = o as Record<string, unknown>;
+  return JSON.stringify(
+    Object.keys(obj)
+      .sort()
+      .map((k) => [k, String(obj[k] ?? '')]),
+  );
+};
+
+const lerTudo = async (
+  adminClient: ClienteAdmin,
+  tabela: string,
+  colunas: string,
+  empresaId: string,
+  ordem: string,
+) => {
+  const linhas: Array<Record<string, unknown>> = [];
   const passo = 1000;
 
   for (let inicio = 0; ; inicio += passo) {
     const { data, error } = await adminClient
-      .from('sales_produtos_v2')
-      .select('produto_id, codigo_sku, nome, descricao, preco_venda, moeda, unidade_medida, estoque, categoria, ativo, metadata')
+      .from(tabela)
+      .select(colunas)
       .eq('empresa_id', empresaId)
-      .order('produto_id', { ascending: true })
+      .order(ordem, { ascending: true })
       .range(inicio, inicio + passo - 1);
 
-    if (error) {
-      throw new HttpError(500, `Nao foi possivel ler o catalogo atual: ${error.message}`);
-    }
+    if (error) throw new HttpError(500, `Nao foi possivel ler o cadastro atual: ${error.message}`);
 
-    const lote = data ?? [];
-    atuais.push(...(lote as typeof atuais));
-
+    const lote = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    linhas.push(...lote);
     if (lote.length < passo) break;
   }
 
-  const atuaisPorSku = new Map(atuais.map((p) => [p.codigo_sku, p]));
+  return linhas;
+};
+
+const gravarProdutos = async ({ adminClient, empresaId, registros, extrasPorChave, vistos, modo }: ArgsGravar) => {
+  const atuais = await lerTudo(
+    adminClient,
+    'sales_produtos_v2',
+    'produto_id, codigo_sku, nome, descricao, preco_venda, moeda, unidade_medida, estoque, categoria, ativo, metadata, link_referencia',
+    empresaId,
+    'produto_id',
+  );
+
+  const porSku = new Map(atuais.map((p) => [p.codigo_sku as string, p]));
 
   const criar: Array<Record<string, unknown>> = [];
   const atualizar: Array<Record<string, unknown>> = [];
 
-  for (const novo of produtos) {
-    const atual = atuaisPorSku.get(novo.codigo_sku as string);
+  for (const novo of registros) {
+    const atual = porSku.get(novo.codigo_sku as string);
 
     if (!atual) {
-      criar.push(novo);
+      criar.push(semCampos(novo, ['link_referencia']));
       continue;
     }
 
@@ -670,119 +722,192 @@ export async function importProductsCsvService(options: ServiceOptions) {
       atual.ativo === false;
 
     if (mudou) {
-      const { codigo_sku: _ignorado, ...camposAtualizaveis } = novo;
-      atualizar.push({ produto_id: atual.produto_id, ...camposAtualizaveis });
+      const { codigo_sku: _ignorado, ...campos } = semCampos(novo, ['link_referencia']);
+      atualizar.push({ produto_id: atual.produto_id, ...campos });
     }
   }
 
-  // Desativar so no modo "substituir". No "mesclar", produto fora da
-  // planilha fica intocado - e o comportamento seguro para planilha parcial.
   const desativar =
     modo === 'substituir'
-      ? atuais.filter((p) => !vistos.has(p.codigo_sku) && p.ativo !== false).map((p) => p.produto_id)
+      ? atuais.filter((p) => !vistos.has(p.codigo_sku as string) && p.ativo !== false).map((p) => p.produto_id)
       : [];
 
-  const { data: resultadoRpc, error: erroRpc } = await adminClient.rpc('sales_v2_sync_aplicar', {
+  const { data, error } = await adminClient.rpc('sales_v2_sync_aplicar', {
     p_payload: { empresa_id: empresaId, criar, atualizar, desativar },
   });
 
-  if (erroRpc) {
-    throw new HttpError(500, `Nao foi possivel gravar os produtos: ${erroRpc.message}`);
-  }
+  if (error) throw new HttpError(500, `Nao foi possivel gravar os produtos: ${error.message}`);
 
-  const contagem = Array.isArray(resultadoRpc) ? resultadoRpc[0] : resultadoRpc;
+  /* A RPC compartilhada nao conhece metadata nem link_referencia, e ela
+     atende todas as empresas - nao vou altera-la por causa desta tela.
+     Segunda passada, so em quem realmente mudou. */
+  const extras = registros
+    .filter((r) => {
+      const sku = r.codigo_sku as string;
+      const atual = porSku.get(sku);
+      const metaNovo = extrasPorChave.get(sku) ?? null;
+      const linkNovo = (r.link_referencia ?? null) as string | null;
 
-  // Registra a origem do catalogo, para a tela de Fonte de Dados refletir.
-  await adminClient
-    .from('sales_empresas_v2')
-    .update({
-      integracao_produtos: {
-        tipo: 'PLANILHA',
-        origem: 'csv',
-        nome_arquivo: limparTexto(payload.nome_arquivo) ?? null,
-        modo,
-        linhas_arquivo: linhas.length,
-        importado_em: new Date().toISOString(),
-      },
-    })
-    .eq('empresa_id', empresaId);
+      if (!atual) return Boolean(metaNovo || linkNovo);
 
-  /* A RPC compartilhada nao tem o campo metadata (e ela atende todas as
-     empresas, entao nao vou altera-la por causa desta tela). Gravamos
-     numa segunda passada, em lotes, so nos produtos que tem algo. */
-  let comInformacoesExtras = 0;
-
-  if (metadataPorSku.size > 0) {
-    const lote = 500;
-
-    /* Comparacao canonica: o jsonb do Postgres devolve as chaves em outra
-       ordem, entao comparar JSON.stringify cru acusaria diferenca sempre.
-       Sem isso, TODO produto com informacoes extras era reescrito a cada
-       importacao - e um gatilho set_updated_at na tabela carimba a data em
-       qualquer escrita, entao o desperdicio nem aparecia como erro. */
-    const canonico = (o: unknown) => {
-      if (!o || typeof o !== 'object') return '{}';
-      const obj = o as Record<string, unknown>;
-      return JSON.stringify(
-        Object.keys(obj)
-          .sort()
-          .map((k) => [k, String(obj[k] ?? '')]),
+      return (
+        canonico(atual.metadata) !== canonico(metaNovo) ||
+        ((atual.link_referencia ?? null) as string | null) !== linkNovo
       );
-    };
+    })
+    .map((r) => ({
+      empresa_id: empresaId,
+      codigo_sku: r.codigo_sku as string,
+      nome: r.nome as string,
+      metadata: extrasPorChave.get(r.codigo_sku as string) ?? {},
+      link_referencia: (r.link_referencia ?? null) as string | null,
+    }));
 
-    const linhasMeta = produtos
-      .filter((p) => {
-        const sku = p.codigo_sku as string;
-        if (!metadataPorSku.has(sku)) return false;
+  await gravarExtras(adminClient, 'sales_produtos_v2', 'empresa_id,codigo_sku', extras);
 
-        const atual = atuaisPorSku.get(sku);
-        if (!atual) return true; // produto novo: sempre grava
-
-        return canonico(atual.metadata) !== canonico(metadataPorSku.get(sku));
-      })
-      .map((p) => ({
-        empresa_id: empresaId,
-        codigo_sku: p.codigo_sku as string,
-        nome: p.nome as string,
-        metadata: metadataPorSku.get(p.codigo_sku as string) as Record<string, string>,
-      }));
-
-    for (let i = 0; i < linhasMeta.length; i += lote) {
-      const { error } = await adminClient
-        .from('sales_produtos_v2')
-        .upsert(linhasMeta.slice(i, i + lote), { onConflict: 'empresa_id,codigo_sku' });
-
-      if (error) {
-        throw new HttpError(500, `Os produtos entraram, mas as informacoes extras falharam: ${error.message}`);
-      }
-    }
-
-    comInformacoesExtras = linhasMeta.length; // quantos precisaram ser gravados
-  }
-
-  /* Avisa a automacao para recalcular a busca inteligente agora, em vez
-     de esperar a varredura de seguranca que roda a cada 3h. Se falhar,
-     a importacao NAO pode falhar junto - por isso o catch vazio. */
-  try {
-    await fetch('https://primary-production-b86f1.up.railway.app/webhook/gerar-embeddings-v2', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ motivo: 'importacao_planilha_produtos' }),
-    });
-  } catch {
-    // a varredura de 3h cobre este caso
-  }
+  const c = (Array.isArray(data) ? data[0] : data) as { criados?: number; atualizados?: number; desativados?: number } | null;
 
   return {
-    criados: Number(contagem?.criados ?? 0),
-    atualizados: Number(contagem?.atualizados ?? 0),
-    desativados: Number(contagem?.desativados ?? 0),
-    lidas: linhas.length,
-    validas: produtos.length,
-    ignoradas: ignoradas.slice(0, 50),
-    total_ignoradas: ignoradas.length,
-    duplicadas,
-    com_informacoes_extras: comInformacoesExtras,
-    modo,
+    criados: Number(c?.criados ?? 0),
+    atualizados: Number(c?.atualizados ?? 0),
+    desativados: Number(c?.desativados ?? 0),
+    com_informacoes_extras: extras.length,
   };
-}
+};
+
+const gravarClientes = async ({ adminClient, empresaId, registros, extrasPorChave, vistos, modo }: ArgsGravar) => {
+  const atuais = await lerTudo(
+    adminClient,
+    'sales_clientes_v2',
+    'cliente_id, codigo_erp, cnpj, nome, razao_social, email, telefone, whatsapp, ativo, metadata',
+    empresaId,
+    'cliente_id',
+  );
+
+  /* Cliente e identificado por codigo_erp OU cnpj (dois indices unicos
+     parciais no banco). Indexamos pelos dois para achar o existente. */
+  const porChave = new Map<string, Record<string, unknown>>();
+  for (const c of atuais) {
+    if (c.codigo_erp) porChave.set(String(c.codigo_erp), c);
+    if (c.cnpj) porChave.set(String(c.cnpj), c);
+  }
+
+  const achar = (r: Record<string, unknown>) => {
+    for (const k of ['codigo_erp', 'cnpj']) {
+      const v = r[k];
+      if (v && porChave.has(String(v))) return porChave.get(String(v));
+    }
+    return undefined;
+  };
+
+  const criar: Array<Record<string, unknown>> = [];
+  const atualizar: Array<Record<string, unknown>> = [];
+  const encontrados = new Set<string>();
+
+  for (const novo of registros) {
+    const atual = achar(novo);
+
+    if (!atual) {
+      criar.push(novo);
+      continue;
+    }
+
+    encontrados.add(String(atual.cliente_id));
+
+    const mudou =
+      atual.nome !== novo.nome ||
+      (atual.razao_social ?? null) !== novo.razao_social ||
+      (atual.email ?? null) !== novo.email ||
+      (atual.telefone ?? null) !== novo.telefone ||
+      (atual.whatsapp ?? null) !== novo.whatsapp ||
+      (atual.codigo_erp ?? null) !== (novo.codigo_erp ?? null) ||
+      (atual.cnpj ?? null) !== (novo.cnpj ?? null) ||
+      atual.ativo === false;
+
+    if (mudou) atualizar.push({ cliente_id: atual.cliente_id, ...novo });
+  }
+
+  const { data, error } = await adminClient.rpc('sales_v2_sync_clientes_aplicar', {
+    p_payload: {
+      empresa_id: empresaId,
+      criar,
+      atualizar,
+      /* A RPC desativa por "ausente em 3 ciclos", desenho feito para a
+         sincronizacao paginada por API. Numa planilha isso exigiria 3
+         importacoes para sumir um cliente - errado aqui. Passamos false
+         e desativamos direto logo abaixo. */
+      desativar_ausentes: false,
+    },
+  });
+
+  if (error) throw new HttpError(500, `Nao foi possivel gravar os clientes: ${error.message}`);
+
+  let desativados = 0;
+
+  if (modo === 'substituir') {
+    const fora = atuais
+      .filter((c) => c.ativo !== false && !encontrados.has(String(c.cliente_id)))
+      .map((c) => c.cliente_id as string);
+
+    for (let i = 0; i < fora.length; i += 500) {
+      const { error: erroOff } = await adminClient
+        .from('sales_clientes_v2')
+        .update({ ativo: false })
+        .in('cliente_id', fora.slice(i, i + 500));
+
+      if (erroOff) throw new HttpError(500, `Nao foi possivel desativar os ausentes: ${erroOff.message}`);
+    }
+
+    desativados = fora.length;
+  }
+
+  const extras = registros
+    .filter((r) => {
+      const chave = (r.codigo_erp || r.cnpj) as string;
+      const metaNovo = extrasPorChave.get(chave) ?? null;
+      const atual = achar(r);
+      if (!atual) return Boolean(metaNovo);
+      return canonico(atual.metadata) !== canonico(metaNovo);
+    })
+    .map((r) => {
+      const chave = (r.codigo_erp || r.cnpj) as string;
+      const atual = achar(r);
+      return {
+        cliente_id: atual?.cliente_id as string | undefined,
+        chave,
+        metadata: extrasPorChave.get(chave) ?? {},
+      };
+    })
+    .filter((e) => e.cliente_id);
+
+  for (const e of extras) {
+    await adminClient.from('sales_clientes_v2').update({ metadata: e.metadata }).eq('cliente_id', e.cliente_id!);
+  }
+
+  const c = (Array.isArray(data) ? data[0] : data) as { criados?: number; atualizados?: number; desativados?: number } | null;
+
+  return {
+    criados: Number(c?.criados ?? 0),
+    atualizados: Number(c?.atualizados ?? 0),
+    desativados,
+    com_informacoes_extras: extras.length,
+  };
+};
+
+const semCampos = (o: Record<string, unknown>, remover: string[]) => {
+  const copia = { ...o };
+  for (const k of remover) delete copia[k];
+  return copia;
+};
+
+const gravarExtras = async (
+  adminClient: ClienteAdmin,
+  tabela: string,
+  conflito: string,
+  linhas: Array<Record<string, unknown>>,
+) => {
+  for (let i = 0; i < linhas.length; i += 500) {
+    const { error } = await adminClient.from(tabela).upsert(linhas.slice(i, i + 500), { onConflict: conflito });
+    if (error) throw new HttpError(500, `Os registros entraram, mas as informacoes extras falharam: ${error.message}`);
+  }
+};

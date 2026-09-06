@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../server/createMemberService.js';
-import { importProductsCsvService } from '../server/importProductsCsvService.js';
+import { importCsvService } from '../server/importCsvService.js';
 
 const getBearerToken = (authorizationHeader?: string) => {
   if (!authorizationHeader?.startsWith('Bearer ')) {
@@ -18,7 +18,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   try {
     const requesterAccessToken = getBearerToken(request.headers.authorization);
-    const result = await importProductsCsvService({
+    const result = await importCsvService({
       supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
       supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
@@ -33,7 +33,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return response.status(error.statusCode).json({ error: error.message });
     }
 
-    console.error('Erro na importacao de produtos por planilha:', error);
-    return response.status(500).json({ error: 'Nao foi possivel importar a planilha de produtos.' });
+    console.error('Erro na importacao por planilha:', error);
+    return response.status(500).json({ error: 'Nao foi possivel importar a planilha.' });
   }
 }

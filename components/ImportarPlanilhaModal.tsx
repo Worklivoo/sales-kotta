@@ -15,21 +15,54 @@ import {
 import { lerCsv, type PlanilhaLida } from '../lib/csv';
 import { supabase } from '../lib/supabase';
 
-/* Espelha CAMPOS_PRODUTO do servidor. Se um campo novo entrar la,
-   precisa entrar aqui tambem - senao o select nao o oferece. */
-const CAMPOS = [
-  { campo: 'codigo_sku', rotulo: 'Código / SKU', obrigatorio: true, varias: false },
-  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, varias: true },
-  { campo: 'descricao', rotulo: 'Descrição', obrigatorio: false, varias: true },
-  { campo: 'preco_venda', rotulo: 'Preço de venda', obrigatorio: false, varias: false },
-  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, varias: false },
-  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, varias: false },
-  { campo: 'estoque', rotulo: 'Quantidade em estoque', obrigatorio: false, varias: false },
-  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, varias: true },
-  { campo: 'metadata', rotulo: 'Informações extras', obrigatorio: false, varias: true },
-] as const;
+/* O catalogo de campos vem do MESMO arquivo que o servidor usa. Manter
+   uma copia aqui era garantia de divergir no primeiro campo novo. */
+const CAMPOS_POR_TIPO: Record<TipoPlanilha, Array<{ campo: string; rotulo: string; obrigatorio: boolean; varias: boolean }>> = {
+  produtos: [
+    { campo: 'codigo_sku', rotulo: 'Código / SKU', obrigatorio: true, varias: false },
+    { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, varias: true },
+    { campo: 'descricao', rotulo: 'Descrição', obrigatorio: false, varias: true },
+    { campo: 'preco_venda', rotulo: 'Preço de venda', obrigatorio: false, varias: false },
+    { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, varias: false },
+    { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, varias: false },
+    { campo: 'estoque', rotulo: 'Quantidade em estoque', obrigatorio: false, varias: false },
+    { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, varias: true },
+    { campo: 'link_referencia', rotulo: 'Link de referência (site ou PDF)', obrigatorio: false, varias: false },
+    { campo: 'metadata', rotulo: 'Informações extras', obrigatorio: false, varias: true },
+  ],
+  clientes: [
+    { campo: 'codigo_erp', rotulo: 'Código no seu sistema', obrigatorio: false, varias: false },
+    { campo: 'cnpj', rotulo: 'CNPJ', obrigatorio: false, varias: false },
+    { campo: 'nome', rotulo: 'Nome / Nome fantasia', obrigatorio: true, varias: true },
+    { campo: 'razao_social', rotulo: 'Razão social', obrigatorio: false, varias: false },
+    { campo: 'email', rotulo: 'E-mail', obrigatorio: false, varias: false },
+    { campo: 'telefone', rotulo: 'Telefone', obrigatorio: false, varias: false },
+    { campo: 'whatsapp', rotulo: 'WhatsApp', obrigatorio: false, varias: false },
+    { campo: 'metadata', rotulo: 'Informações extras', obrigatorio: false, varias: true },
+  ],
+};
 
-const ACEITA_VARIAS = new Set<string>(CAMPOS.filter((c) => c.varias).map((c) => c.campo));
+/* Cliente pode ser identificado por codigo do ERP OU por CNPJ - basta um
+   dos dois. Produto tem chave unica. */
+const CHAVES_POR_TIPO: Record<TipoPlanilha, { chaves: string[]; texto: string }> = {
+  produtos: { chaves: ['codigo_sku'], texto: 'Código / SKU' },
+  clientes: { chaves: ['codigo_erp', 'cnpj'], texto: 'Código no seu sistema ou CNPJ' },
+};
+
+const TEXTOS: Record<TipoPlanilha, { titulo: string; assunto: string; oQueSao: string }> = {
+  produtos: {
+    titulo: 'Fonte de Dados - Produtos',
+    assunto: 'produtos',
+    oQueSao: 'De onde o KOTTA IA busca os produtos que entram nas cotações.',
+  },
+  clientes: {
+    titulo: 'Fonte de Dados - Clientes',
+    assunto: 'clientes',
+    oQueSao: 'De onde o KOTTA IA reconhece quem está pedindo a cotação.',
+  },
+};
+
+export type TipoPlanilha = 'produtos' | 'clientes';
 
 const FONTES = [
   {
@@ -41,19 +74,19 @@ const FONTES = [
   {
     tipo: 'API',
     rotulo: 'API',
-    descricao: 'Buscamos os produtos direto do seu sistema, todo dia às 03:00.',
+    descricao: 'Buscamos os dados direto do seu sistema, sozinhos, de tempos em tempos.',
     disponivel: false,
   },
   {
     tipo: 'XML',
     rotulo: 'XML',
-    descricao: 'Lemos um endereço que devolve seu catálogo em XML.',
+    descricao: 'Lemos um endereço que devolve seu cadastro em XML.',
     disponivel: false,
   },
   {
     tipo: 'HTML',
     rotulo: 'Site (HTML)',
-    descricao: 'Extraímos os produtos das páginas do seu site.',
+    descricao: 'Extraímos os dados das páginas do seu site.',
     disponivel: false,
   },
 ] as const;
@@ -82,6 +115,7 @@ interface Resultado {
 }
 
 interface Props {
+  tipo: TipoPlanilha;
   aberto: boolean;
   aoFechar: () => void;
   aoConcluir: () => void;
@@ -96,7 +130,10 @@ const SELO_CONFIANCA: Record<Confianca, { rotulo: string; classe: string; Icone:
   baixa: { rotulo: 'confira', classe: 'text-amber-600', Icone: CircleAlert },
 };
 
-const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }) => {
+const ImportarPlanilhaModal: React.FC<Props> = ({ tipo, aberto, aoFechar, aoConcluir }) => {
+  const CAMPOS = CAMPOS_POR_TIPO[tipo];
+  const ACEITA_VARIAS = new Set<string>(CAMPOS.filter((c) => c.varias).map((c) => c.campo));
+  const textos = TEXTOS[tipo];
   const [etapa, setEtapa] = useState<Etapa>('fonte');
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [planilha, setPlanilha] = useState<PlanilhaLida | null>(null);
@@ -135,7 +172,7 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
       throw new Error('Sua sessão expirou. Entre novamente para continuar.');
     }
 
-    const resposta = await fetch('/api/import-products-csv', {
+    const resposta = await fetch('/api/import-csv', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(corpo),
@@ -174,7 +211,7 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
         // inteiro nunca sai do navegador nessa etapa.
         const amostras = lida.linhas.slice(0, 5).map((l) => lida.colunas.map((c) => l[c] ?? ''));
 
-        const analise = await chamarApi({ acao: 'analisar', colunas: lida.colunas, amostras });
+        const analise = await chamarApi({ tipo, acao: 'analisar', colunas: lida.colunas, amostras });
 
         setMapeamento(analise.mapeamento ?? []);
         setFormatoNumero(analise.formato_numero === 'US' ? 'US' : 'BR');
@@ -208,8 +245,14 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
 
   const camposFaltando = useMemo(() => {
     const usados = new Set(mapeamento.map((m) => m.campo).filter(Boolean));
-    return CAMPOS.filter((c) => c.obrigatorio && !usados.has(c.campo)).map((c) => c.rotulo);
-  }, [mapeamento]);
+    const pendentes = CAMPOS.filter((c) => c.obrigatorio && !usados.has(c.campo)).map((c) => c.rotulo);
+
+    // cliente aceita codigo do ERP OU CNPJ: basta um dos dois
+    const { chaves, texto } = CHAVES_POR_TIPO[tipo];
+    if (!chaves.some((k) => usados.has(k))) pendentes.push(texto);
+
+    return pendentes;
+  }, [CAMPOS, mapeamento, tipo]);
 
   const importar = useCallback(async () => {
     if (!planilha || !arquivo) return;
@@ -219,6 +262,7 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
 
     try {
       const r = await chamarApi({
+        tipo,
         acao: 'importar',
         mapeamento: mapeamento.map((m) => ({ coluna: m.coluna, campo: m.campo })),
         linhas: planilha.linhas,
@@ -264,10 +308,10 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
             </div>
             <div>
               <h2 id="importar-produtos-titulo" className="text-base font-semibold tracking-tight text-ink">
-                Fonte de Dados - Produtos
+                {textos.titulo}
               </h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-                {etapa === 'fonte' && 'De onde o KOTTA IA vai buscar os produtos da sua empresa.'}
+                {etapa === 'fonte' && textos.oQueSao}
                 {etapa === 'arquivo' && 'Envie a planilha do jeito que ela já está. O trabalho de encaixar as colunas é nosso.'}
                 {etapa === 'depara' && 'Confira o que cada coluna do seu arquivo virou aqui dentro.'}
                 {etapa === 'resultado' && 'Importação concluída.'}
@@ -658,4 +702,4 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
   );
 };
 
-export default ImportarProdutosModal;
+export default ImportarPlanilhaModal;
