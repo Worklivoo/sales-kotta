@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
-  Check,
   CircleAlert,
   CircleCheck,
   CircleDashed,
@@ -110,7 +109,6 @@ interface Resultado {
   ignoradas: Array<{ linha: number; motivo: string }>;
   total_ignoradas: number;
   duplicadas: number;
-  com_informacoes_extras: number;
   modo: string;
 }
 
@@ -590,16 +588,9 @@ const ImportarPlanilhaModal: React.FC<Props> = ({ tipo, aberto, aoFechar, aoConc
           {/* etapa 4: resultado */}
           {etapa === 'resultado' && resultado ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-2.5 rounded-panel border border-lime bg-lime/15 px-4 py-3">
-                <Check size={18} className="text-ink" />
-                <span className="text-sm font-semibold text-ink">
-                  {resultado.validas} produtos processados de {resultado.lidas} linhas.
-                </span>
-              </div>
-
               <div className="grid gap-3 sm:grid-cols-3">
                 {[
-                  { rotulo: 'Criados', valor: resultado.criados },
+                  { rotulo: 'Novos', valor: resultado.criados },
                   { rotulo: 'Atualizados', valor: resultado.atualizados },
                   { rotulo: 'Desativados', valor: resultado.desativados },
                 ].map((c) => (
@@ -610,24 +601,18 @@ const ImportarPlanilhaModal: React.FC<Props> = ({ tipo, aberto, aoFechar, aoConc
                 ))}
               </div>
 
-              {resultado.com_informacoes_extras > 0 ? (
-                <p className="text-xs leading-5 text-muted">
-                  {resultado.com_informacoes_extras} produto(s) receberam informações extras guardadas junto do
-                  cadastro.
-                </p>
-              ) : null}
-
-              {resultado.duplicadas > 0 ? (
-                <p className="text-xs leading-5 text-muted">
-                  {resultado.duplicadas} linha(s) repetiam um código já usado na própria planilha. Para cada código
-                  repetido, valeu a última linha.
-                </p>
-              ) : null}
+              <p className="text-xs leading-5 text-muted">
+                {resultado.lidas} linha(s) lida(s) · {resultado.validas} aproveitada(s)
+                {resultado.duplicadas > 0
+                  ? ` · ${resultado.duplicadas} repetida(s), valeu a última de cada`
+                  : ''}
+                {resultado.total_ignoradas > 0 ? ` · ${resultado.total_ignoradas} de fora` : ''}
+              </p>
 
               {resultado.total_ignoradas > 0 ? (
                 <div className="rounded-panel border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-xs font-semibold text-amber-900">
-                    {resultado.total_ignoradas} linha(s) ficaram de fora
+                    Linhas que ficaram de fora
                   </p>
                   <ul className="mt-1.5 space-y-0.5 text-xs text-amber-800">
                     {resultado.ignoradas.map((i) => (

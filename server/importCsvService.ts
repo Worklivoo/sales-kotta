@@ -767,11 +767,19 @@ const gravarProdutos = async ({ adminClient, empresaId, registros, extrasPorChav
 
   const c = (Array.isArray(data) ? data[0] : data) as { criados?: number; atualizados?: number; desativados?: number } | null;
 
+  /* Produto que so ganhou link ou informacao extra tambem foi ATUALIZADO -
+     a RPC nao conta isso porque essas duas colunas sao gravadas na segunda
+     passada. Sem somar aqui, a tela dizia "1 atualizado" tendo escrito 7. */
+  const jaContados = new Set(atualizar.map((a) => a.produto_id));
+  const soNaSegundaPassada = extras.filter((e) => {
+    const atual = porSku.get(e.codigo_sku);
+    return atual && !jaContados.has(atual.produto_id);
+  }).length;
+
   return {
     criados: Number(c?.criados ?? 0),
-    atualizados: Number(c?.atualizados ?? 0),
+    atualizados: Number(c?.atualizados ?? 0) + soNaSegundaPassada,
     desativados: Number(c?.desativados ?? 0),
-    com_informacoes_extras: extras.length,
   };
 };
 
@@ -886,11 +894,14 @@ const gravarClientes = async ({ adminClient, empresaId, registros, extrasPorChav
 
   const c = (Array.isArray(data) ? data[0] : data) as { criados?: number; atualizados?: number; desativados?: number } | null;
 
+  // mesma correcao dos produtos: informacao extra tambem e atualizacao
+  const jaContados = new Set(atualizar.map((a) => a.cliente_id));
+  const soNaSegundaPassada = extras.filter((e) => !jaContados.has(e.cliente_id)).length;
+
   return {
     criados: Number(c?.criados ?? 0),
-    atualizados: Number(c?.atualizados ?? 0),
+    atualizados: Number(c?.atualizados ?? 0) + soNaSegundaPassada,
     desativados,
-    com_informacoes_extras: extras.length,
   };
 };
 
