@@ -226,7 +226,7 @@ const MensagensAutomaticasTab: React.FC = () => {
             <h2 className="text-base font-semibold text-ink">Mensagens Automáticas</h2>
             <p className="max-w-2xl text-sm leading-6 text-muted">
               Quando um lead manda uma mensagem que não é pedido de cotação (financeiro, dúvida
-              técnica, reclamação, etc), a IA não gera orçamento — só notifica seu time. Aqui você
+              técnica, reclamação, etc), o KOTTA IA não gera orçamento — só notifica seu time. Aqui você
               configura uma resposta automática opcional para cada categoria, que é enviada pro
               lead na hora (por e-mail ou WhatsApp, dependendo de onde ele mandou a mensagem),
               além da notificação interna que já acontece.

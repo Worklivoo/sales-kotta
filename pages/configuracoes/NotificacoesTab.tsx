@@ -65,7 +65,7 @@ const NOTIFICATION_TOGGLES: NotificationToggleDefinition[] = [
     key: 'notificacao_nenhum_item',
     title: 'Nenhum item encontrado',
     description:
-      'Receber notificação quando um cliente solicitar um orçamento e a IA não encontrar nenhum (ou nenhum dos) item(ns) para aquela proposta no catálogo.',
+      'Receber notificação quando um cliente solicitar um orçamento e o KOTTA IA não encontrar nenhum (ou nenhum dos) item(ns) para aquela proposta no catálogo.',
   },
 ];
 

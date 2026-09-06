@@ -421,8 +421,27 @@ const Sidebar: React.FC<SidebarProps> = ({
       >
         <div>
           <div className={`flex items-center ${isCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'} mb-10 px-1`}>
-            <div className="w-12 h-12 rounded-tile flex items-center justify-center shrink-0 overflow-hidden">
-              <img src="/Símbolo_Worklivoo_Fundo_Amarelo.png" alt="Logo" className="w-full h-full object-cover" />
+            <div className={`flex min-w-0 items-center ${isCollapsed ? '' : 'gap-2.5'}`}>
+              <div className="w-12 h-12 rounded-tile flex items-center justify-center shrink-0 overflow-hidden">
+                <img src="/Símbolo_Worklivoo_Fundo_Amarelo.png" alt="Logo" className="w-full h-full object-cover" />
+              </div>
+
+              {!isCollapsed && (
+                <div className="min-w-0">
+                  <div
+                    className="truncate text-[13px] leading-tight text-white"
+                    style={{ fontWeight: 800, letterSpacing: '-.01em' }}
+                  >
+                    KOTTA IA
+                  </div>
+                  <div
+                    className="truncate text-[9px] leading-tight text-white/50"
+                    style={{ fontWeight: 700, letterSpacing: '.12em' }}
+                  >
+                    MÓDULO DE VENDAS
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

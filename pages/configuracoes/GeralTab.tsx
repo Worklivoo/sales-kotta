@@ -1299,7 +1299,7 @@ const GeralTab: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-semibold text-ink">Regras de Cotação</h3>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                      Defina as orientações que a IA deve seguir ao validar a cotação do cliente.
+                      Defina as informações obrigatórias e desejáveis que o KOTTA IA deve solicitar ao cliente antes de gerar qualquer cotação.
                     </p>
                   </div>
                 </div>
@@ -1355,7 +1355,7 @@ const GeralTab: React.FC = () => {
                   <div className="rounded-panel border border-dashed border-line bg-paper px-4 py-6 text-center">
                     <p className="text-sm font-medium text-muted">Nenhuma regra configurada ainda.</p>
                     <p className="mt-1 text-xs text-muted-soft">
-                      Crie regras para orientar a IA sobre quais informações solicitar.
+                      Crie regras para orientar o KOTTA IA sobre quais informações solicitar.
                     </p>
                   </div>
                 )}
@@ -1371,7 +1371,7 @@ const GeralTab: React.FC = () => {
               <div>
                 <h3 className="text-sm font-semibold text-ink">Modo do Orçamento</h3>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
-                  Defina se a IA pode enviar o orçamento automaticamente ao cliente ou se ele sempre
+                  Defina se o KOTTA IA pode enviar o orçamento automaticamente ao cliente ou se ele sempre
                   deve passar por aprovação humana.
                 </p>
               </div>
@@ -1432,7 +1432,7 @@ const GeralTab: React.FC = () => {
               <div>
                 <h3 className="text-sm font-semibold text-ink">Orçamento para Novos Clientes</h3>
                 <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
-                  Defina se a IA pode montar orçamentos para clientes que ainda não existem na base.
+                  Defina se o KOTTA IA pode montar orçamentos para clientes que ainda não existem na base.
                 </p>
               </div>
             </div>
@@ -1585,7 +1585,7 @@ const GeralTab: React.FC = () => {
                     Regras de Cotação
                   </h2>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-                    Configure quais informações a IA deve solicitar ao cliente para validar uma cotação
+                    Configure quais informações o KOTTA IA deve solicitar ao cliente para validar uma cotação
                     antes de avançar no atendimento.
                   </p>
                 </div>
@@ -1721,7 +1721,7 @@ const GeralTab: React.FC = () => {
                     <div className="rounded-card border border-dashed border-line bg-card px-6 py-10 text-center">
                       <p className="text-sm font-semibold text-ink">Nenhuma regra cadastrada</p>
                       <p className="mt-2 text-sm leading-6 text-muted">
-                        Crie a primeira regra para orientar a IA sobre o que deve ser solicitado ao
+                        Crie a primeira regra para orientar o KOTTA IA sobre o que deve ser solicitado ao
                         cliente na etapa de cotação.
                       </p>
                     </div>
@@ -1819,7 +1819,7 @@ const GeralTab: React.FC = () => {
                         rows={5}
                         maxLength={100}
                         className="mt-2 w-full resize-none rounded-panel border border-line bg-card px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
-                        placeholder="Explique para a IA qual informação ela deve solicitar ao cliente e por que isso é necessário."
+                        placeholder="Explique para o KOTTA IA qual informação ele deve solicitar ao cliente e por que isso é necessário."
                       />
                       <div className="mt-2 text-right text-[11px] font-medium text-muted-soft">
                         {quoteRuleForm.descricao.length}/100

@@ -310,7 +310,7 @@ const BaseConhecimentoTab: React.FC = () => {
               <p className="max-w-2xl text-sm leading-6 text-muted">
                 Cadastre perguntas e respostas frequentes (prazo de entrega, pagamento, garantia,
                 etc). Durante uma cotação, se o lead perguntar algo que bata com uma dessas
-                respostas, a IA já responde junto com o orçamento. Se não encontrar nada
+                respostas, o KOTTA IA já responde junto com o orçamento. Se não encontrar nada
                 relacionado, ela avisa que o responsável vai esclarecer depois.
               </p>
             </div>
@@ -431,7 +431,7 @@ const BaseConhecimentoTab: React.FC = () => {
                   {editingItem ? 'Editar pergunta' : 'Adicionar pergunta'}
                 </h2>
                 <p className="mt-1 text-sm leading-5 text-muted">
-                  A resposta é usada pela IA quando um lead perguntar algo parecido durante uma
+                  A resposta é usada pelo KOTTA IA quando um lead perguntar algo parecido durante uma
                   cotação.
                 </p>
               </div>
@@ -487,7 +487,7 @@ const BaseConhecimentoTab: React.FC = () => {
                   }
                   rows={5}
                   className="mt-2 w-full resize-none rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
-                  placeholder="Digite a resposta que a IA deve usar"
+                  placeholder="Digite a resposta que o KOTTA IA deve usar"
                 />
               </div>
 
@@ -500,7 +500,7 @@ const BaseConhecimentoTab: React.FC = () => {
                   }
                   className="h-4 w-4 rounded border-line text-ink accent-lime"
                 />
-                Pergunta ativa (a IA pode usá-la)
+                Pergunta ativa (o KOTTA IA pode usá-la)
               </label>
             </div>
 
