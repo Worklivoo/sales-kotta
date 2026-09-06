@@ -631,7 +631,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
   for (let inicio = 0; ; inicio += passo) {
     const { data, error } = await adminClient
       .from('sales_produtos_v2')
-      .select('produto_id, codigo_sku, nome, descricao, preco_venda, moeda, unidade_medida, estoque, categoria, ativo')
+      .select('produto_id, codigo_sku, nome, descricao, preco_venda, moeda, unidade_medida, estoque, categoria, ativo, metadata')
       .eq('empresa_id', empresaId)
       .order('produto_id', { ascending: true })
       .range(inicio, inicio + passo - 1);
@@ -714,8 +714,32 @@ export async function importProductsCsvService(options: ServiceOptions) {
 
   if (metadataPorSku.size > 0) {
     const lote = 500;
+
+    /* Comparacao canonica: o jsonb do Postgres devolve as chaves em outra
+       ordem, entao comparar JSON.stringify cru acusaria diferenca sempre.
+       Sem isso, TODO produto com informacoes extras era reescrito a cada
+       importacao - e um gatilho set_updated_at na tabela carimba a data em
+       qualquer escrita, entao o desperdicio nem aparecia como erro. */
+    const canonico = (o: unknown) => {
+      if (!o || typeof o !== 'object') return '{}';
+      const obj = o as Record<string, unknown>;
+      return JSON.stringify(
+        Object.keys(obj)
+          .sort()
+          .map((k) => [k, String(obj[k] ?? '')]),
+      );
+    };
+
     const linhasMeta = produtos
-      .filter((p) => metadataPorSku.has(p.codigo_sku as string))
+      .filter((p) => {
+        const sku = p.codigo_sku as string;
+        if (!metadataPorSku.has(sku)) return false;
+
+        const atual = atuaisPorSku.get(sku);
+        if (!atual) return true; // produto novo: sempre grava
+
+        return canonico(atual.metadata) !== canonico(metadataPorSku.get(sku));
+      })
       .map((p) => ({
         empresa_id: empresaId,
         codigo_sku: p.codigo_sku as string,
@@ -733,7 +757,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
       }
     }
 
-    comInformacoesExtras = linhasMeta.length;
+    comInformacoesExtras = linhasMeta.length; // quantos precisaram ser gravados
   }
 
   /* Avisa a automacao para recalcular a busca inteligente agora, em vez
