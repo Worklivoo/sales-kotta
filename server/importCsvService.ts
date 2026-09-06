@@ -525,9 +525,19 @@ export async function importCsvService(options: ServiceOptions) {
 
     for (const campo of catalogo.campos) {
       if (campo.campo === 'metadata') continue;
-      registro[campo.campo] = camposNumericos.has(campo.campo)
-        ? converterNumero(valorDe(campo.campo), formato)
-        : limparTexto(valorDe(campo.campo));
+
+      if (camposNumericos.has(campo.campo)) {
+        registro[campo.campo] = converterNumero(valorDe(campo.campo), formato);
+        continue;
+      }
+
+      const texto = limparTexto(valorDe(campo.campo));
+
+      /* Campo chave guardado em formato diferente do resto da base faz a
+         mesma empresa virar dois cadastros - a unicidade compara o texto
+         literal. Ver o comentario em catalogosImportacao. */
+      registro[campo.campo] =
+        campo.normalizar === 'digitos' && texto ? texto.replace(/\D/g, '') || null : texto;
     }
 
     // nome e obrigatorio nos dois catalogos

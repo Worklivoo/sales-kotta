@@ -19,6 +19,12 @@ export interface CampoCatalogo {
   varias: boolean;
   ajuda: string;
   sinonimos: string[];
+  /* 'digitos' guarda so os numeros. Usado no CNPJ porque ele e CHAVE: a
+     base real tem 22.803 registros so com digitos contra 39 formatados,
+     e gravar "12.345.678/0001-90" onde a sincronizacao grava
+     "12345678000190" faz a mesma empresa virar dois cadastros - a chave
+     unica compara o texto literal. Mesmo padrao do bug do 9o digito. */
+  normalizar?: 'digitos';
 }
 
 export interface Catalogo {
@@ -163,6 +169,7 @@ const CLIENTES: Catalogo = {
       varias: false,
       ajuda: '14 digitos, pode vir formatado. Aceite CPF tambem, se a planilha misturar pessoa fisica.',
       sinonimos: ['cnpj', 'cpf', 'documento', 'doc', 'inscricao'],
+      normalizar: 'digitos',
     },
     {
       campo: 'nome',
