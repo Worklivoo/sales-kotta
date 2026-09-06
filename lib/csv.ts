@@ -50,27 +50,43 @@ const dividirLinha = (linha: string, delimitador: string): string[] => {
   const campos: string[] = [];
   let atual = '';
   let dentroDeAspas = false;
+  let campoComecou = false;
 
   for (let i = 0; i < linha.length; i += 1) {
     const c = linha[i];
 
-    if (c === '"') {
-      if (dentroDeAspas && linha[i + 1] === '"') {
-        atual += '"';
-        i += 1;
+    if (dentroDeAspas) {
+      if (c === '"') {
+        const proximo = linha[i + 1];
+        if (proximo === '"') {
+          atual += '"';
+          i += 1;
+        } else if (proximo === undefined || proximo === delimitador) {
+          dentroDeAspas = false;
+        } else {
+          atual += '"';
+        }
       } else {
-        dentroDeAspas = !dentroDeAspas;
+        atual += c;
       }
       continue;
     }
 
-    if (c === delimitador && !dentroDeAspas) {
+    if (c === '"' && !campoComecou) {
+      dentroDeAspas = true;
+      campoComecou = true;
+      continue;
+    }
+
+    if (c === delimitador) {
       campos.push(atual);
       atual = '';
+      campoComecou = false;
       continue;
     }
 
     atual += c;
+    campoComecou = true;
   }
 
   campos.push(atual);
@@ -85,17 +101,32 @@ const analisar = (texto: string, delimitador: string): string[][] => {
   let campos: string[] = [];
   let atual = '';
   let dentroDeAspas = false;
+  let campoComecou = false; // ja consumimos algum caractere deste campo?
+
+  const fecharCampo = () => {
+    campos.push(atual);
+    atual = '';
+    campoComecou = false;
+  };
 
   for (let i = 0; i < texto.length; i += 1) {
     const c = texto[i];
 
     if (dentroDeAspas) {
       if (c === '"') {
-        if (texto[i + 1] === '"') {
+        const proximo = texto[i + 1];
+
+        if (proximo === '"') {
           atual += '"';
           i += 1;
-        } else {
+        } else if (proximo === undefined || proximo === delimitador || proximo === '\n' || proximo === '\r') {
           dentroDeAspas = false;
+        } else {
+          // Aspa no meio de um campo citado, sem estar escapada. Planilha
+          // de cliente faz isso o tempo todo (medida em polegada). Tratar
+          // como fim do campo comeria o resto da linha, entao vale como
+          // caractere comum.
+          atual += '"';
         }
       } else {
         atual += c;
@@ -103,14 +134,14 @@ const analisar = (texto: string, delimitador: string): string[][] => {
       continue;
     }
 
-    if (c === '"') {
+    if (c === '"' && !campoComecou) {
       dentroDeAspas = true;
+      campoComecou = true;
       continue;
     }
 
     if (c === delimitador) {
-      campos.push(atual);
-      atual = '';
+      fecharCampo();
       continue;
     }
 
@@ -119,14 +150,17 @@ const analisar = (texto: string, delimitador: string): string[][] => {
     }
 
     if (c === '\n') {
-      campos.push(atual);
+      fecharCampo();
       linhas.push(campos);
       campos = [];
-      atual = '';
       continue;
     }
 
+    /* Aspa que aparece DEPOIS do campo ter comecado nao abre citacao -
+       e conteudo. Ex: Disco de Corte 7" - a aspa e polegada. Tratar como
+       abertura fazia o resto da linha virar um campo so. */
     atual += c;
+    campoComecou = true;
   }
 
   // ultima linha, quando o arquivo nao termina em quebra
