@@ -24,7 +24,7 @@ const CAMPOS = [
   { campo: 'preco_venda', rotulo: 'Preço de venda', obrigatorio: false, varias: false },
   { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, varias: false },
   { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, varias: false },
-  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false, varias: false },
+  { campo: 'estoque', rotulo: 'Quantidade em estoque', obrigatorio: false, varias: false },
   { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, varias: true },
   { campo: 'metadata', rotulo: 'Informações extras', obrigatorio: false, varias: true },
 ] as const;

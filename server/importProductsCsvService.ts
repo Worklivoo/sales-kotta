@@ -12,7 +12,7 @@ export const CAMPOS_PRODUTO = [
   { campo: 'preco_venda', rotulo: 'Preco de venda', obrigatorio: false, tipo: 'numero', varias: false },
   { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, tipo: 'texto', varias: false },
   { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, tipo: 'texto', varias: false },
-  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false, tipo: 'numero', varias: false },
+  { campo: 'estoque', rotulo: 'Quantidade em estoque', obrigatorio: false, tipo: 'numero', varias: false },
   { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, tipo: 'texto', varias: true },
   // Nao e coluna da tabela: cai no jsonb metadata, uma chave por coluna.
   // A busca de produtos devolve metadata junto, entao o agente de cotacao
