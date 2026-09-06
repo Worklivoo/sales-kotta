@@ -5,7 +5,9 @@ import { supabase } from '../../lib/supabase';
 interface CanalEmailConfig {
   email_integracao?: string | null;
   smtp_email?: string | null;
-  smtp_senha?: string | null;
+  /* A senha nunca chega ao navegador. senha_salva so diz se existe uma
+     guardada no cofre, para a tela mostrar o estado sem revelar o valor. */
+  senha_salva?: boolean | null;
   smtp_host?: string | null;
   smtp_port?: string | null;
   smtp_ssl?: boolean | null;
@@ -40,7 +42,9 @@ const createEmailConfigForm = (
 
   return {
     smtp_email: canalEmail.smtp_email?.trim() || '',
-    smtp_senha: canalEmail.smtp_senha?.trim() || '',
+    // sempre vazio: a senha nao volta do servidor. Quem quiser trocar,
+    // digita de novo - e assim ninguem le a senha do colega pela tela.
+    smtp_senha: '',
     smtp_host: canalEmail.smtp_host?.trim() || '',
     smtp_port: canalEmail.smtp_port?.trim() || '',
     smtp_ssl: Boolean(canalEmail.smtp_ssl),
@@ -52,7 +56,7 @@ const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) => {
 
   return Boolean(
     canalEmail?.smtp_email?.trim() ||
-      canalEmail?.smtp_senha?.trim() ||
+      canalEmail?.senha_salva ||
       canalEmail?.smtp_host?.trim() ||
       canalEmail?.smtp_port?.trim() ||
       canalEmail?.smtp_ssl,
@@ -97,7 +101,7 @@ const EmailTab: React.FC = () => {
 
         const { data, error } = await supabase
           .from('sales_membros_v2')
-          .select('membro_id, nome, canal_email')
+          .select('membro_id, nome, canal_email')  // o servidor ja nao grava senha aqui; ver salvarSmtpService
           .eq('user_id', session.user.id)
           .maybeSingle();
 
@@ -237,7 +241,9 @@ const EmailTab: React.FC = () => {
         throw new Error('Não foi possível identificar a sessão atual do usuário.');
       }
 
-      const validationResponse = await fetch('/api/validate-smtp', {
+      // valida e salva no servidor: a senha vai para o cofre, nunca para
+      // a tabela de membros - qualquer colega da empresa a leria de la
+      const validationResponse = await fetch('/api/smtp-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -269,23 +275,17 @@ const EmailTab: React.FC = () => {
 
       setIsValidatingConfig(false);
 
+      /* Nada de gravar daqui: quem escreveu foi o servidor, na chamada
+         acima. Isto so reflete na tela o que ficou salvo - e a senha NAO
+         volta, de proposito. */
       const nextCanalEmail: CanalEmailConfig = {
         ...(memberConfig.canal_email || {}),
         smtp_email: smtpEmail,
-        smtp_senha: smtpSenha,
         smtp_host: smtpHost,
         smtp_port: smtpPort,
         smtp_ssl: emailConfigForm.smtp_ssl,
+        senha_salva: true,
       };
-
-      const { error } = await supabase
-        .from('sales_membros_v2')
-        .update({ canal_email: nextCanalEmail })
-        .eq('membro_id', memberConfig.membro_id);
-
-      if (error) {
-        throw error;
-      }
 
       setMemberConfig((current) =>
         current
