@@ -15,15 +15,18 @@ import { supabase } from '../lib/supabase';
 /* Espelha CAMPOS_PRODUTO do servidor. Se um campo novo entrar la,
    precisa entrar aqui tambem - senao o select nao o oferece. */
 const CAMPOS = [
-  { campo: 'codigo_sku', rotulo: 'Código / SKU', obrigatorio: true },
-  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true },
-  { campo: 'descricao', rotulo: 'Descrição', obrigatorio: false },
-  { campo: 'preco_venda', rotulo: 'Preço de venda', obrigatorio: false },
-  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false },
-  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false },
-  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false },
-  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false },
+  { campo: 'codigo_sku', rotulo: 'Código / SKU', obrigatorio: true, varias: false },
+  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, varias: true },
+  { campo: 'descricao', rotulo: 'Descrição', obrigatorio: false, varias: true },
+  { campo: 'preco_venda', rotulo: 'Preço de venda', obrigatorio: false, varias: false },
+  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, varias: false },
+  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, varias: false },
+  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false, varias: false },
+  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, varias: true },
+  { campo: 'metadata', rotulo: 'Informações extras', obrigatorio: false, varias: true },
 ] as const;
+
+const ACEITA_VARIAS = new Set<string>(CAMPOS.filter((c) => c.varias).map((c) => c.campo));
 
 const FONTES = [
   {
@@ -71,6 +74,7 @@ interface Resultado {
   ignoradas: Array<{ linha: number; motivo: string }>;
   total_ignoradas: number;
   duplicadas: number;
+  com_informacoes_extras: number;
   modo: string;
 }
 
@@ -191,8 +195,10 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
         if (item.coluna === coluna) {
           return { ...item, campo: campo || null, confianca: 'alta', motivo: 'Definido por você.' };
         }
-        // um campo do sistema só pode vir de uma coluna
-        if (campo && item.campo === campo) {
+        /* Campos como descrição e informações extras aceitam várias
+           colunas somadas. Os demais (preço, estoque, SKU) só podem vir
+           de uma - escolher outra coluna libera a anterior. */
+        if (campo && item.campo === campo && !ACEITA_VARIAS.has(campo)) {
           return { ...item, campo: null, motivo: 'Substituído por outra coluna.' };
         }
         return item;
@@ -436,12 +442,19 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
                               style={{ fontFamily: 'inherit' }}
                             >
                               <option value="">— não importar —</option>
-                              {CAMPOS.map((c) => (
-                                <option key={c.campo} value={c.campo}>
-                                  {c.rotulo}
-                                  {c.obrigatorio ? ' *' : ''}
-                                </option>
-                              ))}
+                              {CAMPOS.map((c) => {
+                                const outras = mapeamento.filter(
+                                  (m) => m.campo === c.campo && m.coluna !== item.coluna,
+                                ).length;
+
+                                return (
+                                  <option key={c.campo} value={c.campo}>
+                                    {c.rotulo}
+                                    {c.obrigatorio ? ' *' : ''}
+                                    {outras > 0 && c.varias ? ` (+${outras} já aqui)` : ''}
+                                  </option>
+                                );
+                              })}
                             </select>
                             {item.campo ? (
                               <span
@@ -457,6 +470,18 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
                   </tbody>
                 </table>
               </div>
+
+              <p className="text-[11px] leading-5 text-muted-soft">
+                <strong className="text-muted">Nome</strong>, <strong className="text-muted">Descrição</strong>,{' '}
+                <strong className="text-muted">Categoria</strong> e{' '}
+                <strong className="text-muted">Informações extras</strong> aceitam mais de uma coluna: os valores são
+                somados, e do segundo em diante cada um vai identificado pelo nome da sua coluna. Os demais campos
+                aceitam uma coluna só.
+                <br />
+                <strong className="text-muted">Informações extras</strong> não é uma coluna da nossa tabela — cada
+                coluna vira uma anotação guardada junto do produto, que o KOTTA IA enxerga ao montar a cotação, mas que
+                não entra na busca.
+              </p>
 
               <div className="rounded-panel border border-line-soft bg-paper p-4">
                 <p className="text-xs font-semibold text-ink">E os produtos que já estão cadastrados?</p>
@@ -516,6 +541,13 @@ const ImportarProdutosModal: React.FC<Props> = ({ aberto, aoFechar, aoConcluir }
                   </div>
                 ))}
               </div>
+
+              {resultado.com_informacoes_extras > 0 ? (
+                <p className="text-xs leading-5 text-muted">
+                  {resultado.com_informacoes_extras} produto(s) receberam informações extras guardadas junto do
+                  cadastro.
+                </p>
+              ) : null}
 
               {resultado.duplicadas > 0 ? (
                 <p className="text-xs leading-5 text-muted">

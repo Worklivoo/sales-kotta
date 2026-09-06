@@ -6,14 +6,18 @@ import { HttpError } from './createMemberService.js';
  * codigo_sku e nome sao NOT NULL no banco - sem eles nao ha importacao.
  * ------------------------------------------------------------------ */
 export const CAMPOS_PRODUTO = [
-  { campo: 'codigo_sku', rotulo: 'Codigo / SKU', obrigatorio: true, tipo: 'texto' },
-  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, tipo: 'texto' },
-  { campo: 'descricao', rotulo: 'Descricao', obrigatorio: false, tipo: 'texto' },
-  { campo: 'preco_venda', rotulo: 'Preco de venda', obrigatorio: false, tipo: 'numero' },
-  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, tipo: 'texto' },
-  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, tipo: 'texto' },
-  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false, tipo: 'numero' },
-  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, tipo: 'texto' },
+  { campo: 'codigo_sku', rotulo: 'Codigo / SKU', obrigatorio: true, tipo: 'texto', varias: false },
+  { campo: 'nome', rotulo: 'Nome do produto', obrigatorio: true, tipo: 'texto', varias: true },
+  { campo: 'descricao', rotulo: 'Descricao', obrigatorio: false, tipo: 'texto', varias: true },
+  { campo: 'preco_venda', rotulo: 'Preco de venda', obrigatorio: false, tipo: 'numero', varias: false },
+  { campo: 'moeda', rotulo: 'Moeda', obrigatorio: false, tipo: 'texto', varias: false },
+  { campo: 'unidade_medida', rotulo: 'Unidade de medida', obrigatorio: false, tipo: 'texto', varias: false },
+  { campo: 'estoque', rotulo: 'Estoque', obrigatorio: false, tipo: 'numero', varias: false },
+  { campo: 'categoria', rotulo: 'Categoria', obrigatorio: false, tipo: 'texto', varias: true },
+  // Nao e coluna da tabela: cai no jsonb metadata, uma chave por coluna.
+  // A busca de produtos devolve metadata junto, entao o agente de cotacao
+  // enxerga o que for guardado aqui.
+  { campo: 'metadata', rotulo: 'Informacoes extras', obrigatorio: false, tipo: 'texto', varias: true },
 ] as const;
 
 type CampoProduto = (typeof CAMPOS_PRODUTO)[number]['campo'];
@@ -21,6 +25,9 @@ type CampoProduto = (typeof CAMPOS_PRODUTO)[number]['campo'];
 const CAMPOS_VALIDOS = new Set<string>(CAMPOS_PRODUTO.map((c) => c.campo));
 const CAMPOS_NUMERICOS = new Set<string>(
   CAMPOS_PRODUTO.filter((c) => c.tipo === 'numero').map((c) => c.campo),
+);
+const CAMPOS_VARIAS_COLUNAS = new Set<string>(
+  CAMPOS_PRODUTO.filter((c) => c.varias).map((c) => c.campo),
 );
 
 export type FormatoNumero = 'BR' | 'US';
@@ -190,6 +197,9 @@ const SINONIMOS: Record<CampoProduto, string[]> = {
   unidade_medida: ['unidade', 'un', 'um', 'medida', 'unit', 'embalagem'],
   estoque: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'stock', 'disponivel', 'disp'],
   categoria: ['categoria', 'grupo', 'familia', 'linha', 'category', 'segmento', 'departamento'],
+  // De proposito vazio: mandar coluna para "informacoes extras" e uma
+  // escolha da pessoa, nao um palpite automatico.
+  metadata: [],
 };
 
 /* Palavras que aparecem em quase todo cabecalho e nao ajudam a decidir. */
@@ -487,9 +497,15 @@ export async function importProductsCsvService(options: ServiceOptions) {
     (m) => m && typeof m.coluna === 'string' && m.campo && CAMPOS_VALIDOS.has(m.campo),
   ) as Array<{ coluna: string; campo: CampoProduto }>;
 
-  const porCampo = new Map<CampoProduto, string>();
+  /* Um campo pode receber MAIS DE UMA coluna quando faz sentido juntar
+     (nome, descricao, categoria e informacoes extras). Preco, estoque,
+     SKU, moeda e unidade aceitam uma so - juntar dois precos nao quer
+     dizer nada. */
+  const porCampo = new Map<CampoProduto, string[]>();
   for (const m of mapeamento) {
-    if (!porCampo.has(m.campo)) porCampo.set(m.campo, m.coluna);
+    const jaTem = porCampo.get(m.campo) ?? [];
+    if (jaTem.length > 0 && !CAMPOS_VARIAS_COLUNAS.has(m.campo)) continue;
+    porCampo.set(m.campo, [...jaTem, m.coluna]);
   }
 
   for (const obrigatorio of CAMPOS_PRODUTO.filter((c) => c.obrigatorio)) {
@@ -512,6 +528,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
   const modo: ModoImportacao = payload.modo === 'substituir' ? 'substituir' : 'mesclar';
 
   const vistos = new Set<string>();
+  const metadataPorSku = new Map<string, Record<string, string>>();
   const produtos: Array<Record<string, unknown>> = [];
   const ignoradas: Array<{ linha: number; motivo: string }> = [];
   let duplicadas = 0;
@@ -519,10 +536,39 @@ export async function importProductsCsvService(options: ServiceOptions) {
   linhas.forEach((linha, indice) => {
     const numeroLinha = indice + 2; // +1 do cabecalho, +1 para virar 1-based
 
+    /* Primeira coluna entra crua; as seguintes vao rotuladas com o nome
+       do cabecalho, senao um codigo de barras solto no meio da descricao
+       nao diria nada a ninguem (nem a IA). */
     const valorDe = (campo: CampoProduto) => {
-      const coluna = porCampo.get(campo);
-      return coluna ? linha[coluna] : undefined;
+      const colunas = porCampo.get(campo);
+      if (!colunas || colunas.length === 0) return undefined;
+      if (colunas.length === 1) return linha[colunas[0]];
+
+      const partes = colunas
+        .map((coluna, indice) => {
+          const valor = limparTexto(linha[coluna]);
+          if (!valor) return null;
+          return indice === 0 ? valor : `${coluna}: ${valor}`;
+        })
+        .filter(Boolean);
+
+      return partes.length > 0 ? partes.join(' · ') : undefined;
     };
+
+    /* Cada coluna mandada para "Informacoes extras" vira uma chave do
+       jsonb metadata. O padrao ja existe na base: os produtos vindos da
+       sincronizacao guardam idaux, observacoes e ncm assim. */
+    const metadataDaLinha = (() => {
+      const colunas = porCampo.get('metadata') ?? [];
+      const objeto: Record<string, string> = {};
+
+      for (const coluna of colunas) {
+        const valor = limparTexto(linha[coluna]);
+        if (valor) objeto[coluna] = valor;
+      }
+
+      return Object.keys(objeto).length > 0 ? objeto : null;
+    })();
 
     const sku = limparTexto(valorDe('codigo_sku'));
     const nome = limparTexto(valorDe('nome'));
@@ -558,6 +604,9 @@ export async function importProductsCsvService(options: ServiceOptions) {
       categoria,
       texto_busca: [nome, descricao, categoria].filter(Boolean).join(' '),
     };
+
+    // guardado fora do objeto que vai para a RPC - ela nao tem esse campo
+    if (metadataDaLinha) metadataPorSku.set(sku, metadataDaLinha);
 
     const jaExiste = produtos.findIndex((p) => p.codigo_sku === sku);
     if (jaExiste >= 0) {
@@ -658,6 +707,35 @@ export async function importProductsCsvService(options: ServiceOptions) {
     })
     .eq('empresa_id', empresaId);
 
+  /* A RPC compartilhada nao tem o campo metadata (e ela atende todas as
+     empresas, entao nao vou altera-la por causa desta tela). Gravamos
+     numa segunda passada, em lotes, so nos produtos que tem algo. */
+  let comInformacoesExtras = 0;
+
+  if (metadataPorSku.size > 0) {
+    const lote = 500;
+    const linhasMeta = produtos
+      .filter((p) => metadataPorSku.has(p.codigo_sku as string))
+      .map((p) => ({
+        empresa_id: empresaId,
+        codigo_sku: p.codigo_sku as string,
+        nome: p.nome as string,
+        metadata: metadataPorSku.get(p.codigo_sku as string) as Record<string, string>,
+      }));
+
+    for (let i = 0; i < linhasMeta.length; i += lote) {
+      const { error } = await adminClient
+        .from('sales_produtos_v2')
+        .upsert(linhasMeta.slice(i, i + lote), { onConflict: 'empresa_id,codigo_sku' });
+
+      if (error) {
+        throw new HttpError(500, `Os produtos entraram, mas as informacoes extras falharam: ${error.message}`);
+      }
+    }
+
+    comInformacoesExtras = linhasMeta.length;
+  }
+
   /* Avisa a automacao para recalcular a busca inteligente agora, em vez
      de esperar a varredura de seguranca que roda a cada 3h. Se falhar,
      a importacao NAO pode falhar junto - por isso o catch vazio. */
@@ -680,6 +758,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
     ignoradas: ignoradas.slice(0, 50),
     total_ignoradas: ignoradas.length,
     duplicadas,
+    com_informacoes_extras: comInformacoesExtras,
     modo,
   };
 }
