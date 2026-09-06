@@ -182,52 +182,101 @@ const validarChamador = async ({
  * nunca pode depender exclusivamente da IA.
  * ------------------------------------------------------------------ */
 const SINONIMOS: Record<CampoProduto, string[]> = {
-  codigo_sku: ['sku', 'codigo', 'cod', 'code', 'referencia', 'ref', 'codproduto', 'codigoproduto', 'item'],
-  nome: ['nome', 'produto', 'descricaoproduto', 'name', 'title', 'titulo', 'nomeproduto', 'mercadoria'],
-  descricao: ['descricao', 'description', 'detalhe', 'detalhes', 'observacao', 'obs', 'especificacao'],
-  preco_venda: ['preco', 'precovenda', 'valor', 'valorvenda', 'price', 'precounitario', 'valorunitario', 'vlrvenda'],
+  codigo_sku: ['sku', 'codigo', 'cod', 'code', 'referencia', 'ref', 'interno'],
+  nome: ['nome', 'produto', 'item', 'name', 'title', 'titulo', 'mercadoria', 'material'],
+  descricao: ['descricao', 'description', 'detalhe', 'detalhamento', 'observacao', 'obs', 'especificacao', 'tecnico'],
+  preco_venda: ['preco', 'valor', 'vlr', 'price', 'venda'],
   moeda: ['moeda', 'currency'],
-  unidade_medida: ['unidade', 'unidademedida', 'un', 'um', 'medida', 'unit', 'embalagem'],
-  estoque: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'stock', 'disponivel', 'saldoestoque'],
+  unidade_medida: ['unidade', 'un', 'um', 'medida', 'unit', 'embalagem'],
+  estoque: ['estoque', 'quantidade', 'qtd', 'qtde', 'saldo', 'stock', 'disponivel', 'disp'],
   categoria: ['categoria', 'grupo', 'familia', 'linha', 'category', 'segmento', 'departamento'],
 };
+
+/* Palavras que aparecem em quase todo cabecalho e nao ajudam a decidir. */
+const RUIDO = new Set(['do', 'da', 'de', 'dos', 'das', 'e', 'o', 'a', 'no', 'na', 'por', 'p']);
 
 const normalizarNome = (valor: string) =>
   valor
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    .toLowerCase();
 
-export const mapearPorHeuristica = (colunas: string[]): MapeamentoColuna[] => {
-  const usados = new Set<string>();
+/* Quebra o cabecalho em palavras. "Vlr. Unit. Venda" -> [vlr, unit, venda].
+   Comparar palavra a palavra evita o erro de substring: com o texto colado,
+   "vlrunitvenda" contem "unit" e o campo virava unidade de medida. */
+const emPalavras = (valor: string) =>
+  normalizarNome(valor)
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !RUIDO.has(t));
 
-  return colunas.map((coluna) => {
-    const alvo = normalizarNome(coluna);
-    let melhor: { campo: CampoProduto; peso: number } | null = null;
+const pontuar = (palavras: string[], termos: string[]) => {
+  let total = 0;
 
-    for (const [campo, termos] of Object.entries(SINONIMOS) as [CampoProduto, string[]][]) {
-      if (usados.has(campo)) continue;
-
-      for (const termo of termos) {
-        // igual vale mais que "contem", para "codigo" nao roubar "codigobarras"
-        const peso = alvo === termo ? 3 : alvo.startsWith(termo) ? 2 : alvo.includes(termo) ? 1 : 0;
-        if (peso > (melhor?.peso ?? 0)) {
-          melhor = { campo, peso };
-        }
+  for (const palavra of palavras) {
+    for (const termo of termos) {
+      if (palavra === termo) {
+        total += 3;
+      } else if (palavra.startsWith(termo) && termo.length >= 3) {
+        total += 2;
+      } else if (termo.startsWith(palavra) && palavra.length >= 3) {
+        total += 1;
       }
     }
+  }
 
-    if (!melhor) {
+  return total;
+};
+
+export const mapearPorHeuristica = (colunas: string[]): MapeamentoColuna[] => {
+  const palavrasPorColuna = colunas.map((c) => emPalavras(c));
+
+  /* Pontua TODOS os pares coluna x campo antes de decidir. Atribuir na
+     ordem das colunas deixava a primeira coluna "roubar" um campo que
+     combinava muito mais com outra. */
+  const candidatos: Array<{ indice: number; campo: CampoProduto; nota: number }> = [];
+
+  colunas.forEach((_, indice) => {
+    for (const [campo, termos] of Object.entries(SINONIMOS) as [CampoProduto, string[]][]) {
+      const nota = pontuar(palavrasPorColuna[indice], termos);
+      if (nota > 0) candidatos.push({ indice, campo, nota });
+    }
+  });
+
+  // maior nota primeiro; empate resolve pela ordem da planilha
+  candidatos.sort((a, b) => b.nota - a.nota || a.indice - b.indice);
+
+  const campoDaColuna = new Map<number, { campo: CampoProduto; nota: number }>();
+  const colunasUsadas = new Set<number>();
+  const camposUsados = new Set<CampoProduto>();
+
+  for (const c of candidatos) {
+    if (colunasUsadas.has(c.indice) || camposUsados.has(c.campo)) continue;
+    colunasUsadas.add(c.indice);
+    camposUsados.add(c.campo);
+    campoDaColuna.set(c.indice, { campo: c.campo, nota: c.nota });
+  }
+
+  /* Sem nome nao ha importacao. Se nenhuma coluna virou nome, a coluna de
+     texto que ficou com "descricao" e a candidata mais provavel - planilha
+     costuma chamar o nome do produto de "descricao do item". */
+  if (!camposUsados.has('nome')) {
+    const daDescricao = [...campoDaColuna.entries()].find(([, v]) => v.campo === 'descricao');
+    if (daDescricao) {
+      campoDaColuna.set(daDescricao[0], { campo: 'nome', nota: 1 });
+    }
+  }
+
+  return colunas.map((coluna, indice) => {
+    const escolha = campoDaColuna.get(indice);
+
+    if (!escolha) {
       return { coluna, campo: null, confianca: 'baixa' as const, motivo: 'Nenhum campo correspondente.' };
     }
 
-    usados.add(melhor.campo);
-
     return {
       coluna,
-      campo: melhor.campo,
-      confianca: melhor.peso === 3 ? ('alta' as const) : melhor.peso === 2 ? ('media' as const) : ('baixa' as const),
+      campo: escolha.campo,
+      confianca: escolha.nota >= 3 ? ('alta' as const) : escolha.nota === 2 ? ('media' as const) : ('baixa' as const),
       motivo: 'Correspondencia pelo nome da coluna.',
     };
   });
@@ -254,11 +303,22 @@ export const detectarFormatoNumero = (amostras: string[][]): FormatoNumero => {
  * Analise por IA: recebe SO os cabecalhos e poucas linhas de amostra -
  * o arquivo inteiro nunca sai do navegador para a Anthropic.
  * ------------------------------------------------------------------ */
+interface RetornoIa {
+  mapeamento: MapeamentoColuna[];
+  formato_numero: FormatoNumero;
+  avisos: string[];
+}
+
+/* Guarda por que a IA nao respondeu, para a tela poder dizer o motivo em
+   vez de um generico "nao estava disponivel" - foi exatamente isso que
+   escondeu a causa no primeiro teste real. */
+export let ultimoMotivoFalhaIa = '';
+
 const analisarComIa = async (
   anthropicApiKey: string,
   colunas: string[],
   amostras: string[][],
-): Promise<{ mapeamento: MapeamentoColuna[]; formato_numero: FormatoNumero; avisos: string[] } | null> => {
+): Promise<RetornoIa | null> => {
   const catalogo = CAMPOS_PRODUTO.map(
     (c) => `- ${c.campo} (${c.rotulo})${c.obrigatorio ? ' [OBRIGATORIO]' : ''} - tipo ${c.tipo}`,
   ).join('\n');
@@ -303,13 +363,25 @@ Responda SOMENTE com JSON valido, sem texto antes ou depois:
   });
 
   if (!resposta.ok) {
+    const detalhe = await resposta.text().catch(() => '');
+    let mensagem = '';
+    try {
+      mensagem = (JSON.parse(detalhe) as { error?: { message?: string } })?.error?.message ?? '';
+    } catch {
+      mensagem = detalhe.slice(0, 200);
+    }
+    ultimoMotivoFalhaIa = `A Anthropic respondeu ${resposta.status}${mensagem ? ': ' + mensagem : ''}`;
+    console.error('[import-produtos] analise por IA falhou:', resposta.status, detalhe.slice(0, 500));
     return null;
   }
 
   const corpo = (await resposta.json()) as { content?: Array<{ type: string; text?: string }> };
   // modelos recentes podem devolver um bloco de raciocinio antes do texto
   const bloco = corpo.content?.find((c) => c.type === 'text' && typeof c.text === 'string');
-  if (!bloco?.text) return null;
+  if (!bloco?.text) {
+    ultimoMotivoFalhaIa = 'A Anthropic respondeu sem bloco de texto.';
+    return null;
+  }
 
   const texto = bloco.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
 
@@ -317,6 +389,8 @@ Responda SOMENTE com JSON valido, sem texto antes ou depois:
   try {
     bruto = JSON.parse(texto);
   } catch {
+    ultimoMotivoFalhaIa = 'A resposta da IA nao veio em JSON valido.';
+    console.error('[import-produtos] resposta nao-JSON:', texto.slice(0, 400));
     return null;
   }
 
@@ -326,7 +400,10 @@ Responda SOMENTE com JSON valido, sem texto antes ou depois:
     avisos?: unknown[];
   };
 
-  if (!Array.isArray(dados.mapeamento)) return null;
+  if (!Array.isArray(dados.mapeamento)) {
+    ultimoMotivoFalhaIa = 'A IA respondeu sem a lista de mapeamento.';
+    return null;
+  }
 
   const porColuna = new Map(dados.mapeamento.map((m) => [String(m.coluna ?? ''), m]));
   const jaUsados = new Set<string>();
@@ -402,9 +479,19 @@ export async function importProductsCsvService(options: ServiceOptions) {
 
     let resultado: AnaliseResultado;
 
+    ultimoMotivoFalhaIa = '';
+
     const daIa = options.anthropicApiKey
-      ? await analisarComIa(options.anthropicApiKey, colunas, amostras).catch(() => null)
+      ? await analisarComIa(options.anthropicApiKey, colunas, amostras).catch((e) => {
+          ultimoMotivoFalhaIa = e instanceof Error ? e.message : 'Falha de rede ao chamar a IA.';
+          console.error('[import-produtos] excecao na analise por IA:', e);
+          return null;
+        })
       : null;
+
+    if (!options.anthropicApiKey) {
+      ultimoMotivoFalhaIa = 'A chave ANTHROPIC_API_KEY nao chegou ao servidor.';
+    }
 
     if (daIa) {
       resultado = { ...daIa, camposFaltando: [] };
@@ -413,7 +500,7 @@ export async function importProductsCsvService(options: ServiceOptions) {
         mapeamento: mapearPorHeuristica(colunas),
         formato_numero: detectarFormatoNumero(amostras),
         avisos: [
-          'A leitura automatica por IA nao estava disponivel, entao o de-para abaixo foi montado apenas pelo nome das colunas. Confira com atencao antes de importar.',
+          `A leitura por IA nao respondeu${ultimoMotivoFalhaIa ? ' (' + ultimoMotivoFalhaIa + ')' : ''}. O de-para abaixo saiu apenas do nome das colunas - confira com atencao antes de importar.`,
         ],
         camposFaltando: [],
       };
