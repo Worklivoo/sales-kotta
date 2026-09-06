@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Mail, Pencil, Save } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, Mail, Pencil, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface CanalEmailConfig {
@@ -65,6 +65,7 @@ const EmailTab: React.FC = () => {
     EMPTY_EMAIL_CONFIG_FORM,
   );
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [copiouEmail, setCopiouEmail] = useState(false);
   const [isEditingConfig, setIsEditingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isValidatingConfig, setIsValidatingConfig] = useState(false);
@@ -131,7 +132,7 @@ const EmailTab: React.FC = () => {
 
     loadMemberEmailConfig();
 
-    return () => {
+  return () => {
       isMounted = false;
     };
   }, []);
@@ -310,6 +311,20 @@ const EmailTab: React.FC = () => {
     }
   };
 
+  const emailIntegracao = memberConfig?.canal_email?.email_integracao?.trim() || '';
+
+  const copiarEmailIntegracao = async () => {
+    try {
+      await navigator.clipboard.writeText(emailIntegracao);
+      setCopiouEmail(true);
+      // volta ao normal sozinho; sem isso o botao fica "Copiado" para sempre
+      window.setTimeout(() => setCopiouEmail(false), 2000);
+    } catch {
+      // navegador sem permissao de area de transferencia: o texto continua
+      // selecionavel na tela, entao nao vale interromper a pessoa com erro
+    }
+  };
+
   return (
     <div className="min-h-[520px]">
       <div className="space-y-5">
@@ -321,22 +336,50 @@ const EmailTab: React.FC = () => {
 
             <div className="space-y-1">
               <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                Envio de E-mails
+                Recebimento de E-mails
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-muted">
-                Este é o e-mail de integração usado para o envio das mensagens da sua operação.
+                Configure a sua caixa de e-mail para encaminhar as mensagens recebidas para o endereço abaixo. É
+                por ele que o KOTTA IA recebe os pedidos de cotação dos seus clientes.
               </p>
             </div>
           </div>
 
           <div className="mt-6 rounded-panel border border-line-soft bg-card px-4 py-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-soft">
-              E-mail de integração
+              Seu e-mail de integração
             </p>
-            <p className="mt-2 break-all text-sm font-semibold text-ink">
-              {isLoadingConfig
-                ? 'Carregando...'
-                : memberConfig?.canal_email?.email_integracao?.trim() || '-'}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="min-w-0 flex-1 break-all text-sm font-semibold text-ink">
+                {isLoadingConfig ? 'Carregando...' : emailIntegracao || 'Ainda não gerado'}
+              </p>
+
+              {emailIntegracao ? (
+                <button
+                  type="button"
+                  onClick={copiarEmailIntegracao}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
+                >
+                  {copiouEmail ? <Check size={13} /> : <Copy size={13} />}
+                  {copiouEmail ? 'Copiado' : 'Copiar'}
+                </button>
+              ) : null}
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-muted">
+              {emailIntegracao ? (
+                <>
+                  Esse endereço é <strong className="text-ink">seu</strong>, não da empresa: cada pessoa do time
+                  conecta a própria caixa, e é assim que o atendimento nasce com dono e a resposta ao cliente sai
+                  pelo e-mail certo.
+                </>
+              ) : (
+                <>
+                  Seu endereço ainda não foi gerado. Fale com o administrador da empresa — sem ele, os e-mails
+                  encaminhados não chegam ao KOTTA IA.
+                </>
+              )}
             </p>
           </div>
         </section>

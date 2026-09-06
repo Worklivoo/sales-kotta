@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
+import { canalEmailInicial } from './emailIntegracao.js';
 
 interface CreateMemberPayload {
   nome: string;
@@ -186,15 +188,20 @@ export const createMemberService = async ({
     throw new HttpError(500, 'Nao foi possivel obter o ID do usuario criado.');
   }
 
+  const novoMembroId = randomUUID();
+
   const { data: insertedMember, error: insertMemberError } = await adminClient
     .from('sales_membros_v2')
     .insert({
+      membro_id: novoMembroId,
       empresa_id: requesterMember.empresa_id,
       user_id: createdAuthUser.user.id,
       nome,
       email,
       telefone,
       cargo: 'VENDEDOR',
+      // cada membro conecta a propria caixa, entao cada um tem o seu
+      canal_email: canalEmailInicial(novoMembroId),
     })
     .select('membro_id, empresa_id, user_id, nome, email, telefone, cargo')
     .single();

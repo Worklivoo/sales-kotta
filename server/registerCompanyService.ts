@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
+import { randomUUID } from 'node:crypto';
+import { canalEmailInicial } from './emailIntegracao.js';
 
 interface RegisterCompanyPayload {
   accessPassword: string;
@@ -139,13 +141,20 @@ export const registerCompanyService = async ({
     throw new HttpError(400, empresaError?.message || 'Nao foi possivel criar a empresa.');
   }
 
+  /* O id e gerado aqui, e nao pelo banco, para o endereco de integracao
+     ja nascer junto - senao precisaria de uma segunda escrita e a pessoa
+     veria o campo vazio no primeiro acesso. */
+  const membroId = randomUUID();
+
   const { error: membroError } = await adminClient.from('sales_membros_v2').insert({
+    membro_id: membroId,
     empresa_id: empresaRow.empresa_id,
     user_id: createdAuthUser.user.id,
     nome: nomeResponsavel,
     email,
     telefone: telefoneResponsavel,
     cargo: 'ADMIN',
+    canal_email: canalEmailInicial(membroId),
   });
 
   if (membroError) {
