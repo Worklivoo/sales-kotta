@@ -882,27 +882,48 @@ const gravarClientes = async ({ adminClient, empresaId, registros, extrasPorChav
     desativados = fora.length;
   }
 
+  /* Releitura obrigatoria: o mapa acima foi montado ANTES da RPC, entao
+     cliente recem-criado nao tem id nele. Sem isso, o registro novo era
+     descartado em silencio e as informacoes extras so entravam na
+     importacao SEGUINTE - foi exatamente o que aconteceu no teste.
+     O caminho de produtos nao sofre disso porque grava por upsert na
+     chave natural, que existe antes da linha. */
+  const depois = await lerTudo(
+    adminClient,
+    'sales_clientes_v2',
+    'cliente_id, codigo_erp, cnpj, metadata',
+    empresaId,
+    'cliente_id',
+  );
+
+  const porChaveDepois = new Map<string, Record<string, unknown>>();
+  for (const c of depois) {
+    if (c.codigo_erp) porChaveDepois.set(String(c.codigo_erp), c);
+    if (c.cnpj) porChaveDepois.set(String(c.cnpj), c);
+  }
+
+  const acharDepois = (r: Record<string, unknown>) => {
+    for (const k of ['codigo_erp', 'cnpj']) {
+      const v = r[k];
+      if (v && porChaveDepois.has(String(v))) return porChaveDepois.get(String(v));
+    }
+    return undefined;
+  };
+
   const extras = registros
-    .filter((r) => {
-      const chave = (r.codigo_erp || r.cnpj) as string;
-      const metaNovo = extrasPorChave.get(chave) ?? null;
-      const atual = achar(r);
-      if (!atual) return Boolean(metaNovo);
-      return canonico(atual.metadata) !== canonico(metaNovo);
-    })
     .map((r) => {
       const chave = (r.codigo_erp || r.cnpj) as string;
-      const atual = achar(r);
-      return {
-        cliente_id: atual?.cliente_id as string | undefined,
-        chave,
-        metadata: extrasPorChave.get(chave) ?? {},
-      };
+      return { chave, atual: acharDepois(r), metadata: extrasPorChave.get(chave) ?? null };
     })
-    .filter((e) => e.cliente_id);
+    .filter((e) => e.atual && canonico(e.atual.metadata) !== canonico(e.metadata))
+    .map((e) => ({
+      cliente_id: e.atual!.cliente_id as string,
+      chave: e.chave,
+      metadata: e.metadata ?? {},
+    }));
 
   for (const e of extras) {
-    await adminClient.from('sales_clientes_v2').update({ metadata: e.metadata }).eq('cliente_id', e.cliente_id!);
+    await adminClient.from('sales_clientes_v2').update({ metadata: e.metadata }).eq('cliente_id', e.cliente_id);
   }
 
   const c = (Array.isArray(data) ? data[0] : data) as { criados?: number; atualizados?: number; desativados?: number } | null;
@@ -915,20 +936,6 @@ const gravarClientes = async ({ adminClient, empresaId, registros, extrasPorChav
     criados: Number(c?.criados ?? 0),
     atualizados: Number(c?.atualizados ?? 0) + soNaSegundaPassada,
     desativados,
-    // TEMPORARIO: para achar por que 8 clientes foram reescritos sem ter
-    // mudado nada. Remover assim que a causa estiver identificada.
-    _diag: {
-      registros: registros.length,
-      criar: criar.length,
-      atualizar: atualizar.length,
-      extras: extras.length,
-      exemplo: extras[0]
-        ? {
-            banco: canonico(achar(registros.find((r) => (r.codigo_erp || r.cnpj) === extras[0].chave) ?? {})?.metadata),
-            planilha: canonico(extras[0].metadata),
-          }
-        : null,
-    },
   };
 };
 
