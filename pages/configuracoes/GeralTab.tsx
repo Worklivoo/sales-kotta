@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import ImportarProdutosModal from '../../components/ImportarProdutosModal';
 
 type BudgetMode = 'AUTO' | 'SEMI';
 type QuoteRuleLevel = 'OBRIGATORIO' | 'DESEJAVEL';
@@ -322,6 +323,8 @@ const GeralTab: React.FC = () => {
   const [accountSaveError, setAccountSaveError] = useState<string | null>(null);
   const [accountSaveSuccess, setAccountSaveSuccess] = useState<string | null>(null);
   const [companyPlan, setCompanyPlan] = useState<CompanyPlanRecord | null>(null);
+  const [isImportProdutosOpen, setIsImportProdutosOpen] = useState(false);
+  const [recarregarEmpresa, setRecarregarEmpresa] = useState(0);
   const [isCompanyPlanLoading, setIsCompanyPlanLoading] = useState(false);
   const [companyPlanError, setCompanyPlanError] = useState<string | null>(null);
   const [isQuoteRulesModalOpen, setIsQuoteRulesModalOpen] = useState(false);
@@ -471,7 +474,7 @@ const GeralTab: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [isAdminMember, memberAccount?.empresa_id]);
+  }, [isAdminMember, memberAccount?.empresa_id, recarregarEmpresa]);
 
   const memberStatusLabel = formatMemberStatusLabel(memberAccount?.status || null);
   const memberStatusClassName =
@@ -511,6 +514,18 @@ const GeralTab: React.FC = () => {
     (typeof companyPlan?.integracao_produtos?.url === 'string'
       ? (companyPlan.integracao_produtos.url as string).trim()
       : '') || '';
+  const companySourceArquivo =
+    typeof companyPlan?.integracao_produtos?.nome_arquivo === 'string'
+      ? (companyPlan.integracao_produtos.nome_arquivo as string)
+      : '';
+  const companySourceImportadoEm = (() => {
+    const bruto = companyPlan?.integracao_produtos?.importado_em;
+    if (typeof bruto !== 'string') return '';
+    const data = new Date(bruto);
+    return Number.isNaN(data.getTime())
+      ? ''
+      : data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
+  })();
   const companySourceStatusLabel = companySourceType ? formatEnumLabel(companySourceType) : '-';
   const hasCompanySourceConfigured = Boolean(companySourceType) || Boolean(companySourceLink);
   const companyClientSourceLink =
@@ -1490,10 +1505,19 @@ const GeralTab: React.FC = () => {
                   <div>
                     <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Produtos</h3>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                      De onde os itens da empresa são coletados. Configuração somente leitura.
+                      De onde o KOTTA IA busca os produtos da sua empresa.
                     </p>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsImportProdutosOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
+                >
+                  <Pencil size={13} />
+                  Editar
+                </button>
               </div>
 
               <div className="rounded-panel border border-line-soft bg-card px-4 py-4">
@@ -1509,12 +1533,22 @@ const GeralTab: React.FC = () => {
                     </p>
                   </div>
 
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-soft">URL</p>
-                    <p className="mt-1 break-all text-xs leading-5 text-muted">
-                      {companySourceLink || '-'}
-                    </p>
-                  </div>
+                  {companySourceType === 'PLANILHA' ? (
+                    <div>
+                      <p className="text-[11px] font-medium text-muted-soft">Arquivo</p>
+                      <p className="mt-1 break-all text-xs leading-5 text-muted">
+                        {companySourceArquivo || '-'}
+                        {companySourceImportadoEm ? ` · importado em ${companySourceImportadoEm}` : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-[11px] font-medium text-muted-soft">URL</p>
+                      <p className="mt-1 break-all text-xs leading-5 text-muted">
+                        {companySourceLink || '-'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2063,6 +2097,12 @@ const GeralTab: React.FC = () => {
           </div>
         </div>
       ) : null}
+
+      <ImportarProdutosModal
+        aberto={isImportProdutosOpen}
+        aoFechar={() => setIsImportProdutosOpen(false)}
+        aoConcluir={() => setRecarregarEmpresa((n) => n + 1)}
+      />
     </>
   );
 };
