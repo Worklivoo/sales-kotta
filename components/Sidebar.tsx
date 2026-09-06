@@ -308,7 +308,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="flex min-h-full flex-col gap-3 rounded-panel bg-stone p-3">
+              <div className="flex min-h-full flex-col gap-3 rounded-panel bg-paper p-3">
                 {isLoadingNotifications ? (
                   <>
                     {[0, 1, 2].map((item) => (
