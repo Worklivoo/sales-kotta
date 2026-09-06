@@ -356,7 +356,9 @@ Responda SOMENTE com JSON valido, sem texto antes ou depois:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-5',
+      // mesmo modelo que os 5 nos de reserva do Worker Global ja usam em
+      // producao - a conta comprovadamente tem acesso a ele
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     }),
