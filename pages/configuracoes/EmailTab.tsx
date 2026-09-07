@@ -581,11 +581,34 @@ const EmailTab: React.FC = () => {
               diferentes. Aqui o circuito e fechado de verdade: mandamos um
               e-mail para a caixa do cliente e esperamos ele voltar. */}
           {emailIntegracao ? (
-            <div className="mt-4 rounded-panel border border-line-soft bg-card px-4 py-4">
+            /* Enquanto nao esta validado o cartao inteiro fica vermelho, de
+               proposito: neutro ele passava batido e o cliente saia da pagina
+               sem testar - que e justamente como a configuracao errada chega
+               ate a producao. */
+            <div
+              className={`mt-4 rounded-panel border px-4 py-4 ${
+                encaminhamentoValidado
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : 'border-red-200 bg-red-50'
+              }`}
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-semibold text-ink">Testar o encaminhamento</p>
-                  <p className="max-w-xl text-xs leading-5 text-muted">
+                {/* flex-1 e o que faz o texto ENCOLHER em vez de empurrar o
+                    botao para a linha de baixo - com "Verificar de novo",
+                    que e mais largo, ele quebrava. */}
+                <div className="min-w-[240px] flex-1 space-y-1">
+                  <p
+                    className={`text-sm font-semibold ${
+                      encaminhamentoValidado ? 'text-emerald-800' : 'text-red-700'
+                    }`}
+                  >
+                    Testar o encaminhamento
+                  </p>
+                  <p
+                    className={`max-w-xl text-xs leading-5 ${
+                      encaminhamentoValidado ? 'text-emerald-700' : 'text-red-600'
+                    }`}
+                  >
                     {encaminhamento.aguardando && !encaminhamentoValidado ? (
                       <>
                         Teste enviado
@@ -605,7 +628,7 @@ const EmailTab: React.FC = () => {
                     ) : (
                       <>
                         Enviamos um e-mail para{' '}
-                        <strong className="text-ink">{caixaDoTeste || 'o seu e-mail'}</strong> e conferimos se ele
+                        <strong className="font-semibold">{caixaDoTeste || 'o seu e-mail'}</strong> e conferimos se ele
                         volta para o endereço acima. É a única forma de saber que o encaminhamento está de pé.
                       </>
                     )}
@@ -623,12 +646,13 @@ const EmailTab: React.FC = () => {
                 </button>
               </div>
 
+              {/* o cartao ja carrega a cor do estado - caixa colorida dentro
+                  de cartao da mesma cor vira mancha, entao aqui o fundo e
+                  branco e serve so para destacar a mensagem do momento */}
               {avisoVerificacao ? (
                 <p
-                  className={`mt-3 rounded-panel border px-3 py-2 text-xs leading-5 ${
-                    encaminhamentoValidado
-                      ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                      : 'border-line-soft bg-paper text-muted'
+                  className={`mt-3 rounded-panel bg-white/70 px-3 py-2 text-xs leading-5 ${
+                    encaminhamentoValidado ? 'text-emerald-800' : 'text-red-700'
                   }`}
                 >
                   {avisoVerificacao}
@@ -636,7 +660,7 @@ const EmailTab: React.FC = () => {
               ) : null}
 
               {erroVerificacao ? (
-                <p className="mt-3 rounded-panel border border-red-100 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">
+                <p className="mt-3 rounded-panel bg-white/70 px-3 py-2 text-xs leading-5 font-medium text-red-700">
                   {erroVerificacao}
                 </p>
               ) : null}
