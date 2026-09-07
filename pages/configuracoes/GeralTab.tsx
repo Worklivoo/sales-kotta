@@ -8,6 +8,7 @@ import {
   EyeOff,
   FileText,
   KeyRound,
+  Lock,
   Pencil,
   Plus,
   Save,
@@ -102,6 +103,20 @@ const SHOW_USER_PLAN_SECTION = false;
 const QUOTE_RULE_LEVEL_OPTIONS: QuoteRuleLevel[] = ['OBRIGATORIO', 'DESEJAVEL'];
 
 const PROTECTED_QUOTE_RULE_KEYS: readonly string[] = ['Item'];
+
+/* Regra do sistema: vale para toda empresa e ninguem configura.
+   Ela NAO fica gravada em regras_cotacao - quem a injeta e o no
+   "Preparar Prompt" do Worker Global, no momento em que monta o prompt do
+   Gatekeeper. Ficar so la evita migrar as empresas ja existentes e evita
+   que alguem a apague do banco sem querer; aqui embaixo ela e apenas
+   DESENHADA, para o cliente entender por que a IA cobra os itens.
+   O nome tem que continuar batendo com PROTECTED_QUOTE_RULE_KEYS acima e
+   com REGRAS_DO_SISTEMA no n8n. */
+const SYSTEM_QUOTE_RULE = {
+  name: 'Item',
+  nivel: 'OBRIGATORIO' as QuoteRuleLevel,
+  descricao: 'Itens que deseja cotar: nome ou codigo do produto e a quantidade de cada um',
+};
 
 const isProtectedQuoteRule = (ruleName: string) =>
   PROTECTED_QUOTE_RULE_KEYS.includes(ruleName.trim());
@@ -1350,6 +1365,37 @@ const GeralTab: React.FC = () => {
               </div>
 
               <div className="space-y-4 rounded-panel border border-line-soft bg-card px-4 py-4">
+                {/* Regra do sistema, sempre primeiro: ela e a razao de a IA
+                    cobrar os itens, entao esconde-la faria o cliente achar
+                    que a IA esta inventando pedido. */}
+                <div className="rounded-panel border border-line bg-stone/60 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-ink">{SYSTEM_QUOTE_RULE.name}</p>
+                        <span className="inline-flex items-center gap-1 rounded-pill border border-line bg-card px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          <Lock size={10} />
+                          Do sistema
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted">{SYSTEM_QUOTE_RULE.descricao}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-muted-soft">
+                        Sem itens não existe cotação, então esta regra vale para todas as contas e não pode
+                        ser alterada nem desativada.
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span className="rounded-pill bg-lime px-2.5 py-1 text-[11px] font-semibold text-ink">
+                        {formatEnumLabel(SYSTEM_QUOTE_RULE.nivel)}
+                      </span>
+                      <span className="rounded-pill border border-lime bg-lime/15 px-2.5 py-1 text-[11px] font-semibold text-ink">
+                        Ativa
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {quoteRulesPreview.length > 0 ? (
                   <div className="space-y-2">
                     {quoteRulesPreview.map((rule) => (
@@ -1389,9 +1435,10 @@ const GeralTab: React.FC = () => {
                   </div>
                 ) : (
                   <div className="rounded-panel border border-dashed border-line bg-paper px-4 py-6 text-center">
-                    <p className="text-sm font-medium text-muted">Nenhuma regra configurada ainda.</p>
+                    <p className="text-sm font-medium text-muted">Nenhuma regra sua ainda.</p>
                     <p className="mt-1 text-xs text-muted-soft">
-                      Crie regras para orientar o KOTTA IA sobre quais informações solicitar.
+                      Além da regra do sistema acima, crie as suas para orientar o KOTTA IA sobre o que mais
+                      solicitar.
                     </p>
                   </div>
                 )}
@@ -1693,8 +1740,8 @@ const GeralTab: React.FC = () => {
                   <div>
                     <p className="text-sm font-semibold text-ink">Regras atuais</p>
                     <p className="mt-1 text-xs text-muted">
-                      {quoteRulesDraft.length} regra(s) cadastrada(s),{' '}
-                      {quoteRulesDraft.filter((rule) => rule.ativo).length} ativa(s)
+                      {quoteRulesDraft.length + 1} regra(s) no total ({quoteRulesDraft.length} sua(s) + 1 do
+                      sistema), {quoteRulesDraft.filter((rule) => rule.ativo).length + 1} ativa(s)
                     </p>
                   </div>
 
@@ -1712,6 +1759,28 @@ const GeralTab: React.FC = () => {
                 </div>
 
                 <div className="mt-5 space-y-3">
+                  <div className="rounded-card border border-line bg-stone/60 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-ink">{SYSTEM_QUOTE_RULE.name}</p>
+                          <span className="rounded-pill bg-lime px-2.5 py-1 text-[11px] font-semibold text-ink">
+                            {formatEnumLabel(SYSTEM_QUOTE_RULE.nivel)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-pill border border-line bg-card px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                            <Lock size={10} />
+                            Do sistema
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-muted">{SYSTEM_QUOTE_RULE.descricao}</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-soft">
+                          Sem itens não existe cotação: esta regra vale para todas as contas e não pode ser
+                          alterada, desativada nem excluída.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {quoteRulesDraft.length > 0 ? (
                     quoteRulesDraft.map((rule) => (
                       <div
