@@ -575,13 +575,14 @@ const EmailTab: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                    Recebimento de E-mails
+                    Envio de E-mails
                   </h2>
                   {isLoadingConfig ? null : <Pilula pronto={senhaGuardada} />}
                 </div>
                 <p className="max-w-2xl text-sm leading-6 text-muted">
-                  Configure os dados SMTP que serão usados para receber e responder as cotações pelo
-                  seu próprio e-mail.
+                  Configure os dados SMTP que serão usados para responder as cotações pelo seu
+                  próprio e-mail. É por aqui que a resposta sai com o seu endereço, e não com o
+                  nosso.
                 </p>
               </div>
             </div>
