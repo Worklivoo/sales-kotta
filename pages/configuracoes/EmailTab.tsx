@@ -5,9 +5,9 @@ import { supabase } from '../../lib/supabase';
 interface CanalEmailConfig {
   email_integracao?: string | null;
   smtp_email?: string | null;
-  /* A senha nunca chega ao navegador. senha_salva so diz se existe uma
-     guardada no cofre, para a tela mostrar o estado sem revelar o valor. */
-  senha_salva?: boolean | null;
+  /* A senha nunca chega ao navegador. senha_configurada so diz se existe
+     uma guardada no cofre, para a tela mostrar o estado sem revelar nada. */
+  senha_configurada?: boolean | null;
   smtp_host?: string | null;
   smtp_port?: string | null;
   smtp_ssl?: boolean | null;
@@ -56,7 +56,7 @@ const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) => {
 
   return Boolean(
     canalEmail?.smtp_email?.trim() ||
-      canalEmail?.senha_salva ||
+      canalEmail?.senha_configurada ||
       canalEmail?.smtp_host?.trim() ||
       canalEmail?.smtp_port?.trim() ||
       canalEmail?.smtp_ssl,
@@ -141,6 +141,13 @@ const EmailTab: React.FC = () => {
     };
   }, []);
 
+  /* A senha nunca volta do servidor. Quando existe uma guardada e a
+     pessoa ainda nao digitou outra, o campo mostra um valor mascarado de
+     mentira - so para a tela dizer "esta configurada" sem revelar nada.
+     Nesse estado o olhinho some: nao ha o que revelar. */
+  const senhaGuardada = memberConfig?.canal_email?.senha_configurada === true;
+  const mostrandoSenhaGuardada = senhaGuardada && emailConfigForm.smtp_senha === '';
+
   const hasSavedConfig = useMemo(() => hasAnyEmailConfig(memberConfig), [memberConfig]);
 
   const handleStartEditing = () => {
@@ -208,7 +215,11 @@ const EmailTab: React.FC = () => {
     }
 
     if (!smtpSenha) {
-      setSaveError('Informe a senha SMTP.');
+      setSaveError(
+        senhaGuardada
+          ? 'Digite a senha de novo para salvar. Ela fica guardada no cofre, nao no navegador.'
+          : 'Informe a senha SMTP.',
+      );
       return;
     }
 
@@ -284,7 +295,7 @@ const EmailTab: React.FC = () => {
         smtp_host: smtpHost,
         smtp_port: smtpPort,
         smtp_ssl: emailConfigForm.smtp_ssl,
-        senha_salva: true,
+        senha_configurada: true,
       };
 
       setMemberConfig((current) =>
@@ -392,9 +403,17 @@ const EmailTab: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                  Recebimento de E-mails
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[20px] font-semibold tracking-tight text-ink">
+                    Recebimento de E-mails
+                  </h2>
+                  {senhaGuardada ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-stone px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink">
+                      <Check size={12} />
+                      Configurado
+                    </span>
+                  ) : null}
+                </div>
                 <p className="max-w-2xl text-sm leading-6 text-muted">
                   Configure os dados SMTP que serão usados para receber e responder as cotações pelo
                   seu próprio e-mail.
@@ -462,22 +481,30 @@ const EmailTab: React.FC = () => {
                 <div className="relative mt-2">
                   <input
                     id="smtp-senha"
-                    type={isPasswordVisible ? 'text' : 'password'}
-                    value={emailConfigForm.smtp_senha}
+                    type={mostrandoSenhaGuardada || !isPasswordVisible ? 'password' : 'text'}
+                    value={mostrandoSenhaGuardada ? '••••••••••' : emailConfigForm.smtp_senha}
                     onChange={handleInputChange('smtp_senha')}
                     disabled={!isEditingConfig || isLoadingConfig}
                     className="w-full rounded-panel border border-line bg-card px-4 py-3 pr-12 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25 disabled:cursor-default disabled:bg-paper disabled:text-muted"
-                    placeholder={isLoadingConfig ? 'Carregando...' : 'Digite a senha do SMTP'}
+                    placeholder={
+                      isLoadingConfig
+                        ? 'Carregando...'
+                        : senhaGuardada
+                          ? 'Digite para trocar a senha'
+                          : 'Digite a senha do SMTP'
+                    }
                   />
-                  <button
-                    type="button"
-                    onClick={() => setIsPasswordVisible((current) => !current)}
-                    disabled={isLoadingConfig}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-tile text-muted-soft transition-colors hover:bg-stone hover:text-ink disabled:cursor-default disabled:opacity-60"
-                    aria-label={isPasswordVisible ? 'Ocultar senha SMTP' : 'Mostrar senha SMTP'}
-                  >
-                    {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  {mostrandoSenhaGuardada ? null : (
+                    <button
+                      type="button"
+                      onClick={() => setIsPasswordVisible((current) => !current)}
+                      disabled={isLoadingConfig}
+                      className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-tile text-muted-soft transition-colors hover:bg-stone hover:text-ink disabled:cursor-default disabled:opacity-60"
+                      aria-label={isPasswordVisible ? 'Ocultar senha SMTP' : 'Mostrar senha SMTP'}
+                    >
+                      {isPasswordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  )}
                 </div>
               </div>
 

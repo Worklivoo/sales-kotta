@@ -101,6 +101,18 @@ export async function salvarSmtpService(options: Options) {
     return { salvo: false, validated: false, resultado: validacao.resultado };
   }
 
+  /* Cofre PRIMEIRO. Se ele falhar, canal_email nem e tocado - do
+     contrario a tela diria "senha configurada" sem haver senha guardada,
+     e o erro so apareceria no primeiro envio, longe da causa. */
+  const { error: erroSenha } = await adminClient.rpc('sales_v2_smtp_gravar', {
+    p_membro_id: membro.membro_id,
+    p_senha: senha,
+  });
+
+  if (erroSenha) {
+    throw new HttpError(500, `Nao foi possivel guardar a senha com seguranca: ${erroSenha.message}`);
+  }
+
   const canalAtual = (membro.canal_email ?? {}) as Record<string, unknown>;
 
   // a senha NAO entra aqui - so o que nao e segredo
@@ -109,21 +121,21 @@ export async function salvarSmtpService(options: Options) {
   const { error: erroCanal } = await adminClient
     .from('sales_membros_v2')
     .update({
-      canal_email: { ...semSenha, smtp_host: host, smtp_port: port, smtp_ssl: ssl, smtp_email: email },
+      canal_email: {
+        ...semSenha,
+        smtp_host: host,
+        smtp_port: port,
+        smtp_ssl: ssl,
+        smtp_email: email,
+        /* Nao e a senha: e so um aviso de que existe uma guardada, para a
+           tela poder mostrar o estado sem nunca revelar o valor. */
+        senha_configurada: true,
+      },
     })
     .eq('membro_id', membro.membro_id);
 
   if (erroCanal) {
-    throw new HttpError(500, `Nao foi possivel salvar a configuracao: ${erroCanal.message}`);
-  }
-
-  const { error: erroSenha } = await adminClient.rpc('sales_v2_smtp_gravar', {
-    p_membro_id: membro.membro_id,
-    p_senha: senha,
-  });
-
-  if (erroSenha) {
-    throw new HttpError(500, `A configuracao foi salva, mas a senha nao: ${erroSenha.message}`);
+    throw new HttpError(500, `A senha foi guardada, mas a configuracao nao: ${erroCanal.message}`);
   }
 
   return { salvo: true, validated: true, resultado: validacao.resultado };
