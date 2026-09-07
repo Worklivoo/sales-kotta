@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -193,69 +193,140 @@ const EmailTab: React.FC = () => {
   /* Manda o e-mail de teste e fica olhando ate ele voltar. Quem marca
      como validado e a Triagem Global, quando o e-mail cai em
      integracao@ - por isso aqui e so espera, nao ha o que decidir. */
+  const retomouEspera = useRef(false);
+
+  const chamarVerificacao = async (acao: 'enviar' | 'status') => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error('Sua sessão expirou. Entre de novo para continuar.');
+    }
+
+    const resposta = await fetch('/api/verificar-encaminhamento', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ acao }),
+    });
+
+    const corpo = await resposta.json().catch(() => null);
+
+    if (!resposta.ok) {
+      throw new Error(corpo?.error || 'Não foi possível verificar o encaminhamento.');
+    }
+
+    return corpo as { validado_em: string | null; teste_em: string | null; aguardando: boolean };
+  };
+
+  const MSG_NAO_VOLTOU =
+    'O e-mail de teste chegou na sua caixa, mas não voltou para o endereço de integração. ' +
+    'Quase sempre é porque a regra de encaminhamento ainda não existe (ou não pegou esse remetente). ' +
+    'Crie na sua caixa uma regra que encaminhe as mensagens recebidas para o endereço acima e teste de novo.';
+
+  /* Fica olhando ate o e-mail voltar. Sai daqui como ele terminou, para
+     quem chamou decidir a mensagem - retomar ao abrir a pagina nao pode
+     dizer "enviado agora", que seria mentira. */
+  const acompanharVolta = async (voltas: number) => {
+    for (let tentativa = 0; tentativa < voltas; tentativa += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+
+      const atual = await chamarVerificacao('status');
+
+      if (atual.validado_em) {
+        setEncaminhamento(atual);
+        setAvisoVerificacao('Encaminhamento validado: o e-mail de teste chegou ao KOTTA IA.');
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   const verificarEncaminhamento = async () => {
+    // trava o efeito de retomada antes de mexer no estado, senao ele
+    // veria este envio como "teste pendente" e abriria uma segunda espera
+    retomouEspera.current = true;
     setVerificando(true);
     setErroVerificacao(null);
     setAvisoVerificacao(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        throw new Error('Sua sessao expirou. Entre de novo para continuar.');
-      }
-
-      const chamar = async (acao: 'enviar' | 'status') => {
-        const resposta = await fetch('/api/verificar-encaminhamento', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ acao }),
-        });
-
-        const corpo = await resposta.json().catch(() => null);
-
-        if (!resposta.ok) {
-          throw new Error(corpo?.error || 'Nao foi possivel verificar o encaminhamento.');
-        }
-
-        return corpo as { validado_em: string | null; teste_em: string | null; aguardando: boolean };
-      };
-
-      const envio = await chamar('enviar');
+      const envio = await chamarVerificacao('enviar');
       setEncaminhamento(envio);
-      setAvisoVerificacao('E-mail de teste enviado. Aguardando ele voltar para o seu endereço de integração...');
-
-      /* 2 minutos de espera, olhando a cada 5s. Encaminhamento costuma
-         ser instantaneo; passou disso, quase sempre e porque a regra nao
-         existe ou nao pegou. */
-      for (let tentativa = 0; tentativa < 24; tentativa += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 5000));
-
-        const atual = await chamar('status');
-
-        if (atual.validado_em) {
-          setEncaminhamento(atual);
-          setAvisoVerificacao('Encaminhamento validado: o e-mail de teste chegou ao KOTTA IA.');
-          return;
-        }
-      }
-
-      setEncaminhamento((atual) => ({ ...atual, aguardando: false }));
-      setErroVerificacao(
-        'O e-mail de teste não voltou em 2 minutos. Confira a regra de encaminhamento na sua caixa e tente de novo — se ela existir e mesmo assim não chegar, fale com o suporte.',
+      setAvisoVerificacao(
+        'E-mail de teste enviado. Aguardando ele voltar para o seu endereço de integração...',
       );
+
+      /* 2 minutos, olhando a cada 5s. Encaminhamento costuma ser
+         instantaneo; passou disso, quase sempre e porque a regra nao
+         existe ou nao pegou. */
+      const voltou = await acompanharVolta(24);
+
+      if (!voltou) {
+        setEncaminhamento((atual) => ({ ...atual, aguardando: false }));
+        setAvisoVerificacao(null);
+        setErroVerificacao(MSG_NAO_VOLTOU);
+      }
     } catch (erro: any) {
       console.error('Erro ao verificar o encaminhamento:', erro);
-      setErroVerificacao(erro?.message || 'Nao foi possivel verificar o encaminhamento.');
+      setAvisoVerificacao(null);
+      setErroVerificacao(erro?.message || 'Não foi possível verificar o encaminhamento.');
     } finally {
       setVerificando(false);
     }
   };
+
+  /* Sair da pagina no meio da espera nao pode apagar o teste: ele
+     continua valendo por 24h no servidor. Ao voltar, retomamos a espera
+     em vez de mandar outro e-mail - e se ja passou do tempo, dizemos que
+     nao voltou, em vez de fingir que nada aconteceu. */
+  useEffect(() => {
+    if (isLoadingConfig || retomouEspera.current) {
+      return;
+    }
+
+    if (!encaminhamento.aguardando || !encaminhamento.teste_em || encaminhamento.validado_em) {
+      return;
+    }
+
+    retomouEspera.current = true;
+
+    const enviadoHa = Date.now() - new Date(encaminhamento.teste_em).getTime();
+    const quando = new Date(encaminhamento.teste_em).toLocaleString('pt-BR');
+
+    if (enviadoHa > 5 * 60 * 1000) {
+      setErroVerificacao(`O teste enviado em ${quando} não voltou. ${MSG_NAO_VOLTOU}`);
+      return;
+    }
+
+    (async () => {
+      setVerificando(true);
+      setAvisoVerificacao(
+        `Teste enviado em ${quando}. Ainda aguardando ele voltar para o seu endereço de integração...`,
+      );
+
+      try {
+        const restante = Math.max(1, Math.ceil((2 * 60 * 1000 - enviadoHa) / 5000));
+        const voltou = await acompanharVolta(restante);
+
+        if (!voltou) {
+          setEncaminhamento((atual) => ({ ...atual, aguardando: false }));
+          setAvisoVerificacao(null);
+          setErroVerificacao(MSG_NAO_VOLTOU);
+        }
+      } catch (erro: any) {
+        console.error('Erro ao retomar a verificacao:', erro);
+        setAvisoVerificacao(null);
+        setErroVerificacao(erro?.message || 'Não foi possível verificar o encaminhamento.');
+      } finally {
+        setVerificando(false);
+      }
+    })();
+  }, [isLoadingConfig, encaminhamento.aguardando, encaminhamento.teste_em, encaminhamento.validado_em]);
 
   const hasSavedConfig = useMemo(() => hasAnyEmailConfig(memberConfig), [memberConfig]);
 
@@ -515,7 +586,15 @@ const EmailTab: React.FC = () => {
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold text-ink">Testar o encaminhamento</p>
                   <p className="max-w-xl text-xs leading-5 text-muted">
-                    {encaminhamentoValidado ? (
+                    {encaminhamento.aguardando && !encaminhamentoValidado ? (
+                      <>
+                        Teste enviado
+                        {encaminhamento.teste_em
+                          ? ` em ${new Date(encaminhamento.teste_em).toLocaleString('pt-BR')}`
+                          : ''}
+                        . Ele só é dado como validado quando voltar para o endereço acima.
+                      </>
+                    ) : encaminhamentoValidado ? (
                       <>
                         Último teste chegou ao KOTTA IA
                         {encaminhamento.validado_em
