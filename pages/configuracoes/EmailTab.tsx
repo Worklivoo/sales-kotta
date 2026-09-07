@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Eye, EyeOff, Mail, Pencil, Save } from 'lucide-react';
+import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface CanalEmailConfig {
@@ -8,6 +8,11 @@ interface CanalEmailConfig {
   /* A senha nunca chega ao navegador. senha_configurada so diz se existe
      uma guardada no cofre, para a tela mostrar o estado sem revelar nada. */
   senha_configurada?: boolean | null;
+  /* Encaminhamento: prova de que o e-mail que chega na caixa do cliente
+     realmente cai no endereco de integracao. Ver verificarEncaminhamentoService. */
+  redirecionamento_teste_em?: string | null;
+  redirecionamento_teste_token?: string | null;
+  redirecionamento_validado_em?: string | null;
   smtp_host?: string | null;
   smtp_port?: string | null;
   smtp_ssl?: boolean | null;
@@ -63,6 +68,26 @@ const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) => {
   );
 };
 
+/* Uma pilula so para os dois blocos: verde quando esta pronto, vermelha
+   enquanto falta. O vermelho e proposital - "pendente" tem que incomodar,
+   senao o cliente acha que terminou a configuracao e nao terminou. */
+const Pilula: React.FC<{ pronto: boolean; rotuloPronto?: string; rotuloPendente?: string }> = ({
+  pronto,
+  rotuloPronto = 'Configurado',
+  rotuloPendente = 'Pendente',
+}) => (
+  <span
+    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+      pronto
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-red-200 bg-red-50 text-red-600'
+    }`}
+  >
+    {pronto ? <Check size={12} /> : <AlertCircle size={12} />}
+    {pronto ? rotuloPronto : rotuloPendente}
+  </span>
+);
+
 const EmailTab: React.FC = () => {
   const [memberConfig, setMemberConfig] = useState<MemberEmailConfigRecord | null>(null);
   const [emailConfigForm, setEmailConfigForm] = useState<EmailConfigFormState>(
@@ -77,6 +102,14 @@ const EmailTab: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [encaminhamento, setEncaminhamento] = useState<{
+    validado_em: string | null;
+    teste_em: string | null;
+    aguardando: boolean;
+  }>({ validado_em: null, teste_em: null, aguardando: false });
+  const [verificando, setVerificando] = useState(false);
+  const [erroVerificacao, setErroVerificacao] = useState<string | null>(null);
+  const [avisoVerificacao, setAvisoVerificacao] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -116,6 +149,11 @@ const EmailTab: React.FC = () => {
         const nextConfig = (data as MemberEmailConfigRecord | null) ?? null;
         setMemberConfig(nextConfig);
         setEmailConfigForm(createEmailConfigForm(nextConfig));
+        setEncaminhamento({
+          validado_em: nextConfig?.canal_email?.redirecionamento_validado_em || null,
+          teste_em: nextConfig?.canal_email?.redirecionamento_teste_em || null,
+          aguardando: Boolean(nextConfig?.canal_email?.redirecionamento_teste_token),
+        });
         setIsEditingConfig(!hasAnyEmailConfig(nextConfig));
       } catch (error: any) {
         console.error('Erro ao carregar configurações de email:', error);
@@ -147,6 +185,77 @@ const EmailTab: React.FC = () => {
      Nesse estado o olhinho some: nao ha o que revelar. */
   const senhaGuardada = memberConfig?.canal_email?.senha_configurada === true;
   const mostrandoSenhaGuardada = senhaGuardada && emailConfigForm.smtp_senha === '';
+
+  const encaminhamentoValidado = Boolean(encaminhamento.validado_em);
+  const caixaDoTeste =
+    memberConfig?.canal_email?.smtp_email?.trim() || '';
+
+  /* Manda o e-mail de teste e fica olhando ate ele voltar. Quem marca
+     como validado e a Triagem Global, quando o e-mail cai em
+     integracao@ - por isso aqui e so espera, nao ha o que decidir. */
+  const verificarEncaminhamento = async () => {
+    setVerificando(true);
+    setErroVerificacao(null);
+    setAvisoVerificacao(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('Sua sessao expirou. Entre de novo para continuar.');
+      }
+
+      const chamar = async (acao: 'enviar' | 'status') => {
+        const resposta = await fetch('/api/verificar-encaminhamento', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ acao }),
+        });
+
+        const corpo = await resposta.json().catch(() => null);
+
+        if (!resposta.ok) {
+          throw new Error(corpo?.error || 'Nao foi possivel verificar o encaminhamento.');
+        }
+
+        return corpo as { validado_em: string | null; teste_em: string | null; aguardando: boolean };
+      };
+
+      const envio = await chamar('enviar');
+      setEncaminhamento(envio);
+      setAvisoVerificacao('E-mail de teste enviado. Aguardando ele voltar para o seu endereço de integração...');
+
+      /* 2 minutos de espera, olhando a cada 5s. Encaminhamento costuma
+         ser instantaneo; passou disso, quase sempre e porque a regra nao
+         existe ou nao pegou. */
+      for (let tentativa = 0; tentativa < 24; tentativa += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5000));
+
+        const atual = await chamar('status');
+
+        if (atual.validado_em) {
+          setEncaminhamento(atual);
+          setAvisoVerificacao('Encaminhamento validado: o e-mail de teste chegou ao KOTTA IA.');
+          return;
+        }
+      }
+
+      setEncaminhamento((atual) => ({ ...atual, aguardando: false }));
+      setErroVerificacao(
+        'O e-mail de teste não voltou em 2 minutos. Confira a regra de encaminhamento na sua caixa e tente de novo — se ela existir e mesmo assim não chegar, fale com o suporte.',
+      );
+    } catch (erro: any) {
+      console.error('Erro ao verificar o encaminhamento:', erro);
+      setErroVerificacao(erro?.message || 'Nao foi possivel verificar o encaminhamento.');
+    } finally {
+      setVerificando(false);
+    }
+  };
 
   const hasSavedConfig = useMemo(() => hasAnyEmailConfig(memberConfig), [memberConfig]);
 
@@ -346,9 +455,12 @@ const EmailTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-[20px] font-semibold tracking-tight text-ink">
-                Recebimento de E-mails
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[20px] font-semibold tracking-tight text-ink">
+                  Recebimento de E-mails
+                </h2>
+                {isLoadingConfig ? null : <Pilula pronto={encaminhamentoValidado} />}
+              </div>
               <p className="max-w-2xl text-sm leading-6 text-muted">
                 Configure a sua caixa de e-mail para encaminhar as mensagens recebidas para o endereço abaixo. É
                 por ele que o KOTTA IA recebe os pedidos de cotação dos seus clientes.
@@ -393,6 +505,64 @@ const EmailTab: React.FC = () => {
               )}
             </p>
           </div>
+
+          {/* Configurar o encaminhamento e dizer que configurou sao coisas
+              diferentes. Aqui o circuito e fechado de verdade: mandamos um
+              e-mail para a caixa do cliente e esperamos ele voltar. */}
+          {emailIntegracao ? (
+            <div className="mt-4 rounded-panel border border-line-soft bg-card px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-semibold text-ink">Testar o encaminhamento</p>
+                  <p className="max-w-xl text-xs leading-5 text-muted">
+                    {encaminhamentoValidado ? (
+                      <>
+                        Último teste chegou ao KOTTA IA
+                        {encaminhamento.validado_em
+                          ? ` em ${new Date(encaminhamento.validado_em).toLocaleString('pt-BR')}`
+                          : ''}
+                        . Rode de novo sempre que mexer na regra da sua caixa.
+                      </>
+                    ) : (
+                      <>
+                        Enviamos um e-mail para{' '}
+                        <strong className="text-ink">{caixaDoTeste || 'o seu e-mail'}</strong> e conferimos se ele
+                        volta para o endereço acima. É a única forma de saber que o encaminhamento está de pé.
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={verificarEncaminhamento}
+                  disabled={verificando || isLoadingConfig}
+                  className="inline-flex h-11 shrink-0 items-center gap-2 rounded-panel bg-ink px-5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-60"
+                >
+                  {verificando ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                  {verificando ? 'Verificando...' : encaminhamentoValidado ? 'Verificar de novo' : 'Verificar'}
+                </button>
+              </div>
+
+              {avisoVerificacao ? (
+                <p
+                  className={`mt-3 rounded-panel border px-3 py-2 text-xs leading-5 ${
+                    encaminhamentoValidado
+                      ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                      : 'border-line-soft bg-paper text-muted'
+                  }`}
+                >
+                  {avisoVerificacao}
+                </p>
+              ) : null}
+
+              {erroVerificacao ? (
+                <p className="mt-3 rounded-panel border border-red-100 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">
+                  {erroVerificacao}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-[28px] border border-line-soft bg-paper p-5 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-6">
@@ -407,12 +577,7 @@ const EmailTab: React.FC = () => {
                   <h2 className="text-[20px] font-semibold tracking-tight text-ink">
                     Recebimento de E-mails
                   </h2>
-                  {senhaGuardada ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-stone px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink">
-                      <Check size={12} />
-                      Configurado
-                    </span>
-                  ) : null}
+                  {isLoadingConfig ? null : <Pilula pronto={senhaGuardada} />}
                 </div>
                 <p className="max-w-2xl text-sm leading-6 text-muted">
                   Configure os dados SMTP que serão usados para receber e responder as cotações pelo
