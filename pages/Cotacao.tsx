@@ -61,6 +61,8 @@ interface AtendimentoRecord {
   membro_id: string | null;
   origem: 'EMAIL' | 'WHATSAPP' | null;
   telefone_lead: string | null;
+  email_lead: string | null;
+  documento_lead: string | null;
 }
 
 interface ResponsibleMemberRecord {
@@ -504,7 +506,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         let atendimentoQuery = supabase
           .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, origem, telefone_lead',
+            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, origem, telefone_lead, email_lead, documento_lead',
           )
           .eq('empresa_id', empresaId)
           .eq('numero_ticket', Number(numeroTicket))
@@ -807,6 +809,14 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
   const shouldShowOrcamentoApprovalAction = cotacao.status === 'AGUARDANDO_APROVACAO';
   const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
+  // Mesma cadeia de fallback usada na automacao (n8n) ao montar o orcamento: cliente
+  // cadastrado > dado capturado automaticamente no atendimento > em branco.
+  const clienteInfoParaOrcamento = {
+    razaoSocial: clientData?.razao_social || clientData?.nome || null,
+    cnpjCpf: clientData?.cnpj || cotacao.documento_lead || null,
+    email: clientData?.email || (cotacao.origem === 'EMAIL' ? cotacao.email_lead : null) || null,
+    telefone: clientData?.telefone || (cotacao.origem === 'WHATSAPP' ? cotacao.telefone_lead : null) || null,
+  };
   const latestIaMessage = [...orderedConversationItems]
     .reverse()
     .find((message) => message.origem === 'IA');
@@ -970,6 +980,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
               }
             : null
         }
+        clienteInfo={clienteInfoParaOrcamento}
         orcamentoId={orcamentoData?.orcamento_id || null}
         atendimentoId={cotacao.atendimento_id}
         membroId={cotacao.membro_id}

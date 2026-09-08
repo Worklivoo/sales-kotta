@@ -10,6 +10,13 @@ interface BlankOrcamentoEmpresaInfo {
   telefone: string | null;
 }
 
+interface BlankOrcamentoClienteInfo {
+  razaoSocial: string | null;
+  cnpjCpf: string | null;
+  email: string | null;
+  telefone: string | null;
+}
+
 interface OrcamentoEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,6 +25,7 @@ interface OrcamentoEditorModalProps {
   numeroTicket: string | null;
   empresaId: string | null;
   empresaInfo: BlankOrcamentoEmpresaInfo | null;
+  clienteInfo: BlankOrcamentoClienteInfo | null;
   orcamentoId: string | null;
   atendimentoId: string | null;
   membroId: string | null;
@@ -709,12 +717,17 @@ const buildBlankOrcamentoHtml = (
   numeroTicket: string | null,
   empresa: BlankOrcamentoEmpresaInfo | null,
   dataEmissao: string,
+  cliente: BlankOrcamentoClienteInfo | null,
 ) => {
   const empresaLogo = empresa?.logoUrl || '';
   const empresaNome = empresa?.razaoSocial || '';
   const empresaCnpj = empresa?.cnpj || '';
   const empresaEmail = empresa?.email || '';
   const empresaTelefone = empresa?.telefone || '';
+  const clienteRazaoSocial = cliente?.razaoSocial || '';
+  const clienteCnpjCpf = cliente?.cnpjCpf || '';
+  const clienteEmail = cliente?.email || '';
+  const clienteTelefone = cliente?.telefone || '';
 
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
@@ -761,10 +774,10 @@ const buildBlankOrcamentoHtml = (
     '</div>' +
     '<div class="info-cliente">' +
     '<h3>Informações do cliente:</h3>' +
-    '<div class="campo"><strong>Razão Social:</strong> </div>' +
-    '<div class="campo"><strong>CNPJ/CPF:</strong> </div>' +
-    '<div class="campo"><strong>Email:</strong> </div>' +
-    '<div class="campo"><strong>Telefone:</strong> </div>' +
+    '<div class="campo"><strong>Razão Social:</strong> ' + clienteRazaoSocial + '</div>' +
+    '<div class="campo"><strong>CNPJ/CPF:</strong> ' + clienteCnpjCpf + '</div>' +
+    '<div class="campo"><strong>Email:</strong> ' + clienteEmail + '</div>' +
+    '<div class="campo"><strong>Telefone:</strong> ' + clienteTelefone + '</div>' +
     '</div>' +
     '<p class="section-title">Itens do Pedido</p>' +
     '<table class="itens-pedido"><thead><tr>' +
@@ -804,6 +817,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   numeroTicket,
   empresaId,
   empresaInfo,
+  clienteInfo,
   orcamentoId,
   atendimentoId,
   membroId,
@@ -847,7 +861,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
     }),
   );
   const effectiveHtmlOrcamento = isBlankOrcamento
-    ? buildBlankOrcamentoHtml(numeroTicket, empresaInfo, blankOrcamentoDataEmissao)
+    ? buildBlankOrcamentoHtml(numeroTicket, empresaInfo, blankOrcamentoDataEmissao, clienteInfo)
     : htmlOrcamento;
 
   // Sincroniza o estado do editor a partir do HTML fonte durante a renderizacao (nao em useEffect),
