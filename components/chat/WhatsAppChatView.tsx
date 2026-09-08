@@ -8,7 +8,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { messageHtmlClassName } from '../../lib/htmlContent';
-import { formatDayLabel, getAttachmentLabel, isImageUrl } from './utils';
+import { chatWallpaperStyle, formatDayLabel, getAttachmentLabel, isImageUrl } from './utils';
 import type { WhatsAppChatViewProps } from './types';
 
 const startOfDay = (date: Date) => {
@@ -29,7 +29,7 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
     .toUpperCase() || 'CL';
 
   return (
-    <section className="min-h-0 flex flex-col bg-[#efeae2]">
+    <section className="flex h-full min-h-0 flex-1 flex-col" style={chatWallpaperStyle}>
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <header className="flex items-center justify-between border-b border-line-soft bg-card px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">

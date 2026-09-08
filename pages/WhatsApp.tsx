@@ -7,7 +7,12 @@ import {
 } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
 import WhatsAppChatView from '../components/chat/WhatsAppChatView';
-import { formatBrazilianPhone, formatDateTime, formatDayLabel } from '../components/chat/utils';
+import {
+  chatWallpaperStyle,
+  formatBrazilianPhone,
+  formatDateTime,
+  formatDayLabel,
+} from '../components/chat/utils';
 import type { ChatMessage } from '../components/chat/types';
 
 type MessageAuthor = 'CLIENTE' | 'IA' | 'HUMANO';
@@ -891,7 +896,7 @@ const WhatsAppPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="flex h-full flex-col bg-[#efeae2]">
+              <div className="flex h-full flex-col" style={chatWallpaperStyle}>
                 <div className="flex h-full items-center justify-center px-6">
                   <div className="max-w-md rounded-panel border border-dashed border-line bg-card/95 px-8 py-10 text-center backdrop-blur">
                     <p className="text-[16px] text-ink" style={{ fontWeight: 800 }}>

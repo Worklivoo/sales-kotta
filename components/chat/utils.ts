@@ -1,7 +1,16 @@
+import type { CSSProperties } from 'react';
+
 const startOfDay = (date: Date) => {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
   return copy;
+};
+
+export const chatWallpaperStyle: CSSProperties = {
+  backgroundColor: '#efeae2',
+  backgroundImage: 'url("/chat-wallpaper.jpg")',
+  backgroundRepeat: 'repeat',
+  backgroundSize: '368px 688px',
 };
 
 export const formatDateTime = (value: string) => {

@@ -858,7 +858,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto font-sans" data-atendimento-id={cotacao.atendimento_id}>
+    <div className="h-full w-full overflow-y-auto xl:overflow-hidden font-sans" data-atendimento-id={cotacao.atendimento_id}>
       {isDirectApproveConfirmationOpen ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
           <div
@@ -949,7 +949,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
       />
 
-      <div className="flex min-h-full flex-col gap-4 pb-2">
+      <div className="flex min-h-full flex-col gap-4 xl:h-full xl:min-h-0">
         <section className="flex flex-wrap items-start justify-between gap-4 px-1 pt-1">
           <div className="flex min-w-0 items-start gap-3">
             <button
@@ -992,7 +992,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         </section>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="space-y-4">
+          <aside className="space-y-4 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
             <section className="rounded-panel border border-line-soft bg-card p-5">
               <div className="mb-5 flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-tile bg-stone text-muted">
@@ -1083,7 +1083,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             </section>
           </aside>
 
-          <section className="flex min-h-0 h-[720px] max-lg:h-[70vh] flex-col overflow-hidden rounded-panel border border-line-soft xl:h-auto">
+          <section className="flex h-[70vh] min-h-0 flex-col overflow-hidden rounded-panel border border-line-soft xl:h-full">
             {isWhatsAppLayout ? (
                 <WhatsAppChatView
                   header={{
