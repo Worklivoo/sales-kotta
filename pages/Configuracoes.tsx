@@ -7,12 +7,14 @@ import MembrosTab from './configuracoes/MembrosTab';
 import MensagensAutomaticasTab from './configuracoes/MensagensAutomaticasTab';
 import NotificacoesTab from './configuracoes/NotificacoesTab';
 import ProdutosTab from './configuracoes/ProdutosTab';
+import WhatsAppTab from './configuracoes/WhatsAppTab';
 import { supabase } from '../lib/supabase';
 
 type ConfigTabKey =
   | 'geral'
   | 'membros'
   | 'email'
+  | 'whatsapp'
   | 'notificacoes'
   | 'produtos'
   | 'clientes'
@@ -23,6 +25,7 @@ const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
   { key: 'membros', label: 'Membros' },
   { key: 'email', label: 'Email' },
+  { key: 'whatsapp', label: 'WhatsApp' },
   { key: 'notificacoes', label: 'Notificações' },
   { key: 'produtos', label: 'Produtos' },
   { key: 'clientes', label: 'Clientes' },
@@ -157,6 +160,7 @@ const ConfiguracoesPage: React.FC = () => {
           {activeTab === 'geral' ? <GeralTab /> : null}
           {activeTab === 'membros' && isAdminMember ? <MembrosTab /> : null}
           {activeTab === 'email' ? <EmailTab /> : null}
+          {activeTab === 'whatsapp' ? <WhatsAppTab /> : null}
           {activeTab === 'notificacoes' ? <NotificacoesTab /> : null}
           {activeTab === 'produtos' ? <ProdutosTab /> : null}
           {activeTab === 'clientes' ? <ClientesTab /> : null}

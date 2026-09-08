@@ -24,3 +24,39 @@ O MCP `n8n-mcp` está conectado à instância n8n de desenvolvimento (`primary-p
 - **Quando o usuário autorizar a publicação**: publicar o workflow e atualizar o título, trocando o 🟡 por 🟢 (círculo verde) e um nome curto e objetivo (sem o "rascunho" no meio do caminho).
 - **Layout sempre organizado**: nós dispostos em grid limpo — fluxo principal numa linha horizontal, ramos paralelos (ex: diferentes tipos de integração, diferentes tipos de mídia) em linhas separadas alinhadas verticalmente, sem sobreposição nem posições soltas. Espaçamento consistente entre colunas (ex: 240px) e entre linhas de ramos paralelos. Nós terminais (fim de caminho, tipo "Fim - X") ficam deslocados acima/abaixo da linha principal do fluxo em vez de misturados nela. Nunca deixar nós criados em posições aleatórias/tortas, mesmo em rascunho. Ao adicionar nós num workflow existente, se o layout ficar apertado ou desalinhado, reorganizar antes de seguir — não empilhar em cima do que já existe.
 - **Nó "No Operation" (No Op) só no fim de um caminho**, quando não existe mais nada depois dele (ex: "Fim - Sem mensagem", "Fim - Membro inativo"). Nunca usar No Operation como ponto de convergência/checkpoint no meio do fluxo (ex: para múltiplos ramos se juntarem antes de continuar, ou só para dar nome a um ponto de referência) — nesses casos usar um node Set sem nenhum assignment (passthrough, com "Include Other Fields" ligado), que também serve de referência nomeada via `$('Nome do Node')` mas deixa claro visualmente que o fluxo continua dali.
+
+## Regra: etiqueta `restrito` no n8n
+
+A instância `primary-production-b86f1` é compartilhada. Nela convivem os
+fluxos do **Kotta** e do **Sales Kotta** (nossos) e os fluxos internos da
+**Worklivoo** (prospecção, conteúdo, CRM, painéis).
+
+**Quem decide o que pode ser tocado é a ETIQUETA, não a pasta e não o nome.**
+
+| Fluxo | O que pode |
+|---|---|
+| com a etiqueta **`restrito`** | é nosso — pode editar, ativar, desativar |
+| **sem** etiqueta | é da Worklivoo — **só leitura**. Mexer exige combinar antes, para aquele fluxo específico |
+
+### Obrigatório ao criar
+
+**Todo fluxo novo ou importado do Kotta/Sales Kotta tem que receber a
+etiqueta `restrito` na hora.** A etiqueta é a única proteção: fluxo nosso que
+subir sem ela vai parecer da Worklivoo e pode ser editado por lá.
+
+### Como conferir
+
+`GET /api/v1/workflows?tags=restrito` devolve a lista dos nossos. O filtro é
+confiável porque "restrito" não tem acento — etiqueta acentuada a API do n8n
+não resolve, nem codificada na URL.
+
+### As pastas não valem como permissão
+
+`Interno`, `Kotta` e `Sales Kotta` servem só para achar as coisas. Fluxo nosso
+sem etiqueta continua desprotegido mesmo estando na pasta Kotta.
+
+### O nome engana
+
+`Cadência de Email Kotta` é da Worklivoo (prospecção para vender o Kotta) e
+`Cotar com Fornecedores Cadastrados - Kotta` é nosso (o produto). Os dois têm
+"Kotta" no nome. Conferir a etiqueta, nunca o nome.

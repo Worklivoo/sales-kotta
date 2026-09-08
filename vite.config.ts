@@ -5,6 +5,8 @@ import { createMemberService, HttpError } from './server/createMemberService';
 import { manageMemberService } from './server/manageMemberService';
 import { validateSmtpService } from './server/validateSmtpService';
 import { registerCompanyService } from './server/registerCompanyService';
+import { getWhatsappPerfilService, salvarWhatsappPerfilService } from './server/whatsappPerfilService';
+import { whatsappProvisionamentoService } from './server/whatsappProvisionamentoService';
 
 interface DevCreateMemberPluginOptions {
   supabaseUrl: string;
@@ -211,6 +213,127 @@ const registerCompanyDevPlugin = ({
   },
 });
 
+interface DevWhatsappPerfilPluginOptions extends DevCreateMemberPluginOptions {
+  metaSystemUserToken: string;
+  metaAppId: string;
+}
+
+const whatsappPerfilDevPlugin = ({
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseServiceRoleKey,
+  metaSystemUserToken,
+  metaAppId,
+}: DevWhatsappPerfilPluginOptions): Plugin => ({
+  name: 'whatsapp-perfil-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/whatsapp-perfil', async (request, response, next) => {
+      const requesterAccessToken = getBearerToken(request.headers.authorization);
+      const baseOptions = {
+        supabaseUrl,
+        supabaseAnonKey,
+        supabaseServiceRoleKey,
+        metaSystemUserToken,
+        metaAppId,
+        requesterAccessToken,
+      };
+
+      try {
+        if (request.method === 'GET') {
+          const result = await getWhatsappPerfilService(baseOptions);
+          sendJson(response, 200, result);
+          return;
+        }
+
+        if (request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          const result = await salvarWhatsappPerfilService({ ...baseOptions, payload });
+          sendJson(response, 200, result);
+          return;
+        }
+
+        return next();
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error('Erro na API local do perfil de WhatsApp:', error);
+        sendJson(response, 500, { error: 'Nao foi possivel falar com o WhatsApp.' });
+      }
+    });
+  },
+});
+
+interface DevWhatsappProvisionamentoPluginOptions extends DevCreateMemberPluginOptions {
+  metaSystemUserToken: string;
+  metaBusinessId: string;
+  metaAppId: string;
+  metaAppSecret: string;
+  metaRegisterPin: string;
+  salvyApiKey: string;
+}
+
+const whatsappProvisionamentoDevPlugin = ({
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseServiceRoleKey,
+  metaSystemUserToken,
+  metaBusinessId,
+  metaAppId,
+  metaAppSecret,
+  metaRegisterPin,
+  salvyApiKey,
+}: DevWhatsappProvisionamentoPluginOptions): Plugin => ({
+  name: 'whatsapp-provisionamento-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/whatsapp-provisionamento', async (request, response, next) => {
+      if (request.method !== 'POST') {
+        return next();
+      }
+
+      try {
+        const payload = await readJsonBody(request);
+        const requesterAccessToken = getBearerToken(request.headers.authorization);
+        const result = await whatsappProvisionamentoService({
+          supabaseUrl,
+          supabaseAnonKey,
+          supabaseServiceRoleKey,
+          metaSystemUserToken,
+          metaBusinessId,
+          metaAppId,
+          metaAppSecret,
+          metaRegisterPin,
+          salvyApiKey,
+          requesterAccessToken,
+          payload,
+        });
+
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error('Erro na API local de provisionamento de WhatsApp:', error);
+        sendJson(response, 500, { error: 'Nao foi possivel processar a configuracao do WhatsApp.' });
+      }
+    });
+  },
+});
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
@@ -241,6 +364,24 @@ export default defineConfig(({ mode }) => {
         supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
         supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
         accessPassword: env.VITE_REGISTER_ACCESS_PASSWORD || env.REGISTER_ACCESS_PASSWORD || '',
+      }),
+      whatsappPerfilDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        metaSystemUserToken: env.META_SYSTEM_USER_TOKEN || '',
+        metaAppId: env.META_APP_ID || '',
+      }),
+      whatsappProvisionamentoDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        metaSystemUserToken: env.META_SYSTEM_USER_TOKEN || '',
+        metaBusinessId: env.META_BUSINESS_ID || '',
+        metaAppId: env.META_APP_ID || '',
+        metaAppSecret: env.META_APP_SECRET || '',
+        metaRegisterPin: env.META_WHATSAPP_REGISTER_PIN || '',
+        salvyApiKey: env.SALVY_API_KEY || '',
       }),
     ],
   };

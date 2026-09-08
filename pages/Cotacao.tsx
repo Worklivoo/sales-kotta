@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Download,
   FileText,
+  Loader2,
   Mail,
   MessageCircle,
   Paperclip,
@@ -403,6 +404,34 @@ const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
 const APPROVE_ORCAMENTO_WEBHOOK_URL =
   'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
 
+// A automacao de aprovacao pode levar bem mais que alguns segundos para concluir
+// (PDF, e-mail, atualizacao de status). Recarregar a pagina antes disso faz o
+// botao de aprovar reaparecer clicavel, permitindo aprovacao em duplicidade.
+// Por isso aguardamos a confirmacao real do status no banco antes de recarregar.
+const waitForAtendimentoStatusChange = async (
+  atendimentoId: string,
+  fromStatus: string,
+  { intervalMs = 1500, timeoutMs = 90000 }: { intervalMs?: number; timeoutMs?: number } = {},
+) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const { data } = await supabase
+      .from('sales_atendimentos_v2')
+      .select('status')
+      .eq('atendimento_id', atendimentoId)
+      .maybeSingle();
+
+    if (data && data.status !== fromStatus) {
+      return true;
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+
+  return false;
+};
+
 const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div>
     <p
@@ -747,7 +776,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         throw new Error('Não foi possível enviar o orçamento.');
       }
 
-      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      await waitForAtendimentoStatusChange(cotacao.atendimento_id, 'AGUARDANDO_APROVACAO');
       window.location.reload();
     } catch (error: any) {
       setDirectApproveError(error?.message || 'Não foi possível aprovar o orçamento.');
@@ -859,7 +888,23 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
 
   return (
     <div className="h-full w-full overflow-y-auto xl:overflow-hidden font-sans" data-atendimento-id={cotacao.atendimento_id}>
-      {isDirectApproveConfirmationOpen ? (
+      {isDirectApproving ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4">
+          <div
+            className="w-full max-w-sm rounded-panel border-2 border-lime bg-card p-8 text-center"
+            style={{ boxShadow: '0 40px 110px -30px rgba(0,0,0,.65)' }}
+          >
+            <Loader2 size={52} className="mx-auto animate-spin text-lime-deep" strokeWidth={2.5} />
+            <h3 className="mt-5 text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
+              Aprovando orçamento...
+            </h3>
+            <p className="mt-2.5 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
+              Isso pode levar até 1 minuto. Não feche esta janela — a página vai atualizar sozinha
+              assim que o envio for concluído.
+            </p>
+          </div>
+        </div>
+      ) : isDirectApproveConfirmationOpen ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
           <div
             className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
@@ -882,41 +927,27 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
               ) : null}
             </div>
 
-            {isDirectApproving ? (
-              <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-panel border border-line-soft bg-paper px-6 py-10 text-center">
-                <div className="h-10 w-10 animate-spin rounded-full border-2 border-ink/15 border-t-ink" />
-                <div className="space-y-1">
-                  <p className="text-[12.5px] text-ink" style={{ fontWeight: 800, letterSpacing: '.08em' }}>
-                    ORÇAMENTO ENVIADO
-                  </p>
-                  <p className="text-[13px] text-muted" style={{ fontWeight: 500 }}>
-                    Aguarde enquanto recarregamos a página.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-6 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDirectApproveConfirmationOpen(false);
-                    setDirectApproveError(null);
-                  }}
-                  className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-5 text-[13px] text-ink transition-colors hover:bg-stone"
-                  style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
-                >
-                  Não
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDirectApprove}
-                  className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-5 text-[13px] text-ink transition-colors hover:bg-lime-deep"
-                  style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
-                >
-                  Sim
-                </button>
-              </div>
-            )}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDirectApproveConfirmationOpen(false);
+                  setDirectApproveError(null);
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-5 text-[13px] text-ink transition-colors hover:bg-stone"
+                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              >
+                Não
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectApprove}
+                className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-5 text-[13px] text-ink transition-colors hover:bg-lime-deep"
+                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              >
+                Sim
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Package, Search, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Package, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface BlankOrcamentoEmpresaInfo {
@@ -85,6 +85,34 @@ const CLIENT_HTML_LABELS: Record<(typeof CLIENT_FIELD_ORDER)[number], string> = 
 
 const APROVACAO_WEBHOOK_URL =
   'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
+
+// A automacao de aprovacao pode levar bem mais que alguns segundos para concluir
+// (PDF, e-mail, atualizacao de status). Recarregar a pagina antes disso faz o
+// botao de aprovar reaparecer clicavel, permitindo aprovacao em duplicidade.
+// Por isso aguardamos a confirmacao real do status no banco antes de recarregar.
+const waitForAtendimentoStatusChange = async (
+  atendimentoId: string,
+  fromStatus: string,
+  { intervalMs = 1500, timeoutMs = 90000 }: { intervalMs?: number; timeoutMs?: number } = {},
+) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const { data } = await supabase
+      .from('sales_atendimentos_v2')
+      .select('status')
+      .eq('atendimento_id', atendimentoId)
+      .maybeSingle();
+
+    if (data && data.status !== fromStatus) {
+      return true;
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+
+  return false;
+};
 
 const ITEM_FIELD_LABELS: Record<
   Exclude<keyof OrcamentoItemRow, 'id' | 'itemId' | 'produtoId' | 'isManuallyAdded'>,
@@ -1079,7 +1107,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       }
 
       shouldReloadPage = true;
-      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      await waitForAtendimentoStatusChange(atendimentoId, 'AGUARDANDO_APROVACAO');
       window.location.reload();
     } catch (error: any) {
       setActionError(error?.message || 'Não foi possível enviar o orçamento.');
@@ -1099,8 +1127,9 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       <button
         type="button"
         aria-label="Fechar visualizacao do orcamento"
-        onClick={onClose}
-        className="absolute inset-0"
+        onClick={isApprovingOrcamento ? undefined : onClose}
+        disabled={isApprovingOrcamento}
+        className="absolute inset-0 disabled:cursor-not-allowed"
       />
 
       <div className="relative z-10 flex h-screen w-screen flex-col overflow-hidden bg-paper">
@@ -1155,7 +1184,8 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink max-lg:h-10 max-lg:w-10"
+              disabled={isApprovingOrcamento}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10 max-lg:w-10"
               style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
               aria-label="Fechar modal do orçamento"
             >
@@ -1629,7 +1659,23 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
         </div>
       </div>
 
-      {isApproveConfirmationOpen ? (
+      {isApprovingOrcamento ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4">
+          <div
+            className="w-full max-w-sm rounded-panel border-2 border-lime bg-card p-8 text-center"
+            style={{ boxShadow: '0 40px 110px -30px rgba(0,0,0,.65)' }}
+          >
+            <Loader2 size={52} className="mx-auto animate-spin text-lime-deep" strokeWidth={2.5} />
+            <h3 className="mt-5 text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
+              Aprovando orçamento...
+            </h3>
+            <p className="mt-2.5 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
+              Isso pode levar até 1 minuto. Não feche esta janela — a página vai atualizar sozinha
+              assim que o envio for concluído.
+            </p>
+          </div>
+        </div>
+      ) : isApproveConfirmationOpen ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/45 px-4">
           <div
             className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
@@ -1639,45 +1685,31 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
               <h3 className="text-[18px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
                 Aprovar Orçamento
               </h3>
-              {isApprovingOrcamento ? (
-                <div className="mt-4 space-y-3">
-                  <div className="h-2 w-full overflow-hidden rounded-pill bg-stone">
-                    <div className="h-full w-1/3 animate-pulse rounded-pill bg-lime" />
-                  </div>
-                  <p className="text-[13px] leading-6 text-muted" style={{ fontWeight: 500 }}>
-                    Enviando o orçamento. Aguarde alguns segundos enquanto finalizamos o envio.
-                  </p>
-                </div>
-              ) : (
-                <p className="mt-3 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
-                  Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o
-                  cliente.
-                </p>
-              )}
+              <p className="mt-3 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
+                Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o
+                cliente.
+              </p>
             </div>
 
-            {!isApprovingOrcamento ? (
-              <div className="mt-6 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsApproveConfirmationOpen(false)}
-                  className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone"
-                  style={{ fontWeight: 700, transitionDuration: '.22s' }}
-                >
-                  Não
-                </button>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsApproveConfirmationOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-4 text-[13px] text-ink transition-colors hover:bg-stone"
+                style={{ fontWeight: 700, transitionDuration: '.22s' }}
+              >
+                Não
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleApproveOrcamento}
-                  disabled={isApprovingOrcamento}
-                  className="inline-flex h-11 items-center justify-center rounded-[9px] bg-ink px-4 text-[13px] text-white transition-colors hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ fontWeight: 700, transitionDuration: '.22s' }}
-                >
-                  Sim
-                </button>
-              </div>
-            ) : null}
+              <button
+                type="button"
+                onClick={handleApproveOrcamento}
+                className="inline-flex h-11 items-center justify-center rounded-[9px] bg-ink px-4 text-[13px] text-white transition-colors hover:bg-ink-soft"
+                style={{ fontWeight: 700, transitionDuration: '.22s' }}
+              >
+                Sim
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
