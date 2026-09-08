@@ -203,7 +203,7 @@ async function trocarCodigoPorToken(options: Options, code: string) {
     code,
   });
 
-  const resposta = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?${parametros.toString()}`);
+  const resposta = await fetch(`https://graph.facebook.com/v26.0/oauth/access_token?${parametros.toString()}`);
   const corpo = await resposta.json().catch(() => null);
 
   if (!resposta.ok || !corpo?.access_token) {

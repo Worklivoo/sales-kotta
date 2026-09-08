@@ -1,6 +1,6 @@
 import { HttpError } from './createMemberService.js';
 
-const GRAPH_API_VERSION = 'v21.0';
+const GRAPH_API_VERSION = 'v26.0';
 export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 export async function chamarGraphApi(path: string, token: string, init?: RequestInit) {

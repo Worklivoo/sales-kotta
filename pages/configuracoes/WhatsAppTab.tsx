@@ -158,7 +158,7 @@ const WhatsAppTab: React.FC = () => {
     }
 
     window.fbAsyncInit = () => {
-      window.FB?.init({ appId: import.meta.env.VITE_META_APP_ID as string, version: 'v21.0' });
+      window.FB?.init({ appId: import.meta.env.VITE_META_APP_ID as string, version: 'v26.0' });
     };
 
     const script = document.createElement('script');
