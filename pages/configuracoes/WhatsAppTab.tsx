@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Camera, Check, Loader2, MessageCircle, Pencil, Save, X } from 'lucide-react';
+import { AlertCircle, Camera, Check, Link2, Loader2, MessageCircle, Pencil, Plus, Save, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 declare global {
@@ -41,7 +41,7 @@ interface PerfilResponse {
   perfil?: PerfilInfo;
 }
 
-type EtapaProvisionamento = 'nao_iniciado' | 'selecionando_ddd' | 'aguardando_codigo';
+type EtapaProvisionamento = 'nao_iniciado' | 'definindo_waba' | 'selecionando_ddd' | 'aguardando_codigo';
 
 interface ProvisionamentoResponse {
   status: 'nao_iniciado' | 'aguardando_codigo' | 'conectado';
@@ -148,7 +148,6 @@ const WhatsAppTab: React.FC = () => {
   const [empresaTemWaba, setEmpresaTemWaba] = useState(false);
   const [wabaIdInput, setWabaIdInput] = useState('');
   const [isDefinindoWaba, setIsDefinindoWaba] = useState(false);
-  const [mostrarConfigEquipe, setMostrarConfigEquipe] = useState(false);
   const [isConectandoExistente, setIsConectandoExistente] = useState(false);
   const acompanhamentoAtivo = useRef(false);
   const dadosSignupRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
@@ -373,29 +372,6 @@ const WhatsAppTab: React.FC = () => {
     );
   };
 
-  const handleDefinirWaba = async () => {
-    const wabaId = wabaIdInput.trim();
-
-    if (!wabaId) {
-      setErroWizard('Informe o ID da WABA.');
-      return;
-    }
-
-    setErroWizard(null);
-    setIsDefinindoWaba(true);
-
-    try {
-      await chamarProvisionamento('definir_waba', { waba_id: wabaId });
-      setEmpresaTemWaba(true);
-      setWabaIdInput('');
-    } catch (error: any) {
-      console.error('Erro ao definir a WABA da empresa:', error);
-      setErroWizard(error?.message || 'Não foi possível confirmar essa WABA.');
-    } finally {
-      setIsDefinindoWaba(false);
-    }
-  };
-
   const handleAbrirSelecaoDdd = async () => {
     setErroWizard(null);
     setIsCarregandoDdds(true);
@@ -417,6 +393,40 @@ const WhatsAppTab: React.FC = () => {
       setErroWizard(error?.message || 'Não foi possível consultar os DDDs disponíveis.');
     } finally {
       setIsCarregandoDdds(false);
+    }
+  };
+
+  const handleClicarCriarNovaConta = () => {
+    setErroWizard(null);
+
+    if (empresaTemWaba) {
+      handleAbrirSelecaoDdd();
+    } else {
+      setEtapa('definindo_waba');
+    }
+  };
+
+  const handleDefinirWaba = async () => {
+    const wabaId = wabaIdInput.trim();
+
+    if (!wabaId) {
+      setErroWizard('Informe o ID da WABA.');
+      return;
+    }
+
+    setErroWizard(null);
+    setIsDefinindoWaba(true);
+
+    try {
+      await chamarProvisionamento('definir_waba', { waba_id: wabaId });
+      setEmpresaTemWaba(true);
+      setWabaIdInput('');
+      await handleAbrirSelecaoDdd();
+    } catch (error: any) {
+      console.error('Erro ao definir a WABA da empresa:', error);
+      setErroWizard(error?.message || 'Não foi possível confirmar essa WABA.');
+    } finally {
+      setIsDefinindoWaba(false);
     }
   };
 
@@ -609,61 +619,72 @@ const WhatsAppTab: React.FC = () => {
           ) : null}
 
           {etapa === 'nao_iniciado' ? (
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={handleConectarExistente}
                 disabled={isConectandoExistente}
-                className="inline-flex h-11 items-center gap-2 rounded-panel bg-lime px-5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex flex-col items-start gap-3 rounded-panel border border-line bg-card p-5 text-left transition-colors hover:border-ink/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isConectandoExistente ? <Loader2 size={16} className="animate-spin" /> : null}
-                {isConectandoExistente ? 'Conectando...' : 'Já tenho uma conta do WhatsApp Business'}
+                <div className="flex h-10 w-10 items-center justify-center rounded-panel bg-stone text-ink">
+                  {isConectandoExistente ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={18} />}
+                </div>
+                <div>
+                  <p className="text-[15px] font-semibold text-ink">Já tenho uma conta</p>
+                  <p className="mt-1 text-sm leading-6 text-muted">
+                    {isConectandoExistente ? 'Conectando...' : 'Conecte a conta de WhatsApp Business que você já usa.'}
+                  </p>
+                </div>
               </button>
 
-              {empresaTemWaba ? (
-                <button
-                  type="button"
-                  onClick={handleAbrirSelecaoDdd}
-                  disabled={isCarregandoDdds}
-                  className="inline-flex h-11 items-center gap-2 rounded-panel border border-line bg-card px-5 text-sm font-semibold text-ink transition-colors hover:border-ink/25 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isCarregandoDdds ? <Loader2 size={16} className="animate-spin" /> : null}
-                  {isCarregandoDdds ? 'Consultando...' : 'Quero criar um número novo'}
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={handleClicarCriarNovaConta}
+                disabled={isCarregandoDdds}
+                className="flex flex-col items-start gap-3 rounded-panel border border-line bg-card p-5 text-left transition-colors hover:border-ink/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-panel bg-stone text-ink">
+                  {isCarregandoDdds ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                </div>
+                <div>
+                  <p className="text-[15px] font-semibold text-ink">Criar uma nova conta</p>
+                  <p className="mt-1 text-sm leading-6 text-muted">
+                    {isCarregandoDdds ? 'Consultando...' : 'A gente cria um número novo do zero pra você.'}
+                  </p>
+                </div>
+              </button>
             </div>
           ) : null}
 
-          {etapa === 'nao_iniciado' && !empresaTemWaba ? (
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={() => setMostrarConfigEquipe((atual) => !atual)}
-                className="text-xs font-medium text-muted-soft hover:text-muted"
-              >
-                Equipe Worklivoo
-              </button>
-
-              {mostrarConfigEquipe ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <input
-                    type="text"
-                    value={wabaIdInput}
-                    onChange={(event) => setWabaIdInput(event.target.value)}
-                    placeholder="ID da WABA"
-                    className="min-w-[200px] flex-1 rounded-panel border border-line bg-paper px-3 py-2 text-xs font-medium text-ink outline-none transition-colors focus:border-ink/25"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleDefinirWaba}
-                    disabled={isDefinindoWaba}
-                    className="inline-flex h-9 items-center gap-2 rounded-panel border border-line bg-card px-3 text-xs font-semibold text-ink transition-colors hover:border-ink/25 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isDefinindoWaba ? <Loader2 size={14} className="animate-spin" /> : null}
-                    {isDefinindoWaba ? 'Confirmando...' : 'Confirmar'}
-                  </button>
-                </div>
-              ) : null}
+          {etapa === 'definindo_waba' ? (
+            <div className="mt-6 rounded-panel border border-line-soft bg-card px-4 py-4">
+              <p className="text-sm font-semibold text-ink">ID da WABA</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <input
+                  type="text"
+                  value={wabaIdInput}
+                  onChange={(event) => setWabaIdInput(event.target.value)}
+                  placeholder="ID da WABA"
+                  className="min-w-[220px] flex-1 rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
+                />
+                <button
+                  type="button"
+                  onClick={handleDefinirWaba}
+                  disabled={isDefinindoWaba}
+                  className="inline-flex h-11 items-center gap-2 rounded-panel bg-lime px-5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDefinindoWaba ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {isDefinindoWaba ? 'Confirmando...' : 'Confirmar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEtapa('nao_iniciado')}
+                  disabled={isDefinindoWaba}
+                  className="inline-flex h-11 items-center gap-2 rounded-panel border border-line bg-card px-5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Voltar
+                </button>
+              </div>
             </div>
           ) : null}
 
