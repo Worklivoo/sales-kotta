@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ChevronDown,
@@ -9,6 +9,7 @@ import {
   Loader2,
   Mail,
   MessageCircle,
+  MoreVertical,
   Paperclip,
   Zap,
 } from 'lucide-react';
@@ -27,19 +28,12 @@ import {
   stripHtmlToText,
 } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
+import { SITUACAO_FINAL_LABEL, type PipelineEtapa, type SituacaoFinal } from '../lib/pipeline';
 
 interface CotacaoPageProps {
   empresaId: string;
   numeroTicket: string;
 }
-
-type KanbanStatus =
-  | 'TRIAGEM'
-  | 'COLETANDO_DADOS'
-  | 'AGUARDANDO_APROVACAO'
-  | 'ORCAMENTO_ENVIADO'
-  | 'CONCLUIDO'
-  | 'DESCARTADO';
 
 type MessageOrigin = 'CLIENTE' | 'IA' | 'HUMANO';
 
@@ -54,7 +48,9 @@ interface AtendimentoRecord {
   empresa_id: string;
   cliente_id: string | null;
   created_at: string;
-  status: KanbanStatus;
+  status: string;
+  etapa_id: string;
+  situacao_final: SituacaoFinal;
   categoria: string;
   assunto: string | null;
   numero_ticket: number | null;
@@ -450,6 +446,10 @@ const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label,
 
 const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) => {
   const [cotacao, setCotacao] = useState<AtendimentoRecord | null>(null);
+  const [etapas, setEtapas] = useState<PipelineEtapa[]>([]);
+  const [isAcoesMenuOpen, setIsAcoesMenuOpen] = useState(false);
+  const [acaoError, setAcaoError] = useState<string | null>(null);
+  const acoesMenuRef = useRef<HTMLDivElement | null>(null);
   const [responsibleName, setResponsibleName] = useState('Membro nao identificado');
   const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
   const [clientData, setClientData] = useState<ClientRecord | null>(null);
@@ -506,7 +506,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         let atendimentoQuery = supabase
           .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, cliente_id, created_at, status, categoria, assunto, numero_ticket, membro_id, origem, telefone_lead, email_lead, documento_lead',
+            'atendimento_id, empresa_id, cliente_id, created_at, status, etapa_id, situacao_final, categoria, assunto, numero_ticket, membro_id, origem, telefone_lead, email_lead, documento_lead',
           )
           .eq('empresa_id', empresaId)
           .eq('numero_ticket', Number(numeroTicket))
@@ -541,6 +541,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           clientResponse,
           orcamentoResponse,
           empresaResponse,
+          etapaResponse,
           markNotificationsAsReadResponse,
         ] = await Promise.all([
           supabase
@@ -579,6 +580,11 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             .select('razao_social, cnpj, logo_url, email_responsavel, telefone_responsavel')
             .eq('empresa_id', currentMember.empresa_id)
             .limit(1),
+          supabase
+            .from('sales_pipeline_etapas_v2')
+            .select('etapa_id, nome, codigo, ordem, is_fixed, is_ai_stage')
+            .eq('empresa_id', currentMember.empresa_id)
+            .order('ordem', { ascending: true }),
           markNotificationsAsReadPromise,
         ]);
 
@@ -602,6 +608,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           throw empresaResponse.error;
         }
 
+        if (etapaResponse.error) {
+          throw etapaResponse.error;
+        }
+
         if (markNotificationsAsReadResponse.error) {
           console.error('Erro ao marcar notificacoes da cotacao como lidas:', markNotificationsAsReadResponse.error);
         }
@@ -614,6 +624,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           getFirstRow(orcamentoResponse.data as OrcamentoRecord[] | null) ?? null;
         const resolvedEmpresaData =
           getFirstRow(empresaResponse.data as EmpresaRecord[] | null) ?? null;
+        const resolvedEtapas = (etapaResponse.data ?? []) as PipelineEtapa[];
         let resolvedApprovedByName = 'Não aprovado';
         const cotacaoAssunto = atendimento.assunto || 'Cotacao sem assunto';
         const rawMessages = (messagesResponse.data ?? []) as MensagemRecord[];
@@ -687,6 +698,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
 
         setCotacao(atendimento);
+        setEtapas(resolvedEtapas);
         setResponsibleName(resolvedResponsibleName);
         setLinkedEmails(resolvedLinkedEmails);
         setClientData(resolvedClientData);
@@ -707,6 +719,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         }
 
         setCotacao(null);
+        setEtapas([]);
         setResponsibleName('Membro nao identificado');
         setLinkedEmails([]);
         setClientData(null);
@@ -751,6 +764,59 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
       return defaultExpandedMessageId ? [defaultExpandedMessageId] : [];
     });
   }, [orderedConversationItems]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (acoesMenuRef.current && !acoesMenuRef.current.contains(event.target as Node)) {
+        setIsAcoesMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleMarkSituacao = async (situacao: Exclude<SituacaoFinal, null>) => {
+    if (!cotacao) {
+      return;
+    }
+
+    setAcaoError(null);
+    setIsAcoesMenuOpen(false);
+
+    const { error } = await supabase
+      .from('sales_atendimentos_v2')
+      .update({ situacao_final: situacao })
+      .eq('atendimento_id', cotacao.atendimento_id);
+
+    if (error) {
+      setAcaoError(error.message || 'Não foi possível atualizar a cotação.');
+      return;
+    }
+
+    setCotacao((current) => (current ? { ...current, situacao_final: situacao } : current));
+  };
+
+  const handleMoveEtapa = async (etapaId: string) => {
+    if (!cotacao) {
+      return;
+    }
+
+    setAcaoError(null);
+    setIsAcoesMenuOpen(false);
+
+    const { error } = await supabase
+      .from('sales_atendimentos_v2')
+      .update({ etapa_id: etapaId })
+      .eq('atendimento_id', cotacao.atendimento_id);
+
+    if (error) {
+      setAcaoError(error.message || 'Não foi possível mover a cotação.');
+      return;
+    }
+
+    setCotacao((current) => (current ? { ...current, etapa_id: etapaId } : current));
+  };
 
   const handleDirectApprove = async () => {
     if (!orcamentoData?.orcamento_id || !cotacao?.atendimento_id || !cotacao?.membro_id) {
@@ -808,6 +874,12 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   }
 
   const shouldShowOrcamentoApprovalAction = cotacao.status === 'AGUARDANDO_APROVACAO';
+  const etapaAtual = etapas.find((etapa) => etapa.etapa_id === cotacao.etapa_id) ?? null;
+  const podeMoverParaCustom =
+    etapaAtual != null && (etapaAtual.codigo === 'ORCAMENTO_ENVIADO' || !etapaAtual.is_fixed);
+  const etapasDestino = podeMoverParaCustom
+    ? etapas.filter((etapa) => !etapa.is_fixed && etapa.etapa_id !== etapaAtual!.etapa_id)
+    : [];
   const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
   // Mesma cadeia de fallback usada na automacao (n8n) ao montar o orcamento: cliente
   // cadastrado > dado capturado automaticamente no atendimento > em branco.
@@ -992,8 +1064,8 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
       />
 
       <div className="flex min-h-full flex-col gap-4 xl:h-full xl:min-h-0">
-        <section className="flex flex-wrap items-start justify-between gap-4 px-1 pt-1">
-          <div className="flex min-w-0 items-start gap-3">
+        <section className="flex flex-col gap-3 px-1 pt-1">
+          <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={goBackToCotacoes}
@@ -1004,34 +1076,115 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
               <ArrowLeft size={17} strokeWidth={2} />
             </button>
 
-            <div className="min-w-0 space-y-1.5 pt-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="rounded-pill border border-line bg-card px-2.5 py-1 text-[10.5px] text-muted"
-                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+            <div className="relative shrink-0" ref={acoesMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsAcoesMenuOpen((current) => !current)}
+                className="inline-flex h-10 items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 text-[12.5px] text-ink transition-colors hover:bg-stone"
+                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+              >
+                <MoreVertical size={14} />
+                <span className="max-[380px]:hidden">Ações</span>
+              </button>
+
+              {isAcoesMenuOpen ? (
+                <div className="absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-[10px] border border-line-soft bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => handleMarkSituacao('GANHO')}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-stone"
+                  style={{ fontWeight: 600 }}
                 >
-                  {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
-                </span>
-                <span
-                  className="rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
-                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                  Marcar como Ganho
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMarkSituacao('PERDIDO')}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-stone"
+                  style={{ fontWeight: 600 }}
                 >
-                  {formatEnumLabel(cotacao.status)}
-                </span>
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
-                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                  Marcar como Perdido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMarkSituacao('FINALIZADO')}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-stone"
+                  style={{ fontWeight: 600 }}
                 >
-                  {isWhatsAppLayout ? <MessageCircle size={11} /> : <Mail size={11} />}
-                  {isWhatsAppLayout ? 'WhatsApp' : 'E-mail'}
-                </span>
+                  Finalizar atendimento
+                </button>
+
+                {etapasDestino.length > 0 ? (
+                  <>
+                    <div className="my-1 border-t border-line-soft" />
+                    <div
+                      className="px-3 pb-1 pt-1 text-[10px] text-muted-soft"
+                      style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                    >
+                      Mover para
+                    </div>
+                    {etapasDestino.map((etapa) => (
+                      <button
+                        key={etapa.etapa_id}
+                        type="button"
+                        onClick={() => handleMoveEtapa(etapa.etapa_id)}
+                        className="flex w-full items-center px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-stone"
+                        style={{ fontWeight: 600 }}
+                      >
+                        {etapa.nome}
+                      </button>
+                    ))}
+                  </>
+                ) : null}
               </div>
-              <h1 className="text-[22px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
-                {cotacao.assunto || 'Cotação sem assunto'}
-              </h1>
+            ) : null}
             </div>
           </div>
+
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="rounded-pill border border-line bg-card px-2.5 py-1 text-[10.5px] text-muted"
+                style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+              >
+                {cotacao.numero_ticket ? `#${cotacao.numero_ticket}` : 'Sem ticket'}
+              </span>
+              <span
+                className="rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
+                style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+              >
+                {etapaAtual?.nome || formatEnumLabel(cotacao.status)}
+              </span>
+              {cotacao.situacao_final ? (
+                <span
+                  className="rounded-pill bg-lime px-2.5 py-1 text-[10.5px] text-ink"
+                  style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+                >
+                  {SITUACAO_FINAL_LABEL[cotacao.situacao_final]}
+                </span>
+              ) : null}
+              <span
+                className="inline-flex items-center gap-1.5 rounded-pill bg-stone px-2.5 py-1 text-[10.5px] text-muted"
+                style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
+              >
+                {isWhatsAppLayout ? <MessageCircle size={11} /> : <Mail size={11} />}
+                {isWhatsAppLayout ? 'WhatsApp' : 'E-mail'}
+              </span>
+            </div>
+            <h1 className="text-[22px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
+              {cotacao.assunto || 'Cotação sem assunto'}
+            </h1>
+          </div>
         </section>
+
+        {acaoError ? (
+          <div
+            className="rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600"
+            style={{ fontWeight: 500 }}
+          >
+            {acaoError}
+          </div>
+        ) : null}
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="space-y-4 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
@@ -1046,7 +1199,10 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
               </div>
 
               <div className="space-y-4">
-                <InfoField label="Status" value={formatEnumLabel(cotacao.status)} />
+                <InfoField label="Etapa" value={etapaAtual?.nome || formatEnumLabel(cotacao.status)} />
+                {cotacao.situacao_final ? (
+                  <InfoField label="Situação" value={SITUACAO_FINAL_LABEL[cotacao.situacao_final]} />
+                ) : null}
                 <InfoField label="Categoria" value={formatEnumLabel(cotacao.categoria)} />
                 <InfoField
                   label="Ticket"

@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CalendarRange,
+  Check,
+  ListTree,
   Mail,
   MessageCircle,
   Search,
@@ -11,14 +13,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-
-type KanbanStatus =
-  | 'TRIAGEM'
-  | 'COLETANDO_DADOS'
-  | 'AGUARDANDO_APROVACAO'
-  | 'ORCAMENTO_ENVIADO'
-  | 'CONCLUIDO'
-  | 'DESCARTADO';
+import type { PipelineEtapa, SituacaoFinal } from '../lib/pipeline';
+import EditarFunilModal from '../components/EditarFunilModal';
 
 interface CardCotacao {
   atendimentoId: string;
@@ -29,24 +25,12 @@ interface CardCotacao {
   membro: string;
   membroId: string;
   dataEntrada: string;
-  status: KanbanStatus;
+  etapaId: string;
+  situacaoFinal: SituacaoFinal;
   valorFormatado: string | null;
   valorNumerico: number;
   origem: 'EMAIL' | 'WHATSAPP' | null;
 }
-
-const KANBAN_COLUMNS: Array<{
-  key: KanbanStatus;
-  label: string;
-  isAiStage?: boolean;
-}> = [
-  { key: 'TRIAGEM', label: 'Triagem', isAiStage: true },
-  { key: 'COLETANDO_DADOS', label: 'Coletando Dados', isAiStage: true },
-  { key: 'AGUARDANDO_APROVACAO', label: 'Aguardando Aprovação' },
-  { key: 'ORCAMENTO_ENVIADO', label: 'Orçamento Enviado' },
-  { key: 'CONCLUIDO', label: 'Concluído' },
-  { key: 'DESCARTADO', label: 'Descartado' },
-];
 
 interface MemberOption {
   membro_id: string;
@@ -64,7 +48,8 @@ interface AtendimentoRow {
   atendimento_id: string;
   empresa_id: string;
   assunto: string | null;
-  status: KanbanStatus;
+  etapa_id: string;
+  situacao_final: SituacaoFinal;
   categoria: string;
   created_at: string;
   numero_ticket: number | null;
@@ -134,17 +119,21 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
   const [endDate, setEndDate] = useState('');
   const [selectedMember, setSelectedMember] = useState('Todos');
   const [cotacoes, setCotacoes] = useState<CardCotacao[]>([]);
+  const [etapas, setEtapas] = useState<PipelineEtapa[]>([]);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
   const [unreadNotificationsByAtendimento, setUnreadNotificationsByAtendimento] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [showFinalizadas, setShowFinalizadas] = useState(false);
+  const [isFunilModalOpen, setIsFunilModalOpen] = useState(false);
+  const [draggingAtendimentoId, setDraggingAtendimentoId] = useState<string | null>(null);
+  const [dragOverEtapaId, setDragOverEtapaId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCotacoes = async () => {
+  const loadCotacoes = useCallback(async () => {
       setIsLoading(true);
       setLoadError(null);
 
@@ -183,7 +172,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
         const cotacoesQuery = supabase
           .from('sales_atendimentos_v2')
           .select(
-            'atendimento_id, empresa_id, assunto, status, categoria, created_at, numero_ticket, membro_id, cliente_id, origem, email_lead, telefone_lead',
+            'atendimento_id, empresa_id, assunto, etapa_id, situacao_final, categoria, created_at, numero_ticket, membro_id, cliente_id, origem, email_lead, telefone_lead',
           )
           .eq('empresa_id', currentMember.empresa_id)
           .in('categoria', ['COTACAO', 'PEDIDO_COMPRA'])
@@ -193,7 +182,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           ? cotacoesQuery
           : cotacoesQuery.eq('membro_id', currentMember.membro_id);
 
-        const [membersResponse, cotacoesResponse, notificationsResponse] = await Promise.all([
+        const [membersResponse, cotacoesResponse, notificationsResponse, etapasResponse] = await Promise.all([
           adminAccess
             ? supabase
                 .from('sales_membros_v2')
@@ -216,6 +205,11 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             .eq('membro_id', currentMember.membro_id)
             .eq('lida', false)
             .neq('tipo', 'ERRO_AUTOMACAO'),
+          supabase
+            .from('sales_pipeline_etapas_v2')
+            .select('etapa_id, nome, codigo, ordem, is_fixed, is_ai_stage')
+            .eq('empresa_id', currentMember.empresa_id)
+            .order('ordem', { ascending: true }),
         ]);
 
         if (membersResponse.error) {
@@ -228,6 +222,10 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
 
         if (notificationsResponse.error) {
           throw notificationsResponse.error;
+        }
+
+        if (etapasResponse.error) {
+          throw etapasResponse.error;
         }
 
         const atendimentos = (cotacoesResponse.data ?? []) as AtendimentoRow[];
@@ -278,43 +276,52 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             membro: memberName,
             membroId: item.membro_id || '',
             dataEntrada: item.created_at,
-            status: item.status,
+            etapaId: item.etapa_id,
+            situacaoFinal: item.situacao_final,
             valorFormatado: valor != null ? currencyFormatter.format(valor) : ticketNumber,
             valorNumerico: valor ?? 0,
             origem: item.origem,
           };
         });
 
-        if (!isMounted) {
-          return;
-        }
-
         setMemberOptions(members);
         setCotacoes(mappedCotacoes);
+        setEtapas((etapasResponse.data ?? []) as PipelineEtapa[]);
         setUnreadNotificationsByAtendimento(unreadNotificationsMap);
         setIsAdmin(adminAccess);
+        setEmpresaId(currentMember.empresa_id);
       } catch (error: any) {
         console.error('Erro ao carregar cotacoes:', error);
-
-        if (!isMounted) {
-          return;
-        }
-
         setLoadError(error?.message || 'Nao foi possivel carregar as cotacoes.');
         setUnreadNotificationsByAtendimento({});
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
-    };
-
-    loadCotacoes();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadCotacoes();
+  }, [loadCotacoes]);
+
+  const handleMoveEtapa = async (atendimentoId: string, etapaId: string) => {
+    setActionError(null);
+
+    const { error } = await supabase
+      .from('sales_atendimentos_v2')
+      .update({ etapa_id: etapaId })
+      .eq('atendimento_id', atendimentoId);
+
+    if (error) {
+      setActionError(error.message || 'Nao foi possivel mover a cotacao.');
+      return;
+    }
+
+    setCotacoes((current) =>
+      current.map((cotacao) =>
+        cotacao.atendimentoId === atendimentoId ? { ...cotacao, etapaId } : cotacao,
+      ),
+    );
+  };
 
   const filteredCotacoes = useMemo(() => {
     return cotacoes.filter((cotacao) => {
@@ -324,15 +331,14 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
       const cotacaoDate = cotacao.dataEntrada.slice(0, 10);
       const matchesStartDate = !startDate || cotacaoDate >= startDate;
       const matchesEndDate = !endDate || cotacaoDate <= endDate;
+      const matchesSituacao = showFinalizadas || cotacao.situacaoFinal === null;
 
-      return matchesSearch && matchesMember && matchesStartDate && matchesEndDate;
+      return matchesSearch && matchesMember && matchesStartDate && matchesEndDate && matchesSituacao;
     });
-  }, [cotacoes, endDate, search, selectedMember, startDate]);
+  }, [cotacoes, endDate, search, selectedMember, startDate, showFinalizadas]);
 
   const pipelineStat = useMemo(() => {
-    const cotacoesAbertas = cotacoes.filter(
-      (cotacao) => cotacao.status !== 'CONCLUIDO' && cotacao.status !== 'DESCARTADO',
-    );
+    const cotacoesAbertas = cotacoes.filter((cotacao) => cotacao.situacaoFinal === null);
     const total = cotacoesAbertas.reduce((sum, cotacao) => sum + cotacao.valorNumerico, 0);
 
     return {
@@ -464,8 +470,39 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                 Limpar
               </button>
             ) : null}
+
+            <button
+              type="button"
+              onClick={() => setShowFinalizadas((current) => !current)}
+              className={`flex h-10 items-center gap-1.5 rounded-pill border px-3.5 text-[12.5px] transition-colors max-lg:w-full max-lg:justify-center ${
+                showFinalizadas ? 'border-ink bg-ink text-white' : 'border-line bg-card text-muted'
+              }`}
+              style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
+            >
+              {showFinalizadas ? <Check size={13} /> : null}
+              Mostrar todas cotações
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsFunilModalOpen(true)}
+              className="flex h-10 items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 text-[12.5px] text-muted hover:text-ink max-lg:w-full max-lg:justify-center"
+              style={{ fontWeight: 700, transition: 'color .22s var(--ease)' }}
+            >
+              <ListTree size={14} />
+              Editar Funil
+            </button>
           </div>
         </section>
+
+        {isFunilModalOpen && empresaId ? (
+          <EditarFunilModal
+            empresaId={empresaId}
+            etapas={etapas}
+            onClose={() => setIsFunilModalOpen(false)}
+            onEtapasChange={setEtapas}
+          />
+        ) : null}
 
         <section className="min-h-0 flex flex-1 flex-col overflow-hidden">
           {loadError ? (
@@ -474,17 +511,53 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
             </div>
           ) : null}
 
+          {actionError ? (
+            <div className="mb-4 shrink-0 rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600" style={{ fontWeight: 500 }}>
+              {actionError}
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-2">
             <div className="grid h-full min-h-0 min-w-max grid-flow-col auto-cols-[85vw] gap-3 pr-2 sm:auto-cols-[280px] sm:gap-4 md:auto-cols-[320px] xl:auto-cols-[340px]">
-              {KANBAN_COLUMNS.map((column) => {
+              {etapas.map((column) => {
                 const columnItems = filteredCotacoes.filter(
-                  (cotacao) => cotacao.status === column.key,
+                  (cotacao) => cotacao.etapaId === column.etapa_id,
                 );
+                const isDropTarget = !column.is_fixed;
+                const isDragOver = isDropTarget && dragOverEtapaId === column.etapa_id;
 
                 return (
                   <div
-                    key={column.key}
-                    className="flex h-full min-h-0 min-w-0 flex-col rounded-panel border border-line-soft bg-paper p-3"
+                    key={column.etapa_id}
+                    onDragOver={(e) => {
+                      if (!isDropTarget) {
+                        return;
+                      }
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverEtapaId !== column.etapa_id) {
+                        setDragOverEtapaId(column.etapa_id);
+                      }
+                    }}
+                    onDragLeave={() =>
+                      setDragOverEtapaId((current) => (current === column.etapa_id ? null : current))
+                    }
+                    onDrop={(e) => {
+                      if (!isDropTarget) {
+                        return;
+                      }
+                      e.preventDefault();
+                      setDragOverEtapaId(null);
+                      const atendimentoId = e.dataTransfer.getData('text/plain');
+                      const cotacaoMovida = cotacoes.find((item) => item.atendimentoId === atendimentoId);
+                      if (atendimentoId && cotacaoMovida && cotacaoMovida.etapaId !== column.etapa_id) {
+                        handleMoveEtapa(atendimentoId, column.etapa_id);
+                      }
+                    }}
+                    className={`flex h-full min-h-0 min-w-0 flex-col rounded-panel border p-3 transition-colors ${
+                      isDragOver ? 'border-lime bg-lime/10' : 'border-line-soft bg-paper'
+                    }`}
+                    style={{ transitionDuration: '.18s', transitionTimingFunction: 'var(--ease)' }}
                   >
                     <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1 py-1">
                       <div className="min-w-0">
@@ -493,9 +566,9 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                             className="truncate text-[11.5px] text-muted"
                             style={{ fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase' }}
                           >
-                            {column.label}
+                            {column.nome}
                           </h3>
-                          {column.isAiStage ? (
+                          {column.is_ai_stage ? (
                             <span
                               className="inline-flex items-center gap-1 rounded-pill bg-lime px-2 py-[3px] text-[9.5px] text-ink"
                               style={{ fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}
@@ -518,7 +591,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                       {isLoading ? (
                         Array.from({ length: 2 }).map((_, index) => (
                           <div
-                            key={`${column.key}-loading-${index}`}
+                            key={`${column.etapa_id}-loading-${index}`}
                             className="rounded-[11px] border border-line-soft bg-card p-3"
                           >
                             <div className="animate-pulse space-y-3">
@@ -533,17 +606,35 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                         columnItems.map((cotacao) => {
                           const unreadNotificationCount =
                             unreadNotificationsByAtendimento[cotacao.atendimentoId] ?? 0;
-                          const showClientBadge =
-                            cotacao.status !== 'TRIAGEM' &&
-                            cotacao.status !== 'COLETANDO_DADOS';
+                          const showClientBadge = !column.is_ai_stage;
                           const OrigemIcon = cotacao.origem === 'WHATSAPP' ? MessageCircle : Mail;
+                          const canDrag = column.codigo === 'ORCAMENTO_ENVIADO' || !column.is_fixed;
+                          const isBeingDragged = draggingAtendimentoId === cotacao.atendimentoId;
 
                           return (
-                            <button
+                            <div
                               key={cotacao.atendimentoId}
-                              type="button"
+                              role="button"
+                              tabIndex={0}
+                              draggable={canDrag}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', cotacao.atendimentoId);
+                                e.dataTransfer.effectAllowed = 'move';
+                                setDraggingAtendimentoId(cotacao.atendimentoId);
+                              }}
+                              onDragEnd={() => {
+                                setDraggingAtendimentoId(null);
+                                setDragOverEtapaId(null);
+                              }}
                               onClick={() => onOpenCotacao(cotacao.empresaId, cotacao.numeroTicket)}
-                              className="w-full rounded-[11px] border border-line-soft bg-card p-3 text-left transition-all hover:border-ink/15"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  onOpenCotacao(cotacao.empresaId, cotacao.numeroTicket);
+                                }
+                              }}
+                              className={`w-full rounded-[11px] border border-line-soft bg-card p-3 text-left transition-all hover:border-ink/15 ${
+                                canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                              } ${isBeingDragged ? 'opacity-40' : ''}`}
                               style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
                             >
                               <div className="space-y-3">
@@ -624,7 +715,7 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                                   </div>
                                 </div>
                               </div>
-                            </button>
+                            </div>
                           );
                         })
                       ) : (

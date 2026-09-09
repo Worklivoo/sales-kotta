@@ -9,6 +9,7 @@ import ConfiguracoesPage from './pages/Configuracoes.tsx';
 import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
 import { validateActiveMemberAccess } from './lib/memberAccess';
+import { consumeHubHandoff } from './lib/hubHandoff';
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -103,6 +104,13 @@ function App() {
 
     const syncAuthState = async () => {
       try {
+        const handoff = await consumeHubHandoff();
+
+        if (handoff.error) {
+          setUnauthenticatedState(handoff.error);
+          return;
+        }
+
         const {
           data: { session },
         } = await supabase.auth.getSession();

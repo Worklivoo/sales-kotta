@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   CheckCheck,
   FileText,
@@ -17,6 +17,27 @@ const startOfDay = (date: Date) => {
   return copy;
 };
 
+/* Rabicho do balao, no mesmo formato do WhatsApp de verdade (nao um
+   triangulo de borda CSS, que ficava flutuando solto ao lado do balao em
+   vez de nascer dele). Para o lado direito, so espelha a mesma silhueta
+   com scaleX(-1) - e por isso o path so existe uma vez. */
+const BubbleTail: React.FC<{ side: 'left' | 'right'; colorClassName?: string; colorStyle?: React.CSSProperties }> = ({
+  side,
+  colorClassName,
+  colorStyle,
+}) => (
+  <svg
+    viewBox="0 0 8 13"
+    width="8"
+    height="13"
+    className={`pointer-events-none absolute top-0 ${side === 'left' ? '-left-2' : '-right-2 -scale-x-100'} ${colorClassName || ''}`}
+    style={colorStyle}
+  >
+    <path opacity="0.08" d="M1.533,3.568L8,12.193V0H2.812C1.042,0,0.474,1.156,1.533,3.568z" />
+    <path fill="currentColor" d="M1.533,2.568L8,11.193V0H2.812C1.042,0,0.474,1.156,1.533,2.568z" />
+  </svg>
+);
+
 const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
   header,
   messages,
@@ -27,6 +48,22 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
     .replace(/\D/g, '')
     .slice(-2)
     .toUpperCase() || 'CL';
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    /* Abrir uma conversa (ou trocar de conversa) tem que mostrar as
+       mensagens mais recentes direto, sem o usuario precisar rolar - por
+       isso o efeito roda tanto na troca de conversa quanto a cada nova
+       mensagem chegando. */
+    container.scrollTop = container.scrollHeight;
+  }, [header.ticketLabel, header.phoneFormatted, messages.length]);
 
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col" style={chatWallpaperStyle}>
@@ -75,7 +112,7 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
           <div className="flex w-full flex-col gap-2">
             {messages.length > 0 ? (
               messages.map((message, index) => {
@@ -95,14 +132,10 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                     ? 'bg-lime'
                     : 'bg-[#d9fdd3]';
                 const bubbleAlign = isIncoming ? 'mr-auto' : 'ml-auto';
-                const tailColor = isIncoming
-                  ? 'before:border-r-white'
-                  : isIABubble
-                    ? 'before:border-l-lime'
-                    : 'before:border-l-[#d9fdd3]';
-                const tailClass = isIncoming
-                  ? `before:absolute before:left-[-6px] before:top-2 before:h-0 before:w-0 before:border-y-[6px] before:border-r-[6px] before:border-y-transparent ${tailColor}`
-                  : `before:absolute before:right-[-6px] before:top-2 before:h-0 before:w-0 before:border-y-[6px] before:border-l-[6px] before:border-y-transparent ${tailColor}`;
+                // o canto do lado do rabicho fica quase reto - e dali que ele "nasce", igual no WhatsApp de verdade
+                const bubbleCorners = isIncoming ? 'rounded-tl-[3px] rounded-tr-2xl' : 'rounded-tr-[3px] rounded-tl-2xl';
+                const tailColorClassName = isIncoming ? 'text-white' : isIABubble ? 'text-lime' : '';
+                const tailColorStyle = !isIncoming && !isIABubble ? { color: '#d9fdd3' } : undefined;
                 const messageTime = message.time.split(' ').pop() || message.time;
                 const actions = renderActionsForMessageId
                   ? renderActionsForMessageId(message.id)
@@ -140,8 +173,13 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                       ) : null}
 
                       <div
-                        className={`relative ${bubbleBackground} rounded-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${tailClass} ${isHighlighted ? 'ring-2 ring-lime shadow-[0_0_0_3px_rgba(235,245,125,0.3)]' : ''}`}
+                        className={`relative ${bubbleBackground} ${bubbleCorners} rounded-br-2xl rounded-bl-2xl px-3 py-2 shadow-[0_1px_1px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] ${isHighlighted ? 'ring-2 ring-lime shadow-[0_0_0_3px_rgba(235,245,125,0.3)]' : ''}`}
                       >
+                        <BubbleTail
+                          side={isIncoming ? 'left' : 'right'}
+                          colorClassName={tailColorClassName}
+                          colorStyle={tailColorStyle}
+                        />
                         <div className="space-y-2 text-left">
                           <div
                             className={`text-[14px] leading-[20px] text-gray-900 ${messageHtmlClassName}`}
