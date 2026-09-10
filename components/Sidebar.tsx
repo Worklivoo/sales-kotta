@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { LogOut, ChevronLeft, ChevronRight, FileText, Mail, MessageCircle, Settings, Bell, X, ArrowUpRight } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, FileText, Mail, MessageCircle, Settings, Bell, X, ArrowUpRight, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface SidebarProps {
@@ -48,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [isAdminMember, setIsAdminMember] = useState(false);
   const notificationsPanelLeft = isCollapsed
     ? 'calc(1rem + 5rem + 1rem)'
     : 'calc(1rem + 17.5rem + 1rem)';
@@ -72,7 +73,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       path: '/configuracoes',
       icon: Settings,
     },
+    {
+      label: 'Plano',
+      path: '/plano',
+      icon: CreditCard,
+      adminOnly: true,
+    },
   ];
+  const visibleNavigationItems = navigationItems.filter((item) => !item.adminOnly || isAdminMember);
 
   const loadNotifications = useCallback(async () => {
     setIsLoadingNotifications(true);
@@ -207,6 +215,41 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     [onNavigate],
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAdminFlag = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.user?.id) {
+          if (isMounted) setIsAdminMember(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('sales_membros_v2')
+          .select('cargo')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (isMounted) setIsAdminMember(data?.cargo === 'ADMIN');
+      } catch (error) {
+        console.error('Erro ao carregar cargo do membro:', error);
+        if (isMounted) setIsAdminMember(false);
+      }
+    };
+
+    loadAdminFlag();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     loadNotifications();
@@ -454,7 +497,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <div className="flex flex-col gap-2">
-            {navigationItems.map((item) => {
+            {visibleNavigationItems.map((item) => {
               const Icon = item.icon;
               const isActive =
                 currentPath === item.path ||
@@ -597,7 +640,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         className="lg:hidden fixed bottom-0 inset-x-0 z-20 flex items-stretch justify-around bg-ink px-1 pt-1.5 font-sans"
         style={{ minHeight: 'var(--mobile-bottom-nav-h)', paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}
       >
-        {navigationItems.map((item) => {
+        {visibleNavigationItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             currentPath === item.path ||

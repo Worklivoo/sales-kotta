@@ -7,6 +7,15 @@ import { validateSmtpService } from './server/validateSmtpService';
 import { registerCompanyService } from './server/registerCompanyService';
 import { getWhatsappPerfilService, salvarWhatsappPerfilService } from './server/whatsappPerfilService';
 import { whatsappProvisionamentoService } from './server/whatsappProvisionamentoService';
+import { planoCatalogoService } from './server/planoCatalogoService';
+import { planoConsumoService } from './server/planoConsumoService';
+import { planoAssinarService } from './server/planoAssinarService';
+import { planoCancelarService } from './server/planoCancelarService';
+import { planoCreditosExtraService } from './server/planoCreditosExtraService';
+import { planoTrialResgatarService } from './server/planoTrialResgatarService';
+import { planoPagamentoStatusService } from './server/planoPagamentoStatusService';
+import { planoCupomService } from './server/planoCupomService';
+import type { PlanoServiceEnv } from './server/planoAuth';
 
 interface DevCreateMemberPluginOptions {
   supabaseUrl: string;
@@ -334,6 +343,99 @@ const whatsappProvisionamentoDevPlugin = ({
   },
 });
 
+interface DevPlanoPluginOptions extends PlanoServiceEnv {}
+
+const planoDevPlugin = (name: string, path: string, env: DevPlanoPluginOptions): Plugin => ({
+  name,
+  configureServer(server) {
+    server.middlewares.use(path, async (request, response, next) => {
+      const requesterAccessToken = getBearerToken(request.headers.authorization);
+
+      try {
+        if (path === '/api/plano-catalogo' && request.method === 'GET') {
+          sendJson(response, 200, await planoCatalogoService({ env, requesterAccessToken }));
+          return;
+        }
+
+        if (path === '/api/plano-consumo' && request.method === 'GET') {
+          sendJson(response, 200, await planoConsumoService({ env, requesterAccessToken }));
+          return;
+        }
+
+        if (path === '/api/plano-assinar' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          const forwardedFor = request.headers['x-forwarded-for'];
+          const primeiro = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+          const remoteIp = primeiro?.split(',')[0]?.trim() || request.socket.remoteAddress || '127.0.0.1';
+          sendJson(response, 200, await planoAssinarService({ env, requesterAccessToken, remoteIp, payload }));
+          return;
+        }
+
+        if (path === '/api/plano-cancelar' && request.method === 'POST') {
+          sendJson(response, 200, await planoCancelarService({ env, requesterAccessToken }));
+          return;
+        }
+
+        if (path === '/api/plano-creditos-extra' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          const forwardedFor = request.headers['x-forwarded-for'];
+          const primeiro = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+          const remoteIp = primeiro?.split(',')[0]?.trim() || request.socket.remoteAddress || '127.0.0.1';
+          sendJson(
+            response,
+            200,
+            await planoCreditosExtraService({ env, requesterAccessToken, remoteIp, payload }),
+          );
+          return;
+        }
+
+        if (path === '/api/plano-trial-resgatar' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          sendJson(response, 200, await planoTrialResgatarService({ env, requesterAccessToken, payload }));
+          return;
+        }
+
+        if (path === '/api/plano-pagamento-status' && request.method === 'GET') {
+          const paymentId = new URL(request.url || '', 'http://localhost').searchParams.get('paymentId') || '';
+          sendJson(response, 200, await planoPagamentoStatusService({ env, requesterAccessToken, paymentId }));
+          return;
+        }
+
+        if (path === '/api/plano-cupom' && request.method === 'GET') {
+          const params = new URL(request.url || '', 'http://localhost').searchParams;
+          sendJson(
+            response,
+            200,
+            await planoCupomService({
+              env,
+              requesterAccessToken,
+              codigo: params.get('codigo') || '',
+              planoCodigo: params.get('planoCodigo') || '',
+              ciclo: params.get('ciclo') || '',
+            }),
+          );
+          return;
+        }
+
+        return next();
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error(`Erro na API local de plano (${path}):`, error);
+        sendJson(response, 500, { error: 'Nao foi possivel processar a solicitacao de plano.' });
+      }
+    });
+  },
+});
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
@@ -383,6 +485,27 @@ export default defineConfig(({ mode }) => {
         metaRegisterPin: env.META_WHATSAPP_REGISTER_PIN || '',
         salvyApiKey: env.SALVY_API_KEY || '',
       }),
+      ...(() => {
+        const planoEnv: PlanoServiceEnv = {
+          supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+          supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+          supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+          asaasEnv: env.ASAAS_ENV || 'sandbox',
+          asaasApiKey: env.ASAAS_API_KEY || '',
+          asaasApiKeySandbox: env.ASAAS_API_KEY_SANDBOX || '',
+        };
+
+        return [
+          planoDevPlugin('plano-catalogo-dev-api', '/api/plano-catalogo', planoEnv),
+          planoDevPlugin('plano-consumo-dev-api', '/api/plano-consumo', planoEnv),
+          planoDevPlugin('plano-assinar-dev-api', '/api/plano-assinar', planoEnv),
+          planoDevPlugin('plano-cancelar-dev-api', '/api/plano-cancelar', planoEnv),
+          planoDevPlugin('plano-creditos-extra-dev-api', '/api/plano-creditos-extra', planoEnv),
+          planoDevPlugin('plano-trial-resgatar-dev-api', '/api/plano-trial-resgatar', planoEnv),
+          planoDevPlugin('plano-pagamento-status-dev-api', '/api/plano-pagamento-status', planoEnv),
+          planoDevPlugin('plano-cupom-dev-api', '/api/plano-cupom', planoEnv),
+        ];
+      })(),
     ],
   };
 });

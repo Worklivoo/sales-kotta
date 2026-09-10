@@ -6,6 +6,7 @@ import CotacaoPage from './pages/Cotacao';
 import EmailPage from './pages/Email';
 import WhatsAppPage from './pages/WhatsApp';
 import ConfiguracoesPage from './pages/Configuracoes.tsx';
+import PlanoPage from './pages/Plano';
 import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
 import { validateActiveMemberAccess } from './lib/memberAccess';
@@ -208,6 +209,8 @@ function App() {
             <WhatsAppPage />
           ) : currentPath === '/configuracoes' ? (
             <ConfiguracoesPage />
+          ) : currentPath === '/plano' ? (
+            <PlanoPage />
           ) : cotacaoEmpresaId && cotacaoNumeroTicket ? (
             <CotacaoPage
               empresaId={cotacaoEmpresaId}
