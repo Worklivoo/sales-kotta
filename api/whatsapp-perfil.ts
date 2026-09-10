@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../server/createMemberService.js';
-import { getWhatsappPerfilService, salvarWhatsappPerfilService } from '../server/whatsappPerfilService.js';
+import {
+  getFollowupTemplatesService,
+  getWhatsappPerfilService,
+  salvarWhatsappPerfilService,
+} from '../server/whatsappPerfilService.js';
 
 const getBearerToken = (authorizationHeader?: string) => {
   if (!authorizationHeader?.startsWith('Bearer ')) {
@@ -22,6 +26,13 @@ const buildBaseOptions = (request: VercelRequest) => ({
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   try {
     if (request.method === 'GET') {
+      /* Sub-recurso em vez de rota propria: a Hobby da Vercel so permite 12
+         Serverless Functions e ja estamos em 10. */
+      if (request.query?.recurso === 'followup-templates') {
+        const resultado = await getFollowupTemplatesService(buildBaseOptions(request));
+        return response.status(200).json(resultado);
+      }
+
       const resultado = await getWhatsappPerfilService(buildBaseOptions(request));
       return response.status(200).json(resultado);
     }

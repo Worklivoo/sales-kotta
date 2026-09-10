@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
 import { chamarGraphApi } from './metaGraphApi.js';
+import { FOLLOWUP_TEMPLATES, montarPayloadMeta } from '../lib/followupTemplates.js';
 
 const SALVY_API_BASE = 'https://api.salvy.com.br/api/v2';
 
@@ -261,7 +262,44 @@ async function definirWaba(options: Options) {
     throw new HttpError(500, error.message);
   }
 
-  return { salvo: true, nome: wabaResposta.name as string | undefined };
+  const templates = await criarTemplatesFollowup(options, wabaResposta.id as string);
+
+  return { salvo: true, nome: wabaResposta.name as string | undefined, templates };
+}
+
+/**
+ * Cria os templates de follow-up na WABA recem-definida.
+ *
+ * Todos de uma vez, e nao sob demanda, porque template passa por
+ * aprovacao da Meta: criando aqui, trocar de modelo nas Configuracoes vale no
+ * disparo seguinte em vez de esperar aprovacao a cada troca.
+ *
+ * Falha aqui nao derruba a operacao. A WABA ja foi gravada e e ela que destrava
+ * o provisionamento de numero - perder isso porque um template duplicado
+ * retornou erro seria trocar um problema pequeno por um grande. O que deu
+ * errado volta no retorno para a tela poder mostrar.
+ */
+async function criarTemplatesFollowup(options: Options, wabaId: string) {
+  const criados: string[] = [];
+  const falharam: { nome: string; erro: string }[] = [];
+
+  for (const template of FOLLOWUP_TEMPLATES) {
+    try {
+      await chamarGraphApi(`/${wabaId}/message_templates`, options.metaSystemUserToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(montarPayloadMeta(template)),
+      });
+
+      criados.push(template.nome);
+    } catch (erro) {
+      const mensagem = erro instanceof Error ? erro.message : 'Erro desconhecido.';
+      console.error(`[followup] falha ao criar template ${template.nome}:`, mensagem);
+      falharam.push({ nome: template.nome, erro: mensagem });
+    }
+  }
+
+  return { criados, falharam };
 }
 
 async function iniciarProvisionamento(options: Options) {

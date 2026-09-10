@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ImportarPlanilhaModal from '../../components/ImportarPlanilhaModal';
+import FollowUpSection from './FollowUpSection';
 
 type BudgetMode = 'AUTO' | 'SEMI';
 type QuoteRuleLevel = 'OBRIGATORIO' | 'DESEJAVEL';
@@ -1562,6 +1563,8 @@ const GeralTab: React.FC = () => {
               </button>
             </div>
           </div>
+
+          <FollowUpSection empresaId={memberAccount?.empresa_id ?? null} podeEditar={isAdminMember} />
 
           {isAdminMember ? (
             <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">

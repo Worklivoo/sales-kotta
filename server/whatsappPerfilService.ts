@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
 import { chamarGraphApi, GRAPH_API_BASE } from './metaGraphApi.js';
+import { FOLLOWUP_TEMPLATES } from '../lib/followupTemplates.js';
 
 const VERTICAIS_VALIDAS = [
   'UNDEFINED',
@@ -44,6 +45,51 @@ interface SalvarPayload {
   foto_mime?: string;
 }
 
+/**
+ * Situacao de aprovacao dos templates de follow-up na WABA da empresa.
+ *
+ * A tela de Configuracoes precisa disso para nao deixar o cliente escolher um
+ * modelo REJECTED e so descobrir no primeiro disparo que nada saiu. Template
+ * que a WABA nao tem volta como AUSENTE - e o caso das empresas provisionadas
+ * antes desta funcionalidade existir, que nunca receberam a criacao.
+ */
+export async function getFollowupTemplatesService(options: BaseOptions) {
+  const { membro, adminClient } = await autenticarMembro(options);
+
+  const { data: empresa, error } = await adminClient
+    .from('sales_empresas_v2')
+    .select('whatsapp_waba_id')
+    .eq('empresa_id', membro.empresa_id)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  const wabaId = empresa?.whatsapp_waba_id as string | null;
+
+  if (!wabaId) {
+    return { waba: false as const, templates: [] };
+  }
+
+  const nomes = FOLLOWUP_TEMPLATES.map((template) => template.nome);
+  const resposta = await chamarGraphApi(
+    `/${wabaId}/message_templates?fields=name,status&limit=200`,
+    options.metaSystemUserToken,
+  );
+
+  const porNome = new Map<string, string>(
+    (resposta?.data || [])
+      .filter((item: { name?: string }) => item.name && nomes.includes(item.name))
+      .map((item: { name: string; status?: string }) => [item.name, item.status || 'DESCONHECIDO']),
+  );
+
+  return {
+    waba: true as const,
+    templates: nomes.map((nome) => ({ nome, status: porNome.get(nome) || 'AUSENTE' })),
+  };
+}
+
 async function autenticarMembro(options: BaseOptions) {
   if (!options.supabaseUrl || !options.supabaseAnonKey || !options.supabaseServiceRoleKey) {
     throw new HttpError(500, 'As credenciais do servidor nao estao configuradas.');
@@ -79,7 +125,7 @@ async function autenticarMembro(options: BaseOptions) {
      WhatsApp de outro colega so trocando o id enviado. */
   const { data: membro, error: membroError } = await adminClient
     .from('sales_membros_v2')
-    .select('membro_id, canal_whatsapp, status')
+    .select('membro_id, empresa_id, canal_whatsapp, status')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -95,7 +141,7 @@ async function autenticarMembro(options: BaseOptions) {
     throw new HttpError(403, 'Seu acesso esta inativo no momento.');
   }
 
-  return { membro };
+  return { membro, adminClient };
 }
 
 /* O upload de foto de perfil usa a Resumable Upload API da Meta: cria
