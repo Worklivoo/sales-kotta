@@ -151,13 +151,13 @@ export interface AssinarPlanoResultado {
   cartao?: { bandeira: string; final4: string } | null;
 }
 
-export const fetchCatalogoPlanos = () => chamarApi<{ planos: CatalogoOpcao[] }>('/api/plano-catalogo');
+export const fetchCatalogoPlanos = () => chamarApi<{ planos: CatalogoOpcao[] }>('/api/plano/catalogo');
 
-export const fetchConsumoPlano = () => chamarApi<ConsumoResposta>('/api/plano-consumo');
+export const fetchConsumoPlano = () => chamarApi<ConsumoResposta>('/api/plano/consumo');
 
 export const validarCupom = (codigo: string, planoCodigo: string, ciclo: string) =>
   chamarApi<CupomValidado>(
-    `/api/plano-cupom?codigo=${encodeURIComponent(codigo)}&planoCodigo=${encodeURIComponent(planoCodigo)}&ciclo=${encodeURIComponent(ciclo)}`,
+    `/api/plano/cupom?codigo=${encodeURIComponent(codigo)}&planoCodigo=${encodeURIComponent(planoCodigo)}&ciclo=${encodeURIComponent(ciclo)}`,
   );
 
 export const assinarPlano = (input: {
@@ -167,13 +167,13 @@ export const assinarPlano = (input: {
   cupom?: string;
   pagamento?: { forma: FormaPagamento; cartao?: DadosCartao };
 }) =>
-  chamarApi<AssinarPlanoResultado>('/api/plano-assinar', {
+  chamarApi<AssinarPlanoResultado>('/api/plano/assinar', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 
 export const cancelarPlano = () =>
-  chamarApi<{ message: string; acessoAte: string | null }>('/api/plano-cancelar', { method: 'POST' });
+  chamarApi<{ message: string; acessoAte: string | null }>('/api/plano/cancelar', { method: 'POST' });
 
 export interface CreditosExtraResultado {
   tipo: 'PIX' | 'CARTAO';
@@ -186,18 +186,18 @@ export interface CreditosExtraResultado {
 }
 
 export const comprarCreditosExtra = (input: { pacoteCodigo: string; forma: FormaPagamento }) =>
-  chamarApi<CreditosExtraResultado>('/api/plano-creditos-extra', {
+  chamarApi<CreditosExtraResultado>('/api/plano/creditos-extra', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 
 export const verificarStatusPagamento = (paymentId: string) =>
   chamarApi<{ pago: boolean; status: string }>(
-    `/api/plano-pagamento-status?paymentId=${encodeURIComponent(paymentId)}`,
+    `/api/plano/pagamento-status?paymentId=${encodeURIComponent(paymentId)}`,
   );
 
 export const resgatarTrial = (codigo: string) =>
-  chamarApi<{ message: string; dataFinalTrial: string; duracaoDias: number }>('/api/plano-trial-resgatar', {
+  chamarApi<{ message: string; dataFinalTrial: string; duracaoDias: number }>('/api/plano/trial-resgatar', {
     method: 'POST',
     body: JSON.stringify({ codigo }),
   });

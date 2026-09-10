@@ -345,42 +345,49 @@ const whatsappProvisionamentoDevPlugin = ({
 
 interface DevPlanoPluginOptions extends PlanoServiceEnv {}
 
-const planoDevPlugin = (name: string, path: string, env: DevPlanoPluginOptions): Plugin => ({
-  name,
+/* Espelho de dev da rota dinamica api/plano/[acao].ts. Um plugin so, montado
+   em /api/plano, porque em producao tambem e uma unica Serverless Function
+   (o plano Hobby da Vercel permite no maximo 12). */
+const planoDevPlugin = (env: DevPlanoPluginOptions): Plugin => ({
+  name: 'plano-dev-api',
   configureServer(server) {
-    server.middlewares.use(path, async (request, response, next) => {
+    server.middlewares.use('/api/plano', async (request, response, next) => {
       const requesterAccessToken = getBearerToken(request.headers.authorization);
 
+      // Montado num prefixo, o connect entrega em request.url so o resto:
+      // "/consumo", "/cupom?codigo=X" etc.
+      const url = new URL(request.url || '', 'http://localhost');
+      const acao = url.pathname.replace(/^\/+|\/+$/g, '');
+      const params = url.searchParams;
+
+      const forwardedFor = request.headers['x-forwarded-for'];
+      const primeiro = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+      const remoteIp = primeiro?.split(',')[0]?.trim() || request.socket.remoteAddress || '127.0.0.1';
+
       try {
-        if (path === '/api/plano-catalogo' && request.method === 'GET') {
+        if (acao === 'catalogo' && request.method === 'GET') {
           sendJson(response, 200, await planoCatalogoService({ env, requesterAccessToken }));
           return;
         }
 
-        if (path === '/api/plano-consumo' && request.method === 'GET') {
+        if (acao === 'consumo' && request.method === 'GET') {
           sendJson(response, 200, await planoConsumoService({ env, requesterAccessToken }));
           return;
         }
 
-        if (path === '/api/plano-assinar' && request.method === 'POST') {
+        if (acao === 'assinar' && request.method === 'POST') {
           const payload = await readJsonBody(request);
-          const forwardedFor = request.headers['x-forwarded-for'];
-          const primeiro = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-          const remoteIp = primeiro?.split(',')[0]?.trim() || request.socket.remoteAddress || '127.0.0.1';
           sendJson(response, 200, await planoAssinarService({ env, requesterAccessToken, remoteIp, payload }));
           return;
         }
 
-        if (path === '/api/plano-cancelar' && request.method === 'POST') {
+        if (acao === 'cancelar' && request.method === 'POST') {
           sendJson(response, 200, await planoCancelarService({ env, requesterAccessToken }));
           return;
         }
 
-        if (path === '/api/plano-creditos-extra' && request.method === 'POST') {
+        if (acao === 'creditos-extra' && request.method === 'POST') {
           const payload = await readJsonBody(request);
-          const forwardedFor = request.headers['x-forwarded-for'];
-          const primeiro = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-          const remoteIp = primeiro?.split(',')[0]?.trim() || request.socket.remoteAddress || '127.0.0.1';
           sendJson(
             response,
             200,
@@ -389,20 +396,26 @@ const planoDevPlugin = (name: string, path: string, env: DevPlanoPluginOptions):
           return;
         }
 
-        if (path === '/api/plano-trial-resgatar' && request.method === 'POST') {
+        if (acao === 'trial-resgatar' && request.method === 'POST') {
           const payload = await readJsonBody(request);
           sendJson(response, 200, await planoTrialResgatarService({ env, requesterAccessToken, payload }));
           return;
         }
 
-        if (path === '/api/plano-pagamento-status' && request.method === 'GET') {
-          const paymentId = new URL(request.url || '', 'http://localhost').searchParams.get('paymentId') || '';
-          sendJson(response, 200, await planoPagamentoStatusService({ env, requesterAccessToken, paymentId }));
+        if (acao === 'pagamento-status' && request.method === 'GET') {
+          sendJson(
+            response,
+            200,
+            await planoPagamentoStatusService({
+              env,
+              requesterAccessToken,
+              paymentId: params.get('paymentId') || '',
+            }),
+          );
           return;
         }
 
-        if (path === '/api/plano-cupom' && request.method === 'GET') {
-          const params = new URL(request.url || '', 'http://localhost').searchParams;
+        if (acao === 'cupom' && request.method === 'GET') {
           sendJson(
             response,
             200,
@@ -429,7 +442,7 @@ const planoDevPlugin = (name: string, path: string, env: DevPlanoPluginOptions):
           return;
         }
 
-        console.error(`Erro na API local de plano (${path}):`, error);
+        console.error(`Erro na API local de plano (${acao}):`, error);
         sendJson(response, 500, { error: 'Nao foi possivel processar a solicitacao de plano.' });
       }
     });
@@ -496,14 +509,7 @@ export default defineConfig(({ mode }) => {
         };
 
         return [
-          planoDevPlugin('plano-catalogo-dev-api', '/api/plano-catalogo', planoEnv),
-          planoDevPlugin('plano-consumo-dev-api', '/api/plano-consumo', planoEnv),
-          planoDevPlugin('plano-assinar-dev-api', '/api/plano-assinar', planoEnv),
-          planoDevPlugin('plano-cancelar-dev-api', '/api/plano-cancelar', planoEnv),
-          planoDevPlugin('plano-creditos-extra-dev-api', '/api/plano-creditos-extra', planoEnv),
-          planoDevPlugin('plano-trial-resgatar-dev-api', '/api/plano-trial-resgatar', planoEnv),
-          planoDevPlugin('plano-pagamento-status-dev-api', '/api/plano-pagamento-status', planoEnv),
-          planoDevPlugin('plano-cupom-dev-api', '/api/plano-cupom', planoEnv),
+          planoDevPlugin(planoEnv),
         ];
       })(),
     ],
