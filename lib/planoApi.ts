@@ -31,10 +31,27 @@ const chamarApi = async <T>(path: string, init?: RequestInit): Promise<T> => {
     },
   });
 
-  const corpo = await resposta.json().catch(() => null);
+  const textoBruto = await resposta.text();
+
+  let corpo: any = null;
+  try {
+    corpo = textoBruto ? JSON.parse(textoBruto) : null;
+  } catch {
+    corpo = null;
+  }
 
   if (!resposta.ok) {
     throw new PlanoApiError(corpo?.error || 'Não foi possível completar a operação.');
+  }
+
+  /* Resposta com sucesso mas sem JSON significa que a requisição nem chegou
+     na API - o servidor devolveu a própria página no lugar dela. Falhar aqui
+     com mensagem clara evita o erro cair depois, longe da causa. */
+  if (corpo === null) {
+    console.error(`Resposta não-JSON de ${path}:`, textoBruto.slice(0, 200));
+    throw new PlanoApiError(
+      'A resposta do servidor veio em formato inesperado. Recarregue a página e, se continuar, avise o suporte.',
+    );
   }
 
   return corpo as T;
