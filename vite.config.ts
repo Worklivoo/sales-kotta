@@ -16,6 +16,13 @@ import { planoTrialResgatarService } from './server/planoTrialResgatarService';
 import { planoPagamentoStatusService } from './server/planoPagamentoStatusService';
 import { planoCupomService } from './server/planoCupomService';
 import type { PlanoServiceEnv } from './server/planoAuth';
+import {
+  sandboxListarEmpresasService,
+  sandboxListarAtendimentosService,
+  sandboxListarMensagensService,
+  sandboxConfigurarWhatsappService,
+  sandboxExcluirAtendimentoService,
+} from './server/sandboxService';
 
 interface DevCreateMemberPluginOptions {
   supabaseUrl: string;
@@ -449,6 +456,106 @@ const planoDevPlugin = (env: DevPlanoPluginOptions): Plugin => ({
   },
 });
 
+interface DevSandboxPluginOptions extends DevCreateMemberPluginOptions {}
+
+/* Espelho de dev da rota dinamica api/sandbox/[acao].ts - mesmo motivo do
+   planoDevPlugin acima: em producao e uma unica Serverless Function. */
+const sandboxDevPlugin = ({
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseServiceRoleKey,
+}: DevSandboxPluginOptions): Plugin => ({
+  name: 'sandbox-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/sandbox', async (request, response, next) => {
+      const requesterAccessToken = getBearerToken(request.headers.authorization);
+      const sandboxEnv = { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey };
+
+      const url = new URL(request.url || '', 'http://localhost');
+      const acao = url.pathname.replace(/^\/+|\/+$/g, '');
+      const params = url.searchParams;
+
+      try {
+        if (acao === 'empresas' && request.method === 'GET') {
+          sendJson(response, 200, await sandboxListarEmpresasService({ env: sandboxEnv, requesterAccessToken }));
+          return;
+        }
+
+        if (acao === 'atendimentos' && request.method === 'GET') {
+          sendJson(
+            response,
+            200,
+            await sandboxListarAtendimentosService({
+              env: sandboxEnv,
+              requesterAccessToken,
+              empresaId: params.get('empresa_id') || '',
+            }),
+          );
+          return;
+        }
+
+        if (acao === 'mensagens' && request.method === 'GET') {
+          sendJson(
+            response,
+            200,
+            await sandboxListarMensagensService({
+              env: sandboxEnv,
+              requesterAccessToken,
+              empresaId: params.get('empresa_id') || '',
+              atendimentoId: params.get('atendimento_id') || '',
+            }),
+          );
+          return;
+        }
+
+        if (acao === 'configurar-whatsapp' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          sendJson(
+            response,
+            200,
+            await sandboxConfigurarWhatsappService({
+              env: sandboxEnv,
+              requesterAccessToken,
+              empresaId: payload?.empresa_id || '',
+            }),
+          );
+          return;
+        }
+
+        if (acao === 'excluir-atendimento' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
+          sendJson(
+            response,
+            200,
+            await sandboxExcluirAtendimentoService({
+              env: sandboxEnv,
+              requesterAccessToken,
+              empresaId: payload?.empresa_id || '',
+              atendimentoId: payload?.atendimento_id || '',
+            }),
+          );
+          return;
+        }
+
+        return next();
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error(`Erro na API local de sandbox (${acao}):`, error);
+        sendJson(response, 500, { error: 'Nao foi possivel processar a solicitacao de sandbox.' });
+      }
+    });
+  },
+});
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
@@ -497,6 +604,11 @@ export default defineConfig(({ mode }) => {
         metaAppSecret: env.META_APP_SECRET || '',
         metaRegisterPin: env.META_WHATSAPP_REGISTER_PIN || '',
         salvyApiKey: env.SALVY_API_KEY || '',
+      }),
+      sandboxDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
       }),
       ...(() => {
         const planoEnv: PlanoServiceEnv = {

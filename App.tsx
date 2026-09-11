@@ -7,6 +7,7 @@ import EmailPage from './pages/Email';
 import WhatsAppPage from './pages/WhatsApp';
 import ConfiguracoesPage from './pages/Configuracoes.tsx';
 import PlanoPage from './pages/Plano';
+import SandboxPage from './pages/Sandbox';
 import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
 import { validateActiveMemberAccess } from './lib/memberAccess';
@@ -211,6 +212,8 @@ function App() {
             <ConfiguracoesPage />
           ) : currentPath === '/plano' ? (
             <PlanoPage />
+          ) : currentPath === '/sandbox' ? (
+            <SandboxPage />
           ) : cotacaoEmpresaId && cotacaoNumeroTicket ? (
             <CotacaoPage
               empresaId={cotacaoEmpresaId}
