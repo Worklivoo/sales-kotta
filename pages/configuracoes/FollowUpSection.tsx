@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlarmClock, Check, Plus, Save, Trash2, TriangleAlert } from 'lucide-react';
+import { AlarmClock, Plus, Save, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { FOLLOWUP_TEMPLATES, buscarTemplate, renderizarTemplate } from '../../lib/followupTemplates';
 
@@ -23,11 +23,6 @@ interface FollowupConfig {
   tentativas: Tentativa[];
   horario_comercial: { ativo: boolean; inicio: string; fim: string; dias_uteis: boolean };
   ao_esgotar: { marcar_perdido: boolean; notificar: boolean };
-}
-
-interface StatusTemplate {
-  nome: string;
-  status: string;
 }
 
 const CONFIG_PADRAO: FollowupConfig = {
@@ -105,7 +100,6 @@ interface Props {
 
 const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
   const [config, setConfig] = useState<FollowupConfig>(CONFIG_PADRAO);
-  const [statusTemplates, setStatusTemplates] = useState<StatusTemplate[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -163,54 +157,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
       ativo = false;
     };
   }, [empresaId]);
-
-  /* O status de aprovacao vem da Meta, nao do nosso banco: um template pode ter
-     sido reprovado depois de criado, e escolher um reprovado significa
-     follow-up que nunca sai. Falha aqui e silenciosa de proposito - a tela
-     continua util sem os selos. */
-  useEffect(() => {
-    let ativo = true;
-
-    const carregarStatus = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!session?.access_token) {
-          return;
-        }
-
-        const resposta = await fetch('/api/whatsapp-perfil?recurso=followup-templates', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-
-        if (!resposta.ok) {
-          return;
-        }
-
-        const corpo = await resposta.json();
-
-        if (ativo && Array.isArray(corpo?.templates)) {
-          setStatusTemplates(corpo.templates);
-        }
-      } catch (error) {
-        console.error('Não foi possível ler o status dos templates:', error);
-      }
-    };
-
-    carregarStatus();
-
-    return () => {
-      ativo = false;
-    };
-  }, [empresaId]);
-
-  const statusPorNome = useMemo(() => {
-    const mapa = new Map<string, string>();
-    (statusTemplates || []).forEach((item) => mapa.set(item.nome, item.status));
-    return mapa;
-  }, [statusTemplates]);
 
   const marcarSujo = useCallback(() => {
     setErro(null);
@@ -273,10 +219,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
       if (!buscarTemplate(tentativa.template)) {
         return `Escolha um modelo para a ${i + 1}ª tentativa.`;
       }
-
-      if (statusPorNome.get(tentativa.template) === 'REJECTED') {
-        return `O modelo da ${i + 1}ª tentativa foi reprovado pela Meta. Escolha outro.`;
-      }
     }
 
     if (
@@ -287,7 +229,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
     }
 
     return null;
-  }, [config, statusPorNome]);
+  }, [config]);
 
   const custoEstimado = (config.tentativas.length * CUSTO_USD_POR_MENSAGEM).toFixed(2);
 
@@ -357,16 +299,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
         </div>
       ) : null}
 
-      {statusTemplates?.length && statusTemplates.every((item) => item.status === 'AUSENTE') ? (
-        <div className="mb-4 flex items-start gap-2 rounded-panel border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
-          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-          <span>
-            Os modelos ainda não foram criados na sua conta do WhatsApp. Os follow-ups por e-mail
-            funcionam normalmente; os de WhatsApp só saem depois que os modelos forem provisionados.
-          </span>
-        </div>
-      ) : null}
-
       {isLoading ? (
         <div className="rounded-panel border border-line-soft bg-card px-4 py-6 text-sm text-muted">
           Carregando configuração de follow-up...
@@ -401,7 +333,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
 
             {config.tentativas.map((tentativa, indice) => {
               const template = buscarTemplate(tentativa.template);
-              const status = statusPorNome.get(tentativa.template);
 
               return (
                 <div
@@ -452,29 +383,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                         </option>
                       ))}
                     </select>
-
-                    {status === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 rounded-pill border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-                        <Check size={10} />
-                        Aprovado
-                      </span>
-                    ) : null}
-
-                    {status && status !== 'APPROVED' ? (
-                      <span
-                        className={`inline-flex rounded-pill border px-2.5 py-1 text-[10px] font-semibold ${
-                          status === 'REJECTED'
-                            ? 'border-red-100 bg-red-50 text-red-600'
-                            : 'border-amber-100 bg-amber-50 text-amber-700'
-                        }`}
-                      >
-                        {status === 'REJECTED'
-                          ? 'Reprovado pela Meta'
-                          : status === 'PENDING'
-                            ? 'Em aprovação'
-                            : 'Não provisionado'}
-                      </span>
-                    ) : null}
                   </div>
 
                   {template ? (

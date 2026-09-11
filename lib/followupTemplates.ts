@@ -37,10 +37,13 @@ export interface FollowupTemplate {
 /**
  * Rotulo do botao de opt-out.
  *
- * Apertar o botao chega na Triagem como uma mensagem de texto comum com este
- * texto exato - e por isso que ele precisa continuar batendo com a lista de
- * rotulos reconhecidos dentro da RPC sales_v2_triagem_aplicar. Mudar so aqui
- * faz o opt-out parar de funcionar silenciosamente.
+ * No WhatsApp o clique chega na Triagem como mensagem type=button, com este
+ * texto exato em button.text; o no "Texto (Mensagem)" da Triagem le esse campo
+ * e o passa adiante como conteudo. A RPC sales_v2_triagem_aplicar reconhece o
+ * rotulo, pausa os follow-ups e devolve followup_optout=true, e a Triagem
+ * encerra o fluxo no no "Lead Pediu para Parar?". No e-mail o lead digita a
+ * mesma frase. Mudar o rotulo so aqui faz o opt-out parar de funcionar em
+ * silencio.
  */
 export const BOTAO_OPT_OUT = 'Parar de receber';
 

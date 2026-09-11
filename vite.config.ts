@@ -5,11 +5,7 @@ import { createMemberService, HttpError } from './server/createMemberService';
 import { manageMemberService } from './server/manageMemberService';
 import { validateSmtpService } from './server/validateSmtpService';
 import { registerCompanyService } from './server/registerCompanyService';
-import {
-  getFollowupTemplatesService,
-  getWhatsappPerfilService,
-  salvarWhatsappPerfilService,
-} from './server/whatsappPerfilService';
+import { getWhatsappPerfilService, salvarWhatsappPerfilService } from './server/whatsappPerfilService';
 import { whatsappProvisionamentoService } from './server/whatsappProvisionamentoService';
 import { planoCatalogoService } from './server/planoCatalogoService';
 import { planoConsumoService } from './server/planoConsumoService';
@@ -253,14 +249,6 @@ const whatsappPerfilDevPlugin = ({
 
       try {
         if (request.method === 'GET') {
-          const recurso = new URL(request.url || '', 'http://local').searchParams.get('recurso');
-
-          if (recurso === 'followup-templates') {
-            const result = await getFollowupTemplatesService(baseOptions);
-            sendJson(response, 200, result);
-            return;
-          }
-
           const result = await getWhatsappPerfilService(baseOptions);
           sendJson(response, 200, result);
           return;
