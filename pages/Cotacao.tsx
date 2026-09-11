@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Download,
   FileText,
-  Loader2,
   Mail,
   MessageCircle,
   MoreVertical,
@@ -402,8 +401,6 @@ const getAttachmentLabel = (attachment: string) => {
 };
 
 const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
-const APPROVE_ORCAMENTO_WEBHOOK_URL =
-  'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
 
 /* Mesmo caminho de envio da cadencia automatica, so que disparado a mao. Vai
    direto no n8n, como a aprovacao de orcamento aqui do lado: quem fala com a
@@ -412,34 +409,6 @@ const FOLLOWUP_MANUAL_WEBHOOK_URL =
   'https://primary-production-b86f1.up.railway.app/webhook/followup-manual';
 
 const FOLLOWUP_LIMITE = 3;
-
-// A automacao de aprovacao pode levar bem mais que alguns segundos para concluir
-// (PDF, e-mail, atualizacao de status). Recarregar a pagina antes disso faz o
-// botao de aprovar reaparecer clicavel, permitindo aprovacao em duplicidade.
-// Por isso aguardamos a confirmacao real do status no banco antes de recarregar.
-const waitForAtendimentoStatusChange = async (
-  atendimentoId: string,
-  fromStatus: string,
-  { intervalMs = 1500, timeoutMs = 90000 }: { intervalMs?: number; timeoutMs?: number } = {},
-) => {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    const { data } = await supabase
-      .from('sales_atendimentos_v2')
-      .select('status')
-      .eq('atendimento_id', atendimentoId)
-      .maybeSingle();
-
-    if (data && data.status !== fromStatus) {
-      return true;
-    }
-
-    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
-  }
-
-  return false;
-};
 
 const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div>
@@ -472,9 +441,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [orderedConversationItems, setOrderedConversationItems] = useState<ConversationItem[]>([]);
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [isOrcamentoModalOpen, setIsOrcamentoModalOpen] = useState(false);
-  const [isDirectApproveConfirmationOpen, setIsDirectApproveConfirmationOpen] = useState(false);
-  const [isDirectApproving, setIsDirectApproving] = useState(false);
-  const [directApproveError, setDirectApproveError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -720,9 +686,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrcamentoItems(resolvedOrcamentoItems);
         setOrderedConversationItems(mappedMessages);
         setIsOrcamentoModalOpen(false);
-        setIsDirectApproveConfirmationOpen(false);
-        setIsDirectApproving(false);
-        setDirectApproveError(null);
       } catch (error: any) {
         console.error('Erro ao carregar cotacao:', error);
 
@@ -742,9 +705,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         setOrderedConversationItems([]);
         setExpandedMessageIds([]);
         setIsOrcamentoModalOpen(false);
-        setIsDirectApproveConfirmationOpen(false);
-        setIsDirectApproving(false);
-        setDirectApproveError(null);
         setLoadError(error?.message || 'Nao foi possivel carregar a cotacao.');
       } finally {
         if (isMounted) {
@@ -876,40 +836,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     setCotacao((current) => (current ? { ...current, etapa_id: etapaId } : current));
   };
 
-  const handleDirectApprove = async () => {
-    if (!orcamentoData?.orcamento_id || !cotacao?.atendimento_id || !cotacao?.membro_id) {
-      setDirectApproveError('Não foi possível identificar os dados necessários para aprovar o orçamento.');
-      return;
-    }
-
-    setIsDirectApproving(true);
-    setDirectApproveError(null);
-
-    try {
-      const response = await fetch(APPROVE_ORCAMENTO_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          orcamento_id: orcamentoData.orcamento_id,
-          atendimento_id: cotacao.atendimento_id,
-          membro_id: cotacao.membro_id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Não foi possível enviar o orçamento.');
-      }
-
-      await waitForAtendimentoStatusChange(cotacao.atendimento_id, 'AGUARDANDO_APROVACAO');
-      window.location.reload();
-    } catch (error: any) {
-      setDirectApproveError(error?.message || 'Não foi possível aprovar o orçamento.');
-      setIsDirectApproving(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center font-sans">
@@ -1027,77 +953,21 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
       );
     }
 
-    return approvalPendingCta('Aprovar', () => {
-      setDirectApproveError(null);
-      setIsDirectApproveConfirmationOpen(true);
-    });
+    return (
+      <div
+        className="rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[12.5px] text-red-600"
+        style={{ fontWeight: 500 }}
+      >
+        <span style={{ fontWeight: 700 }}>Nenhum item foi encontrado para esse lead.</span> A IA avisou o
+        cliente que a solicitação está em análise (sem mencionar o catálogo) e deixou o atendimento
+        aguardando você — não há orçamento gerado pra aprovar aqui. Continue a conversa diretamente pelo
+        WhatsApp/e-mail do cliente.
+      </div>
+    );
   };
 
   return (
     <div className="h-full w-full overflow-y-auto xl:overflow-hidden font-sans" data-atendimento-id={cotacao.atendimento_id}>
-      {isDirectApproving ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-4">
-          <div
-            className="w-full max-w-sm rounded-panel border-2 border-lime bg-card p-8 text-center"
-            style={{ boxShadow: '0 40px 110px -30px rgba(0,0,0,.65)' }}
-          >
-            <Loader2 size={52} className="mx-auto animate-spin text-lime-deep" strokeWidth={2.5} />
-            <h3 className="mt-5 text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
-              Aprovando orçamento...
-            </h3>
-            <p className="mt-2.5 text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
-              Isso pode levar até 1 minuto. Não feche esta janela — a página vai atualizar sozinha
-              assim que o envio for concluído.
-            </p>
-          </div>
-        </div>
-      ) : isDirectApproveConfirmationOpen ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
-          <div
-            className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
-            style={{ boxShadow: '0 28px 80px -34px rgba(20,20,20,.45)' }}
-          >
-            <div className="space-y-3">
-              <h3 className="text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.02em' }}>
-                Aprovar e enviar
-              </h3>
-              <p className="text-[13.5px] leading-6 text-muted" style={{ fontWeight: 500 }}>
-                Tem certeza que deseja aprovar este orçamento? O e-mail será enviado para o cliente.
-              </p>
-              {directApproveError ? (
-                <div
-                  className="rounded-tile border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600"
-                  style={{ fontWeight: 500 }}
-                >
-                  {directApproveError}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDirectApproveConfirmationOpen(false);
-                  setDirectApproveError(null);
-                }}
-                className="inline-flex h-11 items-center justify-center rounded-[9px] border border-line bg-card px-5 text-[13px] text-ink transition-colors hover:bg-stone"
-                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
-              >
-                Não
-              </button>
-              <button
-                type="button"
-                onClick={handleDirectApprove}
-                className="inline-flex h-11 items-center justify-center rounded-[9px] bg-lime px-5 text-[13px] text-ink transition-colors hover:bg-lime-deep"
-                style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
-              >
-                Sim
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <OrcamentoEditorModal
         isOpen={isOrcamentoModalOpen}
