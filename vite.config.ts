@@ -17,7 +17,7 @@ import { planoPagamentoStatusService } from './server/planoPagamentoStatusServic
 import { planoCupomService } from './server/planoCupomService';
 import type { PlanoServiceEnv } from './server/planoAuth';
 import {
-  sandboxListarEmpresasService,
+  sandboxObterMinhaEmpresaService,
   sandboxListarAtendimentosService,
   sandboxListarMensagensService,
   sandboxConfigurarWhatsappService,
@@ -476,8 +476,8 @@ const sandboxDevPlugin = ({
       const params = url.searchParams;
 
       try {
-        if (acao === 'empresas' && request.method === 'GET') {
-          sendJson(response, 200, await sandboxListarEmpresasService({ env: sandboxEnv, requesterAccessToken }));
+        if (acao === 'minha-empresa' && request.method === 'GET') {
+          sendJson(response, 200, await sandboxObterMinhaEmpresaService({ env: sandboxEnv, requesterAccessToken }));
           return;
         }
 
@@ -485,11 +485,7 @@ const sandboxDevPlugin = ({
           sendJson(
             response,
             200,
-            await sandboxListarAtendimentosService({
-              env: sandboxEnv,
-              requesterAccessToken,
-              empresaId: params.get('empresa_id') || '',
-            }),
+            await sandboxListarAtendimentosService({ env: sandboxEnv, requesterAccessToken }),
           );
           return;
         }
@@ -501,7 +497,6 @@ const sandboxDevPlugin = ({
             await sandboxListarMensagensService({
               env: sandboxEnv,
               requesterAccessToken,
-              empresaId: params.get('empresa_id') || '',
               atendimentoId: params.get('atendimento_id') || '',
             }),
           );
@@ -509,15 +504,10 @@ const sandboxDevPlugin = ({
         }
 
         if (acao === 'configurar-whatsapp' && request.method === 'POST') {
-          const payload = await readJsonBody(request);
           sendJson(
             response,
             200,
-            await sandboxConfigurarWhatsappService({
-              env: sandboxEnv,
-              requesterAccessToken,
-              empresaId: payload?.empresa_id || '',
-            }),
+            await sandboxConfigurarWhatsappService({ env: sandboxEnv, requesterAccessToken }),
           );
           return;
         }
@@ -530,7 +520,6 @@ const sandboxDevPlugin = ({
             await sandboxExcluirAtendimentoService({
               env: sandboxEnv,
               requesterAccessToken,
-              empresaId: payload?.empresa_id || '',
               atendimentoId: payload?.atendimento_id || '',
             }),
           );

@@ -28,108 +28,80 @@ const buildClients = (env: SandboxServiceEnv) => {
   return { publicClient, adminClient };
 };
 
-// Unica checagem de autorizacao do sandbox: exige um usuario autenticado de
-// verdade, mas nao exige que ele pertenca a empresa de teste (o time do
-// Worklivoo testa empresas de clientes que nao sao membros). O limite real de
-// seguranca e outro: toda acao abaixo so enxerga/mexe em empresas com
-// ambiente_teste=true, nunca em dados de cliente real, mesmo com token valido.
-const validateRequester = async (
-  publicClient: SupabaseClient,
-  requesterAccessToken: string,
-) => {
+// O sandbox sempre opera na empresa do proprio usuario logado - nunca recebe
+// um empresa_id do cliente. Isso resolve duas coisas de uma vez: remove a
+// necessidade de selecionar empresa na tela, e fecha a unica brecha de
+// seguranca que existiria (nao da pra pedir dados de uma empresa que nao e a
+// sua so trocando um parametro). Se a empresa do usuario nao for
+// ambiente_teste=true, a acao falha com uma mensagem clara.
+const resolverEmpresaSandboxDoRequester = async (env: SandboxServiceEnv, requesterAccessToken: string) => {
+  const { publicClient, adminClient } = buildClients(env);
+
   if (!requesterAccessToken) {
     throw new HttpError(401, 'Nao foi possivel validar o usuario autenticado.');
   }
 
-  const { data, error } = await publicClient.auth.getUser(requesterAccessToken);
+  const { data: userData, error: userError } = await publicClient.auth.getUser(requesterAccessToken);
 
-  if (error || !data?.user?.id) {
+  if (userError || !userData?.user?.id) {
     throw new HttpError(401, 'Nao foi possivel validar o usuario autenticado.');
   }
-};
 
-const assertEmpresaSandbox = async (
-  adminClient: SupabaseClient,
-  empresaId: string,
-) => {
-  const { data, error } = await adminClient
-    .from('sales_empresas_v2')
-    .select('empresa_id, razao_social, ambiente_teste')
-    .eq('empresa_id', empresaId)
+  const { data: membro, error: membroError } = await adminClient
+    .from('sales_membros_v2')
+    .select('membro_id, empresa_id, canal_whatsapp, canal_email')
+    .eq('user_id', userData.user.id)
     .maybeSingle();
 
-  if (error) {
-    throw new HttpError(500, error.message);
+  if (membroError) {
+    throw new HttpError(500, membroError.message);
   }
 
-  if (!data || data.ambiente_teste !== true) {
-    throw new HttpError(403, 'Essa empresa nao esta marcada como ambiente de teste.');
+  if (!membro?.empresa_id) {
+    throw new HttpError(400, 'Nao foi possivel identificar a empresa do usuario atual.');
   }
 
-  return data;
+  const { data: empresa, error: empresaError } = await adminClient
+    .from('sales_empresas_v2')
+    .select('empresa_id, razao_social, ambiente_teste')
+    .eq('empresa_id', membro.empresa_id)
+    .maybeSingle();
+
+  if (empresaError) {
+    throw new HttpError(500, empresaError.message);
+  }
+
+  if (!empresa || empresa.ambiente_teste !== true) {
+    throw new HttpError(
+      403,
+      'Sua empresa nao esta marcada como ambiente de teste (ambiente_teste=true). Fale com o time pra habilitar.',
+    );
+  }
+
+  return { adminClient, empresa, membro };
 };
 
-export const sandboxListarEmpresasService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
-  const { publicClient, adminClient } = buildClients(env);
-  await validateRequester(publicClient, requesterAccessToken);
-
-  const { data: empresas, error: empresasError } = await adminClient
-    .from('sales_empresas_v2')
-    .select('empresa_id, razao_social')
-    .eq('ambiente_teste', true)
-    .order('razao_social', { ascending: true });
-
-  if (empresasError) {
-    throw new HttpError(500, empresasError.message);
-  }
-
-  const empresaIds = (empresas || []).map((empresa) => empresa.empresa_id);
-
-  const { data: membros, error: membrosError } = await adminClient
-    .from('sales_membros_v2')
-    .select('empresa_id, membro_id, canal_whatsapp, canal_email, created_at')
-    .in('empresa_id', empresaIds.length ? empresaIds : ['00000000-0000-0000-0000-000000000000'])
-    .order('created_at', { ascending: true });
-
-  if (membrosError) {
-    throw new HttpError(500, membrosError.message);
-  }
+export const sandboxObterMinhaEmpresaService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
+  const { empresa, membro } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
+  const canalWhatsapp = (membro.canal_whatsapp || null) as { numero_meta_id?: string } | null;
+  const canalEmail = (membro.canal_email || null) as { email_integracao?: string } | null;
 
   return {
-    empresas: (empresas || []).map((empresa) => {
-      const membro = (membros || []).find((item) => item.empresa_id === empresa.empresa_id) || null;
-      const canalWhatsapp = (membro?.canal_whatsapp || null) as { numero_meta_id?: string } | null;
-      const canalEmail = (membro?.canal_email || null) as { email_integracao?: string } | null;
-
-      return {
-        empresa_id: empresa.empresa_id,
-        razao_social: empresa.razao_social,
-        membro_id: membro?.membro_id || null,
-        numero_meta_id: canalWhatsapp?.numero_meta_id || null,
-        email_integracao: canalEmail?.email_integracao || null,
-      };
-    }),
+    empresa_id: empresa.empresa_id,
+    razao_social: empresa.razao_social,
+    membro_id: membro.membro_id,
+    numero_meta_id: canalWhatsapp?.numero_meta_id || null,
+    email_integracao: canalEmail?.email_integracao || null,
   };
 };
 
-export const sandboxListarAtendimentosService = async ({
-  env,
-  requesterAccessToken,
-  empresaId,
-}: SandboxServiceOptions & { empresaId: string }) => {
-  const { publicClient, adminClient } = buildClients(env);
-  await validateRequester(publicClient, requesterAccessToken);
-
-  if (!empresaId) {
-    throw new HttpError(400, 'Informe a empresa.');
-  }
-
-  await assertEmpresaSandbox(adminClient, empresaId);
+export const sandboxListarAtendimentosService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
+  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
 
   const { data, error } = await adminClient
     .from('sales_atendimentos_v2')
     .select('atendimento_id, numero_ticket, telefone_lead, email_lead, origem, status, categoria, created_at, updated_at')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresa.empresa_id)
     .order('updated_at', { ascending: false })
     .limit(50);
 
@@ -143,22 +115,18 @@ export const sandboxListarAtendimentosService = async ({
 export const sandboxListarMensagensService = async ({
   env,
   requesterAccessToken,
-  empresaId,
   atendimentoId,
-}: SandboxServiceOptions & { empresaId: string; atendimentoId: string }) => {
-  const { publicClient, adminClient } = buildClients(env);
-  await validateRequester(publicClient, requesterAccessToken);
+}: SandboxServiceOptions & { atendimentoId: string }) => {
+  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
 
-  if (!empresaId || !atendimentoId) {
-    throw new HttpError(400, 'Informe a empresa e o atendimento.');
+  if (!atendimentoId) {
+    throw new HttpError(400, 'Informe o atendimento.');
   }
-
-  await assertEmpresaSandbox(adminClient, empresaId);
 
   const { data, error } = await adminClient
     .from('sales_mensagens_v2')
     .select('mensagem_id, created_at, origem, conteudo, anexos')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresa.empresa_id)
     .eq('atendimento_id', atendimentoId)
     .order('created_at', { ascending: true });
 
@@ -169,37 +137,10 @@ export const sandboxListarMensagensService = async ({
   return { mensagens: data || [] };
 };
 
-export const sandboxConfigurarWhatsappService = async ({
-  env,
-  requesterAccessToken,
-  empresaId,
-}: SandboxServiceOptions & { empresaId: string }) => {
-  const { publicClient, adminClient } = buildClients(env);
-  await validateRequester(publicClient, requesterAccessToken);
+export const sandboxConfigurarWhatsappService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
+  const { adminClient, empresa, membro } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
 
-  if (!empresaId) {
-    throw new HttpError(400, 'Informe a empresa.');
-  }
-
-  await assertEmpresaSandbox(adminClient, empresaId);
-
-  const { data: membro, error: membroError } = await adminClient
-    .from('sales_membros_v2')
-    .select('membro_id, canal_whatsapp')
-    .eq('empresa_id', empresaId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (membroError) {
-    throw new HttpError(500, membroError.message);
-  }
-
-  if (!membro) {
-    throw new HttpError(400, 'Essa empresa ainda nao tem nenhum membro cadastrado.');
-  }
-
-  const numeroMetaIdSimulado = `sandbox-${empresaId.slice(0, 8)}`;
+  const numeroMetaIdSimulado = `sandbox-${empresa.empresa_id.slice(0, 8)}`;
   const canalAtual = (membro.canal_whatsapp || {}) as Record<string, unknown>;
 
   const { error: updateError } = await adminClient
@@ -217,22 +158,18 @@ export const sandboxConfigurarWhatsappService = async ({
 export const sandboxExcluirAtendimentoService = async ({
   env,
   requesterAccessToken,
-  empresaId,
   atendimentoId,
-}: SandboxServiceOptions & { empresaId: string; atendimentoId: string }) => {
-  const { publicClient, adminClient } = buildClients(env);
-  await validateRequester(publicClient, requesterAccessToken);
+}: SandboxServiceOptions & { atendimentoId: string }) => {
+  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
 
-  if (!empresaId || !atendimentoId) {
-    throw new HttpError(400, 'Informe a empresa e o atendimento.');
+  if (!atendimentoId) {
+    throw new HttpError(400, 'Informe o atendimento.');
   }
-
-  await assertEmpresaSandbox(adminClient, empresaId);
 
   const { data: orcamentos } = await adminClient
     .from('sales_orcamentos_v2')
     .select('orcamento_id')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresa.empresa_id)
     .eq('atendimento_id', atendimentoId);
 
   const orcamentoIds = (orcamentos || []).map((item) => item.orcamento_id);
@@ -248,7 +185,7 @@ export const sandboxExcluirAtendimentoService = async ({
   const { error: deleteAtendimentoError } = await adminClient
     .from('sales_atendimentos_v2')
     .delete()
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresa.empresa_id)
     .eq('atendimento_id', atendimentoId);
 
   if (deleteAtendimentoError) {

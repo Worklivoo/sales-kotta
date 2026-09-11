@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../../server/createMemberService.js';
 import {
-  sandboxListarEmpresasService,
+  sandboxObterMinhaEmpresaService,
   sandboxListarAtendimentosService,
   sandboxListarMensagensService,
   sandboxConfigurarWhatsappService,
@@ -36,21 +36,17 @@ interface Acao {
 }
 
 const ACOES: Record<string, Acao> = {
-  empresas: {
+  'minha-empresa': {
     metodo: 'GET',
-    erro: 'Nao foi possivel carregar as empresas de teste.',
+    erro: 'Nao foi possivel carregar os dados de sandbox da sua empresa.',
     executar: (_request, requesterAccessToken) =>
-      sandboxListarEmpresasService({ env: env(), requesterAccessToken }),
+      sandboxObterMinhaEmpresaService({ env: env(), requesterAccessToken }),
   },
   atendimentos: {
     metodo: 'GET',
     erro: 'Nao foi possivel carregar as conversas de teste.',
-    executar: (request, requesterAccessToken) =>
-      sandboxListarAtendimentosService({
-        env: env(),
-        requesterAccessToken,
-        empresaId: queryParam(request.query.empresa_id),
-      }),
+    executar: (_request, requesterAccessToken) =>
+      sandboxListarAtendimentosService({ env: env(), requesterAccessToken }),
   },
   mensagens: {
     metodo: 'GET',
@@ -59,19 +55,14 @@ const ACOES: Record<string, Acao> = {
       sandboxListarMensagensService({
         env: env(),
         requesterAccessToken,
-        empresaId: queryParam(request.query.empresa_id),
         atendimentoId: queryParam(request.query.atendimento_id),
       }),
   },
   'configurar-whatsapp': {
     metodo: 'POST',
     erro: 'Nao foi possivel configurar o WhatsApp de teste.',
-    executar: (request, requesterAccessToken) =>
-      sandboxConfigurarWhatsappService({
-        env: env(),
-        requesterAccessToken,
-        empresaId: request.body?.empresa_id || '',
-      }),
+    executar: (_request, requesterAccessToken) =>
+      sandboxConfigurarWhatsappService({ env: env(), requesterAccessToken }),
   },
   'excluir-atendimento': {
     metodo: 'POST',
@@ -80,7 +71,6 @@ const ACOES: Record<string, Acao> = {
       sandboxExcluirAtendimentoService({
         env: env(),
         requesterAccessToken,
-        empresaId: request.body?.empresa_id || '',
         atendimentoId: request.body?.atendimento_id || '',
       }),
   },
