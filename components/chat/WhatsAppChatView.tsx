@@ -8,6 +8,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { messageHtmlClassName } from '../../lib/htmlContent';
+import MelhorarResposta from '../feedback/MelhorarResposta';
 import { chatWallpaperStyle, formatDayLabel, getAttachmentLabel, isImageUrl } from './utils';
 import type { WhatsAppChatViewProps } from './types';
 
@@ -155,13 +156,19 @@ const WhatsAppChatView: React.FC<WhatsAppChatViewProps> = ({
                     >
                       {message.author !== 'CLIENTE' ? (
                         isIABubble ? (
-                          <span
-                            className="mb-1 mr-1 inline-flex w-fit items-center gap-1 self-end rounded-pill bg-ink px-2 py-0.5 text-[10px] text-lime"
-                            style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}
-                          >
-                            <Zap size={10} />
-                            IA
-                          </span>
+                          /* O "Melhorar" fica colado no selo da IA de proposito: e a
+                             mensagem dela que o usuario esta criticando, e o ajuste
+                             vale so para a empresa dele (Otimizacao Automatica). */
+                          <div className="mb-1 mr-1 flex w-fit items-center gap-1.5 self-end">
+                            <MelhorarResposta mensagemId={message.id} />
+                            <span
+                              className="inline-flex items-center gap-1 rounded-pill bg-ink px-2 py-0.5 text-[10px] text-lime"
+                              style={{ fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}
+                            >
+                              <Zap size={10} />
+                              IA
+                            </span>
+                          </div>
                         ) : (
                           <span
                             className="mb-1 mr-1 self-end text-[10px] text-muted"

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import MelhorarResposta from '../components/feedback/MelhorarResposta';
 import {
   Check,
   ChevronDown,
@@ -1030,6 +1031,12 @@ const EmailPage: React.FC = () => {
                                 {message.time}
                               </span>
                             </button>
+
+                            {message.author === 'IA' ? (
+                              <div className="px-4 pb-3">
+                                <MelhorarResposta mensagemId={message.id} variante="lista" />
+                              </div>
+                            ) : null}
 
                             {isExpanded ? (
                               <div className="space-y-3 border-t border-line-soft px-4 pb-4 pt-3.5">

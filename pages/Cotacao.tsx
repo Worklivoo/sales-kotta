@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import OrcamentoEditorModal from '../components/OrcamentoEditorModal';
 import WhatsAppChatView from '../components/chat/WhatsAppChatView';
+import MelhorarResposta from '../components/feedback/MelhorarResposta';
 import {
   formatBrazilianPhone,
   extractTimeFromDateTime,
@@ -1333,6 +1334,12 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                               {message.horario}
                             </span>
                           </button>
+
+                          {message.origem === 'IA' ? (
+                            <div className="px-4 pb-3">
+                              <MelhorarResposta mensagemId={message.id} variante="lista" />
+                            </div>
+                          ) : null}
 
                           {shouldShowMessageOrcamentoAction ? (
                             <div className="px-4 pb-3.5">{renderActionsForMessageId(message.id)}</div>
