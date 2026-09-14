@@ -9,7 +9,11 @@ interface PlanoTrialResgatarServiceOptions {
 
 /* Codigos de trial sao fixos e reutilizaveis (varias empresas usam o mesmo
    codigo) e cada um define uma duracao em dias, nao uma data fixa. O trial
-   libera o acesso sem teto de cotacoes ate a data final. */
+   libera o acesso sem teto de cotacoes ate a data final.
+
+   Cada EMPRESA so resgata periodo gratis uma vez na vida: trial_resgatado_em
+   marca o uso e nunca e limpo. Estender um teste e decisao do suporte, que
+   altera data_final_trial direto no banco. */
 export const planoTrialResgatarService = async ({
   env,
   requesterAccessToken,
@@ -28,7 +32,7 @@ export const planoTrialResgatarService = async ({
      trial, o que nao faz sentido e mascararia o consumo real. */
   const { data: empresa, error: empresaError } = await adminClient
     .from('sales_empresas_v2')
-    .select('asaas_subscription_id')
+    .select('asaas_subscription_id, trial_resgatado_em')
     .eq('empresa_id', empresaId)
     .maybeSingle();
 
@@ -41,6 +45,10 @@ export const planoTrialResgatarService = async ({
       400,
       'Esta empresa já tem um plano ativo. Cancele a assinatura antes de usar um código de período grátis.',
     );
+  }
+
+  if (empresa?.trial_resgatado_em) {
+    throw new HttpError(400, 'Esta empresa já utilizou o período grátis. Escolha um plano para continuar.');
   }
 
   const { data: codigoRow, error: codigoError } = await adminClient
@@ -62,13 +70,25 @@ export const planoTrialResgatarService = async ({
   const dataFinalTrial = new Date();
   dataFinalTrial.setUTCDate(dataFinalTrial.getUTCDate() + (codigoRow.duracao_dias as number));
 
-  const { error: updateError } = await adminClient
+  /* O filtro trial_resgatado_em IS NULL no proprio update fecha a corrida de
+     dois cliques simultaneos: so um deles encontra a linha. */
+  const { data: atualizadas, error: updateError } = await adminClient
     .from('sales_empresas_v2')
-    .update({ cliente_status: 'TRIAL', data_final_trial: dataFinalTrial.toISOString() })
-    .eq('empresa_id', empresaId);
+    .update({
+      cliente_status: 'TRIAL',
+      data_final_trial: dataFinalTrial.toISOString(),
+      trial_resgatado_em: new Date().toISOString(),
+    })
+    .eq('empresa_id', empresaId)
+    .is('trial_resgatado_em', null)
+    .select('empresa_id');
 
   if (updateError) {
     throw new HttpError(500, updateError.message);
+  }
+
+  if (!atualizadas?.length) {
+    throw new HttpError(400, 'Esta empresa já utilizou o período grátis. Escolha um plano para continuar.');
   }
 
   return {

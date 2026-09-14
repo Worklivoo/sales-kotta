@@ -232,9 +232,6 @@ const PlanoPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Com plano ativo nao ha o que resgatar - o link fica so no trial,
-              onde serve para estender o periodo com um codigo maior. */}
-          {emTrial ? <ResgatarTrialModal onResgatar={resgatar} /> : null}
         </section>
 
         {aviso ? (
@@ -323,7 +320,8 @@ const PlanoPage: React.FC = () => {
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-muted" style={{ fontWeight: 500 }}>
                   <ShieldCheck size={14} /> Pagamento processado com segurança
                 </span>
-                <ResgatarTrialModal onResgatar={resgatar} />
+                {/* Periodo gratis e uma vez por empresa: depois de usado o link some. */}
+                {!empresa.trialJaUtilizado ? <ResgatarTrialModal onResgatar={resgatar} /> : null}
               </div>
             </div>
 

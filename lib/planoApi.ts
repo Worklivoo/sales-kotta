@@ -98,6 +98,7 @@ export interface ConsumoResposta {
     planoStatus: string | null;
     clienteStatus: string | null;
     dataFinalTrial: string | null;
+    trialJaUtilizado: boolean;
     assinaturaPeriodoFim: string | null;
     limiteAtendimentosMes: number;
     nomeResponsavel: string | null;

@@ -26,7 +26,7 @@ export const planoConsumoService = async ({ env, requesterAccessToken }: PlanoCo
   const { data: empresa, error: empresaError } = await adminClient
     .from('sales_empresas_v2')
     .select(
-      'plano, plano_codigo, plano_ciclo, valor_mensal, plano_status, cliente_status, data_final_trial, assinatura_periodo_fim, limite_atendimentos_mes, nome_responsavel, cnpj, email_responsavel, telefone_responsavel, endereco_faturamento, asaas_subscription_id, data_contratacao_atual, pagamento',
+      'plano, plano_codigo, plano_ciclo, valor_mensal, plano_status, cliente_status, data_final_trial, trial_resgatado_em, assinatura_periodo_fim, limite_atendimentos_mes, nome_responsavel, cnpj, email_responsavel, telefone_responsavel, endereco_faturamento, asaas_subscription_id, data_contratacao_atual, pagamento',
     )
     .eq('empresa_id', empresaId)
     .maybeSingle();
@@ -121,6 +121,7 @@ export const planoConsumoService = async ({ env, requesterAccessToken }: PlanoCo
       planoStatus: empresa.plano_status,
       clienteStatus: empresa.cliente_status,
       dataFinalTrial: empresa.data_final_trial,
+      trialJaUtilizado: Boolean(empresa.trial_resgatado_em),
       assinaturaPeriodoFim: empresa.assinatura_periodo_fim,
       limiteAtendimentosMes: limiteBase,
       nomeResponsavel: empresa.nome_responsavel,
