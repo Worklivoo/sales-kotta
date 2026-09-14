@@ -851,7 +851,7 @@ const MembrosTab: React.FC = () => {
       </div>
 
       {isCreateMemberModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] backdrop-blur-sm px-4 py-6">
           <div
             className="absolute inset-0"
             aria-hidden="true"
@@ -1005,7 +1005,7 @@ const MembrosTab: React.FC = () => {
       ) : null}
 
       {isEditMemberModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] backdrop-blur-sm px-4 py-6">
           <div
             className="absolute inset-0"
             aria-hidden="true"

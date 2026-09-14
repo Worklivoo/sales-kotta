@@ -46,7 +46,7 @@ const ResgatarTrialModal: React.FC<ResgatarTrialModalProps> = ({ onResgatar }) =
       </button>
 
       {aberto ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-panel bg-card p-6 text-left">
             <div className="flex items-start justify-between gap-3">
               <div>

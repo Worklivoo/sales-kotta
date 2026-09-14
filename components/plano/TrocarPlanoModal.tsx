@@ -18,7 +18,7 @@ const TrocarPlanoModal: React.FC<TrocarPlanoModalProps> = ({
   onEscolher,
   onFechar,
 }) => (
-  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 backdrop-blur-sm sm:items-center">
+  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(20,20,20,0.55)] p-4 backdrop-blur-sm sm:items-center">
     <div className="my-auto w-full max-w-4xl rounded-panel bg-paper p-6">
       <div className="flex items-start justify-between gap-3">
         <div>

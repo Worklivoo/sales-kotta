@@ -120,7 +120,7 @@ const EditarFunilModal: React.FC<EditarFunilModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(20,20,20,0.55)] backdrop-blur-sm px-4">
       <div
         className="w-full max-w-md rounded-panel border border-line-soft bg-card p-6"
         style={{ boxShadow: '0 28px 80px -34px rgba(20,20,20,.45)' }}

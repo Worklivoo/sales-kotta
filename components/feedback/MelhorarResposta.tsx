@@ -209,7 +209,7 @@ const MelhorarResposta: React.FC<MelhorarRespostaProps> = ({ mensagemId, variant
 
       {aberto ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] backdrop-blur-sm p-4"
           role="dialog"
           aria-modal="true"
         >

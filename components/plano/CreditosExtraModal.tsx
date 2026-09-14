@@ -104,7 +104,7 @@ const CreditosExtraModal: React.FC<CreditosExtraModalProps> = ({
             : 'Pagamento não aprovado';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-panel bg-card p-6">
         <div className="flex items-start justify-between gap-3">
           <div>

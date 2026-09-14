@@ -1137,7 +1137,7 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] font-sans">
+    <div className="fixed inset-0 z-50 bg-[rgba(20,20,20,0.55)] backdrop-blur-sm font-sans">
       <button
         type="button"
         aria-label="Fechar visualizacao do orcamento"
