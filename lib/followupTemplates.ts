@@ -1,51 +1,36 @@
 /**
- * Catalogo de templates de follow-up.
+ * Catalogo das mensagens de follow-up.
  *
- * Os seis modelos abaixo sao criados de uma vez na WABA da empresa, no momento
- * em que a WABA e definida. Criar todos de antemao e o que permite o cliente
- * trocar de modelo nas Configuracoes e ver o efeito no disparo seguinte: se
- * cada modelo so fosse criado quando escolhido, toda troca ficaria esperando a
- * aprovacao da Meta, que leva de minutos a horas.
+ * Desde 14/09/2026 o follow-up NAO usa template da Meta. As seis mensagens
+ * abaixo sao enviadas ao lead como mensagem de texto comum, dentro da janela de
+ * 24h de atendimento que a Meta abre a cada mensagem que o lead manda. Nao ha
+ * aprovacao da Meta envolvida, entao o texto pode ser ajustado aqui.
  *
  * Os textos nao citam numero da cotacao nem nome da empresa - decisao de
- * produto. A unica variavel e o nome do lead.
+ * produto. A unica variavel e {{1}}, o primeiro nome do lead; sem nome
+ * cadastrado ela vira "tudo bem", por isso todos comecam com "Olá, {{1}}!".
  *
- * Regras da Meta que o formato abaixo respeita (mexer aqui sem respeitar
- * significa template reprovado, e template reprovado nao pode ser corrigido -
- * so recriado com outro nome):
- *   - corpo nao pode comecar nem terminar com variavel;
- *   - todo template precisa de exemplo para cada variavel.
+ * IMPORTANTE: os corpos tem uma copia no Code node "Montar mensagem" do
+ * workflow "Follow-up de Leads (v2)" no n8n, que e quem renderiza o texto
+ * enviado e gravado no historico. Mexeu no texto aqui, mexa la - acentos
+ * inclusive.
  *
- * Categoria: os modelos sao enviados como UTILITY, que e bem mais barata. Se a
- * Meta entender que o conteudo e promocional, ela mesma recategoriza para
- * MARKETING na aprovacao - o template continua valido, so muda o preco.
+ * O `nome` de cada mensagem continua no formato sales_kotta_fup_* porque e a
+ * chave gravada em sales_empresas_v2.followup_config e no metadata das
+ * mensagens ja enviadas.
  *
- * IMPORTANTE: depois de aprovado, o texto de um template NAO pode ser editado.
- * Editar `corpo` aqui so afeta empresas cuja WABA ainda nao foi provisionada.
+ * Opt-out: o lead que responder "parar de receber", "parar", "sair" ou
+ * "descadastrar" tem os follow-ups pausados pela RPC sales_v2_triagem_aplicar.
  */
 
 export interface FollowupTemplate {
-  /** Nome do template na Meta. Minusculas, digitos e underline. */
+  /** Chave da mensagem, gravada na configuracao da empresa. */
   nome: string;
   titulo: string;
   descricao: string;
   /** Texto com {{1}} = primeiro nome do lead. */
   corpo: string;
-  exemplo: [string];
 }
-
-/**
- * Rotulo do botao de opt-out.
- *
- * No WhatsApp o clique chega na Triagem como mensagem type=button, com este
- * texto exato em button.text; o no "Texto (Mensagem)" da Triagem le esse campo
- * e o passa adiante como conteudo. A RPC sales_v2_triagem_aplicar reconhece o
- * rotulo, pausa os follow-ups e devolve followup_optout=true, e a Triagem
- * encerra o fluxo no no "Lead Pediu para Parar?". No e-mail o lead digita a
- * mesma frase. Mudar o rotulo so aqui faz o opt-out parar de funcionar em
- * silencio.
- */
-export const BOTAO_OPT_OUT = 'Parar de receber';
 
 export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
   {
@@ -55,7 +40,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Sua cotação ficou pendente e continua aberta por aqui. ' +
       'Quer que a gente siga com ela?',
-    exemplo: ['Marcos'],
   },
   {
     nome: 'sales_kotta_fup_pendencia',
@@ -64,7 +48,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Para fechar sua cotação ainda falta uma informação que pedimos na conversa. ' +
       'Pode responder esta mensagem para darmos sequência?',
-    exemplo: ['Marcos'],
   },
   {
     nome: 'sales_kotta_fup_disponibilidade',
@@ -73,7 +56,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Sua cotação continua aberta. Consegue retomar hoje? ' +
       'É rápido: basta responder esta mensagem e seguimos de onde paramos.',
-    exemplo: ['Marcos'],
   },
   {
     nome: 'sales_kotta_fup_ajuda',
@@ -82,7 +64,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Vimos que sua cotação parou no meio do caminho. ' +
       'Se preferir, um de nossos vendedores assume daqui e te ajuda a concluir. É só responder por aqui.',
-    exemplo: ['Marcos'],
   },
   {
     nome: 'sales_kotta_fup_urgencia',
@@ -91,7 +72,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Sua cotação ainda está aberta, mas preços e disponibilidade podem mudar sem aviso. ' +
       'Responda esta mensagem que confirmamos as condições para você.',
-    exemplo: ['Marcos'],
   },
   {
     nome: 'sales_kotta_fup_ultima',
@@ -100,7 +80,6 @@ export const FOLLOWUP_TEMPLATES: FollowupTemplate[] = [
     corpo:
       'Olá, {{1}}! Como não tivemos retorno, vamos encerrar sua cotação por aqui. ' +
       'Se ainda tiver interesse, é só responder esta mensagem que retomamos o atendimento.',
-    exemplo: ['Marcos'],
   },
 ];
 
@@ -115,27 +94,4 @@ export function buscarTemplate(nome: string | null | undefined): FollowupTemplat
 /** Troca {{1}} pelo primeiro nome do lead. */
 export function renderizarTemplate(corpo: string, leadNome: string): string {
   return corpo.replace(/\{\{1\}\}/g, leadNome);
-}
-
-/**
- * Corpo do template no formato que a Graph API espera em
- * POST /{waba_id}/message_templates.
- */
-export function montarPayloadMeta(template: FollowupTemplate) {
-  return {
-    name: template.nome,
-    language: 'pt_BR',
-    category: 'UTILITY',
-    components: [
-      {
-        type: 'BODY',
-        text: template.corpo,
-        example: { body_text: [template.exemplo] },
-      },
-      {
-        type: 'BUTTONS',
-        buttons: [{ type: 'QUICK_REPLY', text: BOTAO_OPT_OUT }],
-      },
-    ],
-  };
 }
