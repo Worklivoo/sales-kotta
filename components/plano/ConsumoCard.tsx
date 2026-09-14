@@ -6,7 +6,9 @@ interface ConsumoCardProps {
   consumo: ConsumoResposta['consumoCiclo'];
   isSubmitting: boolean;
   onUpgrade: () => void;
-  onComprarCreditos: () => void;
+  /* Sem essa funcao a compra de cotacoes extras fica escondida (desativada
+     por decisao de produto em 14/09 - o resto do fluxo continua no codigo). */
+  onComprarCreditos?: () => void;
 }
 
 export const LIMIAR_ALERTA_PCT = 80;
@@ -149,18 +151,20 @@ const ConsumoCard: React.FC<ConsumoCardProps> = ({
             >
               Aumentar plano
             </button>
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={onComprarCreditos}
-              className="inline-flex items-center gap-1 rounded-pill bg-card px-3.5 py-2 text-[12px] text-ink disabled:opacity-60"
-              style={{ fontWeight: 700 }}
-            >
-              <Plus size={13} /> Cotações extras
-            </button>
+            {onComprarCreditos ? (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={onComprarCreditos}
+                className="inline-flex items-center gap-1 rounded-pill bg-card px-3.5 py-2 text-[12px] text-ink disabled:opacity-60"
+                style={{ fontWeight: 700 }}
+              >
+                <Plus size={13} /> Cotações extras
+              </button>
+            ) : null}
           </div>
         </div>
-      ) : (
+      ) : onComprarCreditos ? (
         <button
           type="button"
           disabled={isSubmitting || consumo.semLimite}
@@ -170,7 +174,7 @@ const ConsumoCard: React.FC<ConsumoCardProps> = ({
         >
           <Plus size={14} /> Comprar cotações extras
         </button>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -314,7 +314,6 @@ const PlanoPage: React.FC = () => {
                 consumo={consumo.consumoCiclo}
                 isSubmitting={enviando}
                 onUpgrade={() => setMostrarTrocarPlano(true)}
-                onComprarCreditos={() => setMostrarCreditosExtra(true)}
               />
             </div>
 
