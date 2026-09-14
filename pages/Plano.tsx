@@ -16,7 +16,7 @@ import ConsumoCard from '../components/plano/ConsumoCard';
 import ProximaFaturaCard from '../components/plano/ProximaFaturaCard';
 import FormaPagamentoCard from '../components/plano/FormaPagamentoCard';
 import FaturasTable from '../components/plano/FaturasTable';
-import TrialBanner from '../components/plano/TrialBanner';
+import TrialBanner, { trialExpiradoRecente } from '../components/plano/TrialBanner';
 import TrocarPlanoModal from '../components/plano/TrocarPlanoModal';
 import AssinarModal from '../components/plano/AssinarModal';
 import CreditosExtraModal from '../components/plano/CreditosExtraModal';
@@ -211,6 +211,13 @@ const PlanoPage: React.FC = () => {
   const empresa = consumo?.empresa;
   const temAssinatura = Boolean(empresa?.temAssinaturaAtiva);
   const emTrial = !temAssinatura && Boolean(empresa?.emTrialAtivo);
+  /* Teste acabou ha menos de 3 dias e o cliente ainda nao assinou: o banner
+     continua, vermelho, avisando que expirou. */
+  const trialAcabouDeExpirar =
+    !temAssinatura &&
+    !emTrial &&
+    empresa?.clienteStatus !== 'ATIVO' &&
+    trialExpiradoRecente(empresa?.dataFinalTrial ?? null);
 
   return (
     <div className="h-full w-full overflow-y-auto font-sans">
@@ -296,6 +303,13 @@ const PlanoPage: React.FC = () => {
           </>
         ) : (
           <>
+            {trialAcabouDeExpirar ? (
+              <TrialBanner
+                dataFinalTrial={empresa.dataFinalTrial}
+                qtdCotacoes={consumo.consumoCiclo.qtdCotacoes}
+              />
+            ) : null}
+
             <div className="rounded-panel bg-card p-6 sm:p-8">
               <PlanoCards
                 opcoes={catalogo}

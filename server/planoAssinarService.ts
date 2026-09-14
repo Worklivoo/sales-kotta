@@ -94,7 +94,7 @@ const validarDadosCobranca = (dados: DadosCobrancaPayload) => {
   }
 
   if (celular.length !== 11 || celular[2] !== '9') {
-    throw new HttpError(400, 'Informe um celular válido, com DDD (ex: 11 91234-5678).');
+    throw new HttpError(400, 'Informe um WhatsApp de cobrança válido, com DDD (ex: 11 91234-5678).');
   }
 
   return { nome, cnpj, email, celular };

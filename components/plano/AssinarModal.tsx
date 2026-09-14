@@ -145,7 +145,7 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
 
     const digitos = somenteDigitos(celular);
     if (digitos.length !== 11 || digitos[2] !== '9') {
-      problemas.celular = 'Celular com DDD, começando com 9 (ex: 11 91234-5678).';
+      problemas.celular = 'WhatsApp com DDD, começando com 9 (ex: 11 91234-5678).';
     }
 
     return problemas;
@@ -315,7 +315,7 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
             : 'Pagamento não aprovado';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-panel bg-card p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -420,7 +420,7 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
 
                 <div>
                   <label className={labelClass} style={labelStyle}>
-                    Celular
+                    WhatsApp de cobrança
                   </label>
                   <input
                     type="text"
