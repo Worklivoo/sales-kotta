@@ -28,7 +28,6 @@ import {
   stripHtmlToText,
 } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
-import { FOLLOWUP_TEMPLATES } from '../lib/followupTemplates';
 import { SITUACAO_FINAL_LABEL, type PipelineEtapa, type SituacaoFinal } from '../lib/pipeline';
 
 interface CotacaoPageProps {
@@ -406,10 +405,7 @@ const getFirstRow = <T,>(rows: T[] | null | undefined) => rows?.[0] ?? null;
 /* Mesmo caminho de envio da cadencia automatica, so que disparado a mao. Vai
    direto no n8n, como a aprovacao de orcamento aqui do lado: quem fala com a
    Graph API e o n8n, e a Hobby da Vercel so permite 12 Serverless Functions. */
-const FOLLOWUP_MANUAL_WEBHOOK_URL =
-  'https://primary-production-b86f1.up.railway.app/webhook/followup-manual';
 
-const FOLLOWUP_LIMITE = 3;
 
 const InfoField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div>
@@ -430,7 +426,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const [etapas, setEtapas] = useState<PipelineEtapa[]>([]);
   const [isAcoesMenuOpen, setIsAcoesMenuOpen] = useState(false);
   const [acaoError, setAcaoError] = useState<string | null>(null);
-  const [isEnviandoFollowup, setIsEnviandoFollowup] = useState(false);
   const acoesMenuRef = useRef<HTMLDivElement | null>(null);
   const [responsibleName, setResponsibleName] = useState('Membro nao identificado');
   const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
@@ -770,52 +765,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
     setCotacao((current) => (current ? { ...current, situacao_final: situacao } : current));
   };
 
-  /* Follow-up disparado a mao. Consome uma das tres tentativas do atendimento
-     igual a cadencia automatica - o teto e do lead, nao do canal - e por isso
-     quem incrementa o contador e a RPC sales_v2_followup_registrar, chamada la
-     no n8n. Aqui so refletimos o novo total na tela. */
-  const handleEnviarFollowup = async (template: string) => {
-    if (!cotacao) {
-      return;
-    }
-
-    setAcaoError(null);
-    setIsAcoesMenuOpen(false);
-    setIsEnviandoFollowup(true);
-
-    try {
-      const resposta = await fetch(FOLLOWUP_MANUAL_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ atendimento_id: cotacao.atendimento_id, template }),
-      });
-
-      if (!resposta.ok) {
-        throw new Error('A automacao de follow-up nao respondeu.');
-      }
-
-      const corpo = await resposta.json().catch(() => null);
-
-      if (corpo && corpo.sucesso === false) {
-        throw new Error(corpo.erro === 'limite_atingido'
-          ? 'Este lead ja recebeu o maximo de follow-ups.'
-          : corpo.erro === 'followup_pausado'
-            ? 'Este lead pediu para nao receber mais mensagens.'
-            : 'Nao foi possivel enviar o follow-up.');
-      }
-
-      setCotacao((current) =>
-        current
-          ? { ...current, followup_enviados: (current.followup_enviados ?? 0) + 1 }
-          : current,
-      );
-    } catch (error: any) {
-      setAcaoError(error?.message || 'Não foi possível enviar o follow-up.');
-    } finally {
-      setIsEnviandoFollowup(false);
-    }
-  };
-
   const handleMoveEtapa = async (etapaId: string) => {
     if (!cotacao) {
       return;
@@ -857,13 +806,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
       </div>
     );
   }
-
-  /* Lead que pediu para parar nao recebe mais nada, nem no botao. Sem canal
-     tambem nao ha o que enviar. */
-  const followupsRestantes =
-    cotacao.followup_pausado || (!cotacao.telefone_lead && !cotacao.email_lead)
-      ? 0
-      : FOLLOWUP_LIMITE - (cotacao.followup_enviados ?? 0);
 
   const shouldShowOrcamentoApprovalAction = cotacao.status === 'AGUARDANDO_APROVACAO';
   const etapaAtual = etapas.find((etapa) => etapa.etapa_id === cotacao.etapa_id) ?? null;
@@ -1049,30 +991,6 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
                 >
                   Finalizar atendimento
                 </button>
-
-                {followupsRestantes > 0 && !cotacao.situacao_final ? (
-                  <>
-                    <div className="my-1 border-t border-line-soft" />
-                    <div
-                      className="px-3 pb-1 pt-1 text-[10px] text-muted-soft"
-                      style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
-                    >
-                      Enviar follow-up ({cotacao.followup_enviados ?? 0}/{FOLLOWUP_LIMITE})
-                    </div>
-                    {FOLLOWUP_TEMPLATES.map((template) => (
-                      <button
-                        key={template.nome}
-                        type="button"
-                        disabled={isEnviandoFollowup}
-                        onClick={() => handleEnviarFollowup(template.nome)}
-                        className="flex w-full items-center px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-stone disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{ fontWeight: 600 }}
-                      >
-                        {template.titulo}
-                      </button>
-                    ))}
-                  </>
-                ) : null}
 
                 {etapasDestino.length > 0 ? (
                   <>

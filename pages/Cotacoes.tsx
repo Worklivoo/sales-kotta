@@ -632,7 +632,11 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
                                   onOpenCotacao(cotacao.empresaId, cotacao.numeroTicket);
                                 }
                               }}
-                              className={`w-full rounded-[11px] border border-line-soft bg-card p-3 text-left transition-all hover:border-ink/15 ${
+                              className={`w-full rounded-[11px] border p-3 text-left transition-all ${
+                                cotacao.situacaoFinal === 'PERDIDO'
+                                  ? 'border-red-200 bg-red-50 hover:border-red-300'
+                                  : 'border-line-soft bg-card hover:border-ink/15'
+                              } ${
                                 canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
                               } ${isBeingDragged ? 'opacity-40' : ''}`}
                               style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}

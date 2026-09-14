@@ -14,10 +14,6 @@ const MAX_TENTATIVAS = 3;
 const MIN_HORAS = 3;
 const MAX_HORAS = 24;
 
-/* Preco de MARKETING para o Brasil na tabela da Meta. Os modelos sao enviados
-   como UTILITY (mais barata), mas a Meta pode recategorizar - por isso a tela
-   usa o preco de marketing como teto ("ate US$ X"). Nao serve para faturamento. */
-const CUSTO_USD_POR_MENSAGEM = 0.0625;
 
 interface Tentativa {
   horas: number;
@@ -235,17 +231,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
       }
     }
 
-    if (
-      config.horario_comercial.ativo &&
-      config.horario_comercial.inicio >= config.horario_comercial.fim
-    ) {
-      return 'O horário de início precisa ser menor que o de término.';
-    }
-
     return null;
   }, [config]);
-
-  const custoEstimado = (config.tentativas.length * CUSTO_USD_POR_MENSAGEM).toFixed(2);
 
   const handleSalvar = async () => {
     if (!empresaId) {
@@ -304,11 +291,11 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
               <p className="mt-2 text-sm font-semibold text-ink">
                 {cfg.ativo ? 'Ligada' : 'Desligada'}
               </p>
-              <p className="mt-2 max-w-xl text-xs leading-5 text-muted">
-                {cfg.ativo
-                  ? `No WhatsApp, custo estimado de até US$ ${custoEstimado} por lead que não responder. No e-mail não há custo.`
-                  : 'Com a cadência desligada, você ainda pode enviar follow-ups manualmente pelo botão na tela da cotação.'}
-              </p>
+              {!cfg.ativo ? (
+                <p className="mt-2 max-w-xl text-xs leading-5 text-muted">
+                  Com a cadência desligada, nenhum follow-up é enviado.
+                </p>
+              ) : null}
             </div>
 
             <Alternador
@@ -413,94 +400,6 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
           </div>
 
           <div className="space-y-3 rounded-panel border border-line-soft bg-card px-4 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-ink">Somente em horário comercial</p>
-                <p className="mt-1 max-w-xl text-xs leading-5 text-muted">
-                  Follow-up vencido fora da janela espera a próxima janela em vez de tocar o celular
-                  do lead de madrugada.
-                </p>
-              </div>
-
-              <Alternador
-                ligado={cfg.horario_comercial.ativo}
-                rotulo="Enviar somente em horário comercial"
-                desabilitado={!editavel}
-                onChange={() => {
-                  marcarSujo();
-                  setConfig((atual) => ({
-                    ...atual,
-                    horario_comercial: {
-                      ...atual.horario_comercial,
-                      ativo: !atual.horario_comercial.ativo,
-                    },
-                  }));
-                }}
-              />
-            </div>
-
-            {cfg.horario_comercial.ativo ? (
-              <div className="flex flex-wrap items-center gap-3 border-t border-line-soft pt-3">
-                <label className="flex items-center gap-2 text-xs text-muted">
-                  Das
-                  <input
-                    type="time"
-                    disabled={!editavel}
-                    value={cfg.horario_comercial.inicio}
-                    onChange={(evento) => {
-                      marcarSujo();
-                      setConfig((atual) => ({
-                        ...atual,
-                        horario_comercial: {
-                          ...atual.horario_comercial,
-                          inicio: evento.target.value,
-                        },
-                      }));
-                    }}
-                    className="rounded-panel border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none focus:border-ink/25 disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-                  às
-                  <input
-                    type="time"
-                    disabled={!editavel}
-                    value={cfg.horario_comercial.fim}
-                    onChange={(evento) => {
-                      marcarSujo();
-                      setConfig((atual) => ({
-                        ...atual,
-                        horario_comercial: { ...atual.horario_comercial, fim: evento.target.value },
-                      }));
-                    }}
-                    className="rounded-panel border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none focus:border-ink/25 disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-muted">
-                  <input
-                    type="checkbox"
-                    disabled={!editavel}
-                    checked={cfg.horario_comercial.dias_uteis}
-                    onChange={() => {
-                      marcarSujo();
-                      setConfig((atual) => ({
-                        ...atual,
-                        horario_comercial: {
-                          ...atual.horario_comercial,
-                          dias_uteis: !atual.horario_comercial.dias_uteis,
-                        },
-                      }));
-                    }}
-                    className="h-3.5 w-3.5 accent-lime disabled:cursor-not-allowed"
-                  />
-                  Apenas de segunda a sexta
-                </label>
-
-                <span className="text-[11px] text-muted-soft">Horário de Brasília</span>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="space-y-3 rounded-panel border border-line-soft bg-card px-4 py-4">
             <p className="text-xs font-medium text-muted-soft">Quando as tentativas se esgotarem</p>
 
             <label className="flex items-center gap-2 text-xs text-muted">
@@ -551,11 +450,54 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
         </div>
   );
 
+  /* Fora do popup so o resumo; a configuracao completa fica dentro dele. */
+  const renderResumo = (cfg: FollowupConfig) => (
+    <div className="space-y-2 rounded-panel border border-line-soft bg-card px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-muted-soft">Cadência automática</p>
+        <span
+          className={`rounded-pill px-2.5 py-1 text-[11px] font-semibold ${
+            cfg.ativo ? 'bg-lime text-ink' : 'bg-stone text-muted'
+          }`}
+        >
+          {cfg.ativo ? 'Ligada' : 'Desligada'}
+        </span>
+      </div>
+
+      {cfg.ativo && cfg.tentativas.length ? (
+        <>
+          <ul className="space-y-1.5 pt-1">
+            {cfg.tentativas.map((tentativa, indice) => (
+              <li key={indice} className="flex items-center gap-2 text-xs text-muted">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-pill bg-lime text-[10px] font-bold text-ink">
+                  {indice + 1}
+                </span>
+                <span className="font-semibold text-ink">{descreverPrazo(tentativa.horas)}</span>
+                <span>· {buscarTemplate(tentativa.template)?.titulo || 'Modelo não encontrado'}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="pt-1 text-[11px] leading-5 text-muted-soft">
+            Ao esgotar:{' '}
+            {[
+              cfg.ao_esgotar.marcar_perdido ? 'marca como perdido' : null,
+              cfg.ao_esgotar.notificar ? 'notifica o responsável' : null,
+            ]
+              .filter(Boolean)
+              .join(' e ') || 'nada é feito'}
+            .
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+
   const descricao = (
     <>
       Quando o KOTTA IA faz uma pergunta durante a cotação e o lead não volta, ele retoma a conversa
       automaticamente pelo mesmo canal do atendimento. Vale enquanto a cotação ainda está coletando
-      dados, antes de ir para aprovação. Máximo de {MAX_TENTATIVAS} mensagens.
+      dados, antes de ir para aprovação. Máximo de {MAX_TENTATIVAS} mensagens, enviadas sempre das 08h às 18h
+      (horário de Brasília).
     </>
   );
 
@@ -605,7 +547,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
           Carregando configuração de follow-up...
         </div>
       ) : (
-        renderCampos(configSalva, false)
+        renderResumo(configSalva)
       )}
 
       {isEditando ? (
