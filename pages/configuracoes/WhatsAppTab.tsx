@@ -607,7 +607,11 @@ const WhatsAppTab: React.FC = () => {
                 </span>
               </div>
               <p className="max-w-2xl text-sm leading-6 text-muted">
-                Conecte seu WhatsApp Business para começar a atender os seus clientes por aqui.
+                Conecte a API Oficial do WhatsApp (Meta) para começar a atender os seus clientes por aqui.
+              </p>
+              <p className="max-w-2xl text-[13px] leading-5 text-muted-soft">
+                Não é o aplicativo WhatsApp Business do celular. Um número que já está em uso no aplicativo
+                precisa ser removido dele antes de ser conectado aqui.
               </p>
             </div>
           </div>
@@ -630,9 +634,9 @@ const WhatsAppTab: React.FC = () => {
                   {isConectandoExistente ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={18} />}
                 </div>
                 <div>
-                  <p className="text-[15px] font-semibold text-ink">Já tenho uma conta</p>
+                  <p className="text-[15px] font-semibold text-ink">Já tenho a API Oficial</p>
                   <p className="mt-1 text-sm leading-6 text-muted">
-                    {isConectandoExistente ? 'Conectando...' : 'Conecte a conta de WhatsApp Business que você já usa.'}
+                    {isConectandoExistente ? 'Conectando...' : 'Conecte a conta da API Oficial do WhatsApp que a sua empresa já tem na Meta.'}
                   </p>
                 </div>
               </button>
@@ -649,7 +653,7 @@ const WhatsAppTab: React.FC = () => {
                 <div>
                   <p className="text-[15px] font-semibold text-ink">Criar uma nova conta</p>
                   <p className="mt-1 text-sm leading-6 text-muted">
-                    {isCarregandoDdds ? 'Consultando...' : 'A gente cria um número novo do zero pra você.'}
+                    {isCarregandoDdds ? 'Consultando...' : 'A gente cria um número novo, já na API Oficial, do zero pra você.'}
                   </p>
                 </div>
               </button>
