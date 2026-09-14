@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import LoginPage from './pages/Login';
 import CotacoesPage from './pages/Cotacoes';
@@ -12,12 +12,15 @@ import RegisterPage from './pages/Register';
 import { supabase } from './lib/supabase';
 import { validateActiveMemberAccess } from './lib/memberAccess';
 import { consumeHubHandoff } from './lib/hubHandoff';
+import { irParaLoginCentral, sairPelaCentral, usarLoginLocal, voltarParaProdutos } from './lib/hubLogin';
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  // Marca os signOut que o proprio App dispara ao barrar o acesso (ver listener).
+  const barrandoAcesso = useRef(false);
   const isRegisterRoute = currentPath === '/registrar';
   const cotacaoRouteMatch = currentPath.match(/^\/cotacao\/([^/]+)\/([^/]+)$/);
   const cotacaoEmpresaId = cotacaoRouteMatch ? decodeURIComponent(cotacaoRouteMatch[1]) : null;
@@ -81,7 +84,10 @@ function App() {
 
         if (!accessValidation.allowed) {
           try {
-            await supabase.auth.signOut();
+            // So deste navegador/produto: a sessao da central continua valendo
+            // para a pessoa entrar no modulo que ela tem.
+            barrandoAcesso.current = true;
+            await supabase.auth.signOut({ scope: 'local' });
           } catch (signOutError) {
             console.error('Error signing out after access denial:', signOutError);
           }
@@ -95,7 +101,8 @@ function App() {
       } catch (error) {
         console.error('Error validating member access:', error);
         try {
-          await supabase.auth.signOut();
+          barrandoAcesso.current = true;
+          await supabase.auth.signOut({ scope: 'local' });
         } catch (signOutError) {
           console.error('Error signing out after validation failure:', signOutError);
         }
@@ -117,6 +124,17 @@ function App() {
           data: { session },
         } = await supabase.auth.getSession();
 
+        /* Sessao guardada pode ter sido encerrada em outro lugar (Sair na
+           central ou em outro modulo). getUser confere no servidor. */
+        if (session) {
+          const { error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            await supabase.auth.signOut({ scope: 'local' });
+            setUnauthenticatedState(null);
+            return;
+          }
+        }
+
         await applySessionAccess(session);
       } catch (error) {
         console.error('Error syncing auth state:', error);
@@ -128,7 +146,15 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      /* O SIGNED_OUT que nos mesmos disparamos ao barrar o acesso chegaria
+         aqui e apagaria a mensagem, mandando a pessoa de volta pra central
+         sem explicacao. A mensagem ja foi mostrada, entao ignora. */
+      if (event === 'SIGNED_OUT' && barrandoAcesso.current) {
+        barrandoAcesso.current = false;
+        return;
+      }
+
       window.setTimeout(() => {
         applySessionAccess(session).catch((error) => {
           console.error('Error handling auth state change:', error);
@@ -154,21 +180,34 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      // Encerra a sessao no servidor: vale para a central e para os outros modulos.
       await supabase.auth.signOut();
-      setAuthError(null);
-      setIsAuthenticated(false);
     } catch (error) {
       console.error('Error logging out:', error);
+    }
+
+    if (usarLoginLocal()) {
       setAuthError(null);
       setIsAuthenticated(false);
+      return;
     }
+
+    sairPelaCentral();
   };
+
+  const semSessaoSemErro = isAuthenticated === false && !authError && !usarLoginLocal() && !isRegisterRoute;
+
+  useEffect(() => {
+    if (semSessaoSemErro) {
+      irParaLoginCentral();
+    }
+  }, [semSessaoSemErro]);
 
   if (isRegisterRoute) {
     return <RegisterPage />;
   }
 
-  if (isAuthenticated === null) {
+  if (isAuthenticated === null || semSessaoSemErro) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#F6F6F6]">
         <div className="w-10 h-10 border-2 border-black/10 border-t-black rounded-full animate-spin" />
@@ -177,7 +216,43 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage initialError={authError} />;
+    if (usarLoginLocal()) {
+      return <LoginPage initialError={authError} />;
+    }
+
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-paper p-6 font-sans">
+        <div
+          className="w-full max-w-[440px] rounded-card border border-line-soft bg-card p-8 text-center md:p-12"
+          style={{ boxShadow: '0 34px 64px -34px rgba(20,20,20,.45)' }}
+        >
+          <h1 className="text-[21px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.025em' }}>
+            Não foi possível entrar
+          </h1>
+          <p className="mt-2 text-[13.5px] text-muted" style={{ fontWeight: 500 }}>
+            {authError}
+          </p>
+          <div className="mt-7 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={voltarParaProdutos}
+              className="h-[47px] rounded-[9px] bg-lime text-[14px] text-ink hover:bg-lime-deep"
+              style={{ fontWeight: 700 }}
+            >
+              Voltar para os produtos
+            </button>
+            <button
+              type="button"
+              onClick={sairPelaCentral}
+              className="text-[13px] text-muted hover:text-ink"
+              style={{ fontWeight: 600 }}
+            >
+              Entrar com outra conta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
