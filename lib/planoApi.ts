@@ -214,6 +214,19 @@ export const verificarStatusPagamento = (paymentId: string) =>
     `/api/plano/pagamento-status?paymentId=${encodeURIComponent(paymentId)}`,
   );
 
+export interface PixPendente {
+  paymentId: string;
+  valor: number;
+  planoNome: string | null;
+  planoCiclo: string | null;
+  pix: { qrCodeBase64: string; copiaCola: string; expiracao: string };
+}
+
+export const fetchPixPendente = () =>
+  chamarApi<{ pendente: false; pagoAgora?: boolean } | ({ pendente: true } & PixPendente)>(
+    '/api/plano/pix-pendente',
+  );
+
 export const resgatarTrial = (codigo: string) =>
   chamarApi<{ message: string; dataFinalTrial: string; duracaoDias: number }>('/api/plano/trial-resgatar', {
     method: 'POST',

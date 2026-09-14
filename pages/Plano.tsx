@@ -5,10 +5,12 @@ import {
   cancelarPlano,
   fetchCatalogoPlanos,
   fetchConsumoPlano,
+  fetchPixPendente,
   resgatarTrial,
   verificarStatusPagamento,
   type CatalogoOpcao,
   type ConsumoResposta,
+  type PixPendente,
 } from '../lib/planoApi';
 import PlanoCards from '../components/plano/PlanoCards';
 import PlanoAtualCard from '../components/plano/PlanoAtualCard';
@@ -21,6 +23,7 @@ import TrocarPlanoModal from '../components/plano/TrocarPlanoModal';
 import AssinarModal from '../components/plano/AssinarModal';
 import CreditosExtraModal from '../components/plano/CreditosExtraModal';
 import ResgatarTrialModal from '../components/plano/ResgatarTrialModal';
+import PixPendenteModal from '../components/plano/PixPendenteModal';
 
 const PlanoPage: React.FC = () => {
   const [carregandoAcesso, setCarregandoAcesso] = useState(true);
@@ -37,6 +40,8 @@ const PlanoPage: React.FC = () => {
   const [mostrarTrocarPlano, setMostrarTrocarPlano] = useState(false);
   const [mostrarCreditosExtra, setMostrarCreditosExtra] = useState(false);
   const [opcaoParaAssinar, setOpcaoParaAssinar] = useState<CatalogoOpcao | null>(null);
+  const [pixPendente, setPixPendente] = useState<PixPendente | null>(null);
+  const [mostrarPix, setMostrarPix] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -89,6 +94,31 @@ const PlanoPage: React.FC = () => {
 
       setConsumo(consumoResposta);
       setCatalogo(catalogoResposta.planos);
+
+      /* Assinou por Pix e ainda nao pagou a primeira cobranca: reabre o QR Code
+         a cada carregamento, ate o pagamento cair. */
+      const empresaCarregada = consumoResposta.empresa;
+      if (
+        empresaCarregada.temAssinaturaAtiva &&
+        !empresaCarregada.planoStatus &&
+        empresaCarregada.formaPagamento === 'PIX'
+      ) {
+        try {
+          const pix = await fetchPixPendente();
+          if (pix.pendente) {
+            const { pendente: _pendente, ...dados } = pix;
+            setPixPendente(dados);
+            setMostrarPix(true);
+          } else {
+            setPixPendente(null);
+            if ('pagoAgora' in pix && pix.pagoAgora) setConsumo(await fetchConsumoPlano());
+          }
+        } catch (error) {
+          console.error('Erro ao carregar Pix pendente:', error);
+        }
+      } else {
+        setPixPendente(null);
+      }
     } catch (error: any) {
       setErroCarregamento(error?.message || 'Não foi possível carregar os dados do plano.');
     } finally {
@@ -257,6 +287,22 @@ const PlanoPage: React.FC = () => {
           </div>
         ) : temAssinatura ? (
           <>
+            {pixPendente ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-orange-200 bg-orange-50 p-4">
+                <p className="text-[13px] text-orange-800" style={{ fontWeight: 600 }}>
+                  Seu plano ainda não está ativo. Pague o Pix da primeira cobrança para ativar.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setMostrarPix(true)}
+                  className="rounded-pill bg-ink px-4 py-2 text-[12.5px] text-white"
+                  style={{ fontWeight: 700 }}
+                >
+                  Ver QR Code do Pix
+                </button>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <PlanoAtualCard
                 empresa={empresa}
@@ -345,6 +391,18 @@ const PlanoPage: React.FC = () => {
             empresa={empresa}
             onSucesso={aoConcluirCreditosExtra}
             onFechar={fecharCreditosExtra}
+          />
+        ) : null}
+
+        {pixPendente && mostrarPix && !opcaoParaAssinar ? (
+          <PixPendenteModal
+            pendente={pixPendente}
+            onPago={async () => {
+              setPixPendente(null);
+              await carregarDados();
+              setAviso({ tipo: 'sucesso', texto: 'Pagamento confirmado. Seu plano está ativo.' });
+            }}
+            onFechar={() => setMostrarPix(false)}
           />
         ) : null}
 

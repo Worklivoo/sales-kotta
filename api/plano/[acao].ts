@@ -10,6 +10,7 @@ import { planoCreditosExtraService } from '../../server/planoCreditosExtraServic
 import { planoTrialResgatarService } from '../../server/planoTrialResgatarService.js';
 import { planoPagamentoStatusService } from '../../server/planoPagamentoStatusService.js';
 import { planoCupomService } from '../../server/planoCupomService.js';
+import { planoPixPendenteService } from '../../server/planoPixPendenteService.js';
 
 /* Todas as acoes de plano numa unica Serverless Function.
 
@@ -100,6 +101,11 @@ const ACOES: Record<string, Acao> = {
         requesterAccessToken,
         paymentId: queryParam(request.query.paymentId),
       }),
+  },
+  'pix-pendente': {
+    metodo: 'GET',
+    erro: 'Nao foi possivel carregar o Pix pendente.',
+    executar: ({ env, requesterAccessToken }) => planoPixPendenteService({ env, requesterAccessToken }),
   },
   cupom: {
     metodo: 'GET',
