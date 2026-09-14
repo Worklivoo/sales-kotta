@@ -8,6 +8,12 @@ import { FOLLOWUP_TEMPLATES, buscarTemplate, renderizarTemplate } from '../../li
    uma configuracao que o banco ignora. */
 const MAX_TENTATIVAS = 3;
 
+/* Faixa de cada tentativa, contada desde a ultima mensagem do lead. Minimo de
+   3h para nao cutucar o lead cedo demais; maximo de 24h para a cadencia
+   inteira caber dentro de um dia de conversa. */
+const MIN_HORAS = 3;
+const MAX_HORAS = 24;
+
 /* Preco de MARKETING para o Brasil na tabela da Meta. Os modelos sao enviados
    como UTILITY (mais barata), mas a Meta pode recategorizar - por isso a tela
    usa o preco de marketing como teto ("ate US$ X"). Nao serve para faturamento. */
@@ -29,8 +35,8 @@ const CONFIG_PADRAO: FollowupConfig = {
   ativo: false,
   tentativas: [
     { horas: 3, template: 'sales_kotta_fup_lembrete' },
-    { horas: 24, template: 'sales_kotta_fup_ajuda' },
-    { horas: 72, template: 'sales_kotta_fup_ultima' },
+    { horas: 12, template: 'sales_kotta_fup_ajuda' },
+    { horas: 24, template: 'sales_kotta_fup_ultima' },
   ],
   horario_comercial: { ativo: true, inicio: '08:00', fim: '18:00', dias_uteis: true },
   ao_esgotar: { marcar_perdido: true, notificar: true },
@@ -187,7 +193,10 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
         ...atual,
         tentativas: [
           ...atual.tentativas,
-          { horas: (ultima?.horas ?? 12) * 2, template: FOLLOWUP_TEMPLATES[0].nome },
+          {
+            horas: Math.min(MAX_HORAS, (ultima?.horas ?? MIN_HORAS - 6) + 6),
+            template: FOLLOWUP_TEMPLATES[0].nome,
+          },
         ].slice(0, MAX_TENTATIVAS),
       };
     });
@@ -213,8 +222,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
     for (let i = 0; i < config.tentativas.length; i += 1) {
       const tentativa = config.tentativas[i];
 
-      if (!Number.isFinite(tentativa.horas) || tentativa.horas < 1) {
-        return `A ${i + 1}ª tentativa precisa de um prazo de pelo menos 1 hora.`;
+      if (!Number.isInteger(tentativa.horas) || tentativa.horas < MIN_HORAS || tentativa.horas > MAX_HORAS) {
+        return `A ${i + 1}ª tentativa precisa ser entre ${MIN_HORAS} e ${MAX_HORAS} horas depois da última mensagem do lead.`;
       }
 
       if (i > 0 && tentativa.horas <= config.tentativas[i - 1].horas) {
@@ -287,74 +296,25 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
     setIsEditando(false);
   };
 
-  if (!podeEditar) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
-            <AlarmClock size={16} />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-ink">Follow-ups</h3>
-            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">
-              Quando a IA faz uma pergunta e o lead não volta, o KOTTA IA cutuca ele automaticamente
-              para retomar a cotação. Máximo de {MAX_TENTATIVAS} mensagens — cada uma é um template
-              cobrado pela Meta.
-            </p>
-          </div>
-        </div>
-
-        {!isLoading && !isEditando ? (
-          <button
-            type="button"
-            onClick={handleEditar}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
-          >
-            <Pencil size={13} />
-            Editar
-          </button>
-        ) : null}
-      </div>
-
-      {erro ? (
-        <div className="mb-4 rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-          {erro}
-        </div>
-      ) : null}
-
-      {sucesso ? (
-        <div className="mb-4 rounded-panel border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          {sucesso}
-        </div>
-      ) : null}
-
-      {isLoading ? (
-        <div className="rounded-panel border border-line-soft bg-card px-4 py-6 text-sm text-muted">
-          Carregando configuração de follow-up...
-        </div>
-      ) : (
+  const renderCampos = (cfg: FollowupConfig, editavel: boolean) => (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4 rounded-panel border border-line-soft bg-card px-4 py-4">
             <div>
               <p className="text-xs font-medium text-muted-soft">Cadência automática</p>
               <p className="mt-2 text-sm font-semibold text-ink">
-                {config.ativo ? 'Ligada' : 'Desligada'}
+                {cfg.ativo ? 'Ligada' : 'Desligada'}
               </p>
               <p className="mt-2 max-w-xl text-xs leading-5 text-muted">
-                {config.ativo
-                  ? `Custo estimado de até US$ ${custoEstimado} por lead que não responder.`
+                {cfg.ativo
+                  ? `No WhatsApp, custo estimado de até US$ ${custoEstimado} por lead que não responder. No e-mail não há custo.`
                   : 'Com a cadência desligada, você ainda pode enviar follow-ups manualmente pelo botão na tela da cotação.'}
               </p>
             </div>
 
             <Alternador
-              ligado={config.ativo}
+              ligado={cfg.ativo}
               rotulo="Ativar follow-ups automáticos"
-              desabilitado={!isEditando}
+              desabilitado={!editavel}
               onChange={() => {
                 marcarSujo();
                 setConfig((atual) => ({ ...atual, ativo: !atual.ativo }));
@@ -365,7 +325,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
           <div className="space-y-3 rounded-panel border border-line-soft bg-card px-4 py-4">
             <p className="text-xs font-medium text-muted-soft">Tentativas</p>
 
-            {config.tentativas.map((tentativa, indice) => {
+            {cfg.tentativas.map((tentativa, indice) => {
               const template = buscarTemplate(tentativa.template);
 
               return (
@@ -382,9 +342,9 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                       Enviar
                       <input
                         type="number"
-                        min={1}
-                        max={336}
-                        disabled={!isEditando}
+                        min={MIN_HORAS}
+                        max={MAX_HORAS}
+                        disabled={!editavel}
                         value={tentativa.horas}
                         onChange={(evento) =>
                           atualizarTentativa(indice, 'horas', Number(evento.target.value))
@@ -394,7 +354,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                       horas depois da última mensagem do lead
                     </label>
 
-                    {isEditando ? (
+                    {editavel ? (
                       <button
                         type="button"
                         onClick={() => removerTentativa(indice)}
@@ -409,7 +369,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={tentativa.template}
-                      disabled={!isEditando}
+                      disabled={!editavel}
                       onChange={(evento) =>
                         atualizarTentativa(indice, 'template', evento.target.value)
                       }
@@ -426,6 +386,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                   {template ? (
                     <>
                       <p className="rounded-panel border border-line-soft bg-card px-3 py-2 text-xs leading-5 text-muted">
+                        <span className="font-semibold text-muted-soft">Exemplo: </span>
                         {renderizarTemplate(template.corpo, 'Marcos')}
                       </p>
                       <p className="text-[11px] leading-4 text-muted-soft">{template.descricao}</p>
@@ -435,7 +396,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
               );
             })}
 
-            {!isEditando ? null : config.tentativas.length < MAX_TENTATIVAS ? (
+            {!editavel ? null : cfg.tentativas.length < MAX_TENTATIVAS ? (
               <button
                 type="button"
                 onClick={adicionarTentativa}
@@ -462,9 +423,9 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
               </div>
 
               <Alternador
-                ligado={config.horario_comercial.ativo}
+                ligado={cfg.horario_comercial.ativo}
                 rotulo="Enviar somente em horário comercial"
-                desabilitado={!isEditando}
+                desabilitado={!editavel}
                 onChange={() => {
                   marcarSujo();
                   setConfig((atual) => ({
@@ -478,14 +439,14 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
               />
             </div>
 
-            {config.horario_comercial.ativo ? (
+            {cfg.horario_comercial.ativo ? (
               <div className="flex flex-wrap items-center gap-3 border-t border-line-soft pt-3">
                 <label className="flex items-center gap-2 text-xs text-muted">
                   Das
                   <input
                     type="time"
-                    disabled={!isEditando}
-                    value={config.horario_comercial.inicio}
+                    disabled={!editavel}
+                    value={cfg.horario_comercial.inicio}
                     onChange={(evento) => {
                       marcarSujo();
                       setConfig((atual) => ({
@@ -501,8 +462,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                   às
                   <input
                     type="time"
-                    disabled={!isEditando}
-                    value={config.horario_comercial.fim}
+                    disabled={!editavel}
+                    value={cfg.horario_comercial.fim}
                     onChange={(evento) => {
                       marcarSujo();
                       setConfig((atual) => ({
@@ -517,8 +478,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
                 <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
-                    disabled={!isEditando}
-                    checked={config.horario_comercial.dias_uteis}
+                    disabled={!editavel}
+                    checked={cfg.horario_comercial.dias_uteis}
                     onChange={() => {
                       marcarSujo();
                       setConfig((atual) => ({
@@ -545,8 +506,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
             <label className="flex items-center gap-2 text-xs text-muted">
               <input
                 type="checkbox"
-                disabled={!isEditando}
-                checked={config.ao_esgotar.marcar_perdido}
+                disabled={!editavel}
+                checked={cfg.ao_esgotar.marcar_perdido}
                 onChange={() => {
                   marcarSujo();
                   setConfig((atual) => ({
@@ -565,8 +526,8 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
             <label className="flex items-center gap-2 text-xs text-muted">
               <input
                 type="checkbox"
-                disabled={!isEditando}
-                checked={config.ao_esgotar.notificar}
+                disabled={!editavel}
+                checked={cfg.ao_esgotar.notificar}
                 onChange={() => {
                   marcarSujo();
                   setConfig((atual) => ({
@@ -580,37 +541,127 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
             </label>
           </div>
 
-          {config.ativo && config.tentativas.length ? (
+          {cfg.ativo && cfg.tentativas.length ? (
             <p className="text-[11px] leading-5 text-muted-soft">
-              Resumo: {config.tentativas.map((t) => descreverPrazo(t.horas)).join(' · ')} depois da
+              Resumo: {cfg.tentativas.map((t) => descreverPrazo(t.horas)).join(' · ')} depois da
               última mensagem do lead. Se ele responder a qualquer momento, a cadência para e o
               contador zera.
             </p>
           ) : null}
-
-          {isEditando ? (
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleCancelar}
-                disabled={isSaving}
-                className="rounded-panel border border-line bg-card px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-ink/25 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSalvar}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 rounded-panel bg-lime px-5 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Save size={16} />
-                {isSaving ? 'Salvando...' : 'Salvar follow-ups'}
-              </button>
-            </div>
-          ) : null}
         </div>
+  );
+
+  const descricao = (
+    <>
+      Quando o KOTTA IA faz uma pergunta durante a cotação e o lead não volta, ele retoma a conversa
+      automaticamente pelo mesmo canal do atendimento. Vale enquanto a cotação ainda está coletando
+      dados, antes de ir para aprovação. Máximo de {MAX_TENTATIVAS} mensagens.
+    </>
+  );
+
+  if (!podeEditar) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-panel border border-line-soft bg-paper p-4 sm:p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-tile bg-card text-muted shadow-sm">
+            <AlarmClock size={16} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Follow-ups</h3>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">{descricao}</p>
+          </div>
+        </div>
+
+        {!isLoading ? (
+          <button
+            type="button"
+            onClick={handleEditar}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
+          >
+            <Pencil size={13} />
+            Editar
+          </button>
+        ) : null}
+      </div>
+
+      {erro && !isEditando ? (
+        <div className="mb-4 rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+          {erro}
+        </div>
+      ) : null}
+
+      {sucesso ? (
+        <div className="mb-4 rounded-panel border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          {sucesso}
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <div className="rounded-panel border border-line-soft bg-card px-4 py-6 text-sm text-muted">
+          Carregando configuração de follow-up...
+        </div>
+      ) : (
+        renderCampos(configSalva, false)
       )}
+
+      {isEditando ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] px-4 py-6 backdrop-blur-sm">
+          <div className="absolute inset-0" aria-hidden="true" onClick={handleCancelar} />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="followups-modal-title"
+            className="relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line-soft px-6 py-5 max-lg:px-4 max-lg:py-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime/20 text-ink">
+                  <AlarmClock size={18} />
+                </div>
+                <div>
+                  <h2 id="followups-modal-title" className="text-base font-semibold tracking-tight text-ink">
+                    Follow-ups
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted">{descricao}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCancelar}
+                  disabled={isSaving}
+                  className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSalvar}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {isSaving ? 'Salvando...' : 'Salvar follow-ups'}
+                </button>
+              </div>
+            </div>
+
+            {erro ? (
+              <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm font-medium text-red-600">{erro}</div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-paper px-6 py-5 max-lg:px-4 max-lg:py-4">
+              {renderCampos(config, true)}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
