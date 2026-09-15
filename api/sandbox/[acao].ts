@@ -4,7 +4,7 @@ import {
   sandboxObterMinhaEmpresaService,
   sandboxListarAtendimentosService,
   sandboxListarMensagensService,
-  sandboxConfigurarWhatsappService,
+  sandboxEnviarEmailService,
   sandboxExcluirAtendimentoService,
 } from '../../server/sandboxService.js';
 
@@ -27,6 +27,7 @@ const env = () => ({
   supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
   supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  sandboxWebhookToken: process.env.SANDBOX_WEBHOOK_TOKEN || '',
 });
 
 interface Acao {
@@ -38,7 +39,7 @@ interface Acao {
 const ACOES: Record<string, Acao> = {
   'minha-empresa': {
     metodo: 'GET',
-    erro: 'Nao foi possivel carregar os dados de sandbox da sua empresa.',
+    erro: 'Nao foi possivel carregar os dados de teste da sua empresa.',
     executar: (_request, requesterAccessToken) =>
       sandboxObterMinhaEmpresaService({ env: env(), requesterAccessToken }),
   },
@@ -58,11 +59,17 @@ const ACOES: Record<string, Acao> = {
         atendimentoId: queryParam(request.query.atendimento_id),
       }),
   },
-  'configurar-whatsapp': {
+  'enviar-email': {
     metodo: 'POST',
-    erro: 'Nao foi possivel configurar o WhatsApp de teste.',
-    executar: (_request, requesterAccessToken) =>
-      sandboxConfigurarWhatsappService({ env: env(), requesterAccessToken }),
+    erro: 'Nao foi possivel enviar a mensagem de teste.',
+    executar: (request, requesterAccessToken) =>
+      sandboxEnviarEmailService({
+        env: env(),
+        requesterAccessToken,
+        texto: request.body?.texto || '',
+        assunto: request.body?.assunto || '',
+        atendimentoId: request.body?.atendimento_id || '',
+      }),
   },
   'excluir-atendimento': {
     metodo: 'POST',

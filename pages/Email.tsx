@@ -399,6 +399,8 @@ const EmailPage: React.FC = () => {
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('origem', 'EMAIL')
+          // conversas da pagina "Testar atendimento" ficam so la
+          .eq('sandbox', false)
           .order('created_at', { ascending: false });
 
         if (currentMember.cargo !== 'ADMIN') {

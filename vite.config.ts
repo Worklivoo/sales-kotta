@@ -20,7 +20,7 @@ import {
   sandboxObterMinhaEmpresaService,
   sandboxListarAtendimentosService,
   sandboxListarMensagensService,
-  sandboxConfigurarWhatsappService,
+  sandboxEnviarEmailService,
   sandboxExcluirAtendimentoService,
 } from './server/sandboxService';
 
@@ -456,7 +456,9 @@ const planoDevPlugin = (env: DevPlanoPluginOptions): Plugin => ({
   },
 });
 
-interface DevSandboxPluginOptions extends DevCreateMemberPluginOptions {}
+interface DevSandboxPluginOptions extends DevCreateMemberPluginOptions {
+  sandboxWebhookToken: string;
+}
 
 /* Espelho de dev da rota dinamica api/sandbox/[acao].ts - mesmo motivo do
    planoDevPlugin acima: em producao e uma unica Serverless Function. */
@@ -464,12 +466,13 @@ const sandboxDevPlugin = ({
   supabaseUrl,
   supabaseAnonKey,
   supabaseServiceRoleKey,
+  sandboxWebhookToken,
 }: DevSandboxPluginOptions): Plugin => ({
   name: 'sandbox-dev-api',
   configureServer(server) {
     server.middlewares.use('/api/sandbox', async (request, response, next) => {
       const requesterAccessToken = getBearerToken(request.headers.authorization);
-      const sandboxEnv = { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey };
+      const sandboxEnv = { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey, sandboxWebhookToken };
 
       const url = new URL(request.url || '', 'http://localhost');
       const acao = url.pathname.replace(/^\/+|\/+$/g, '');
@@ -503,11 +506,18 @@ const sandboxDevPlugin = ({
           return;
         }
 
-        if (acao === 'configurar-whatsapp' && request.method === 'POST') {
+        if (acao === 'enviar-email' && request.method === 'POST') {
+          const payload = await readJsonBody(request);
           sendJson(
             response,
             200,
-            await sandboxConfigurarWhatsappService({ env: sandboxEnv, requesterAccessToken }),
+            await sandboxEnviarEmailService({
+              env: sandboxEnv,
+              requesterAccessToken,
+              texto: payload?.texto || '',
+              assunto: payload?.assunto || '',
+              atendimentoId: payload?.atendimento_id || '',
+            }),
           );
           return;
         }
@@ -598,6 +608,7 @@ export default defineConfig(({ mode }) => {
         supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
         supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
         supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        sandboxWebhookToken: env.SANDBOX_WEBHOOK_TOKEN || '',
       }),
       ...(() => {
         const planoEnv: PlanoServiceEnv = {

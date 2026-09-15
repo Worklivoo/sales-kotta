@@ -1,10 +1,31 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { randomBytes } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
+
+/* Pagina /sandbox ("Testar atendimento"): o cliente simula um lead mandando
+   e-mail para a propria empresa e acompanha a IA respondendo.
+
+   A mensagem entra pela Triagem Global REAL (webhook "Webhook (Teste E-mail)",
+   que cai no mesmo "Normalizar Email" do IMAP) e segue Worker, orcamento etc.
+   Se algo quebrar, o erro aparece na execucao real. O atendimento nasce com
+   sales_atendimentos_v2.sandbox = true e as RPCs cuidam do resto: o envio final
+   ao lead e simulado, nada vai para o ERP do cliente, nao ha follow-up e nao
+   conta consumo do plano. */
+
+const TRIAGEM_EMAIL_TESTE_URL = 'https://primary-production-b86f1.up.railway.app/webhook/triagem-email-teste-v2';
+
+// .invalid e reservado (RFC 2606): nenhum e-mail para esse dominio e entregue,
+// entao mesmo que algum envio escapasse da trava, nao chegaria a ninguem.
+const DOMINIO_TESTE = 'teste.invalid';
+
+const LIMITE_TEXTO = 5000;
+const LIMITE_ASSUNTO = 200;
 
 interface SandboxServiceEnv {
   supabaseUrl: string;
   supabaseAnonKey: string;
   supabaseServiceRoleKey: string;
+  sandboxWebhookToken: string;
 }
 
 interface SandboxServiceOptions {
@@ -28,13 +49,10 @@ const buildClients = (env: SandboxServiceEnv) => {
   return { publicClient, adminClient };
 };
 
-// O sandbox sempre opera na empresa do proprio usuario logado - nunca recebe
-// um empresa_id do cliente. Isso resolve duas coisas de uma vez: remove a
-// necessidade de selecionar empresa na tela, e fecha a unica brecha de
-// seguranca que existiria (nao da pra pedir dados de uma empresa que nao e a
-// sua so trocando um parametro). Se a empresa do usuario nao for
-// ambiente_teste=true, a acao falha com uma mensagem clara.
-const resolverEmpresaSandboxDoRequester = async (env: SandboxServiceEnv, requesterAccessToken: string) => {
+// Sempre opera no membro do proprio usuario logado - nunca recebe empresa_id
+// nem membro_id do navegador. Cada membro ve e mexe so nas conversas de teste
+// que ele mesmo criou (sandbox = true), nunca num atendimento real.
+const resolverMembroDoRequester = async (env: SandboxServiceEnv, requesterAccessToken: string) => {
   const { publicClient, adminClient } = buildClients(env);
 
   if (!requesterAccessToken) {
@@ -49,7 +67,7 @@ const resolverEmpresaSandboxDoRequester = async (env: SandboxServiceEnv, request
 
   const { data: membro, error: membroError } = await adminClient
     .from('sales_membros_v2')
-    .select('membro_id, empresa_id, canal_whatsapp, canal_email')
+    .select('membro_id, empresa_id, status, canal_email')
     .eq('user_id', userData.user.id)
     .maybeSingle();
 
@@ -63,7 +81,7 @@ const resolverEmpresaSandboxDoRequester = async (env: SandboxServiceEnv, request
 
   const { data: empresa, error: empresaError } = await adminClient
     .from('sales_empresas_v2')
-    .select('empresa_id, razao_social, ambiente_teste')
+    .select('empresa_id, razao_social')
     .eq('empresa_id', membro.empresa_id)
     .maybeSingle();
 
@@ -71,37 +89,70 @@ const resolverEmpresaSandboxDoRequester = async (env: SandboxServiceEnv, request
     throw new HttpError(500, empresaError.message);
   }
 
-  if (!empresa || empresa.ambiente_teste !== true) {
-    throw new HttpError(
-      403,
-      'Sua empresa nao esta marcada como ambiente de teste (ambiente_teste=true). Fale com o time pra habilitar.',
-    );
+  if (!empresa) {
+    throw new HttpError(400, 'Nao foi possivel identificar a empresa do usuario atual.');
   }
 
-  return { adminClient, empresa, membro };
+  const canalEmail = (membro.canal_email || null) as { email_integracao?: string } | null;
+
+  return {
+    adminClient,
+    empresa,
+    membro,
+    emailIntegracao: canalEmail?.email_integracao || null,
+  };
 };
 
+const buscarAtendimentoDeTeste = async (
+  adminClient: ReturnType<typeof buildClients>['adminClient'],
+  membroId: string,
+  atendimentoId: string,
+) => {
+  if (!atendimentoId) {
+    throw new HttpError(400, 'Informe a conversa.');
+  }
+
+  const { data, error } = await adminClient
+    .from('sales_atendimentos_v2')
+    .select('atendimento_id, empresa_id, email_lead, assunto')
+    .eq('atendimento_id', atendimentoId)
+    .eq('membro_id', membroId)
+    .eq('sandbox', true)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  if (!data) {
+    throw new HttpError(404, 'Conversa de teste nao encontrada.');
+  }
+
+  return data;
+};
+
+const gerarId = () => randomBytes(6).toString('hex');
+
 export const sandboxObterMinhaEmpresaService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
-  const { empresa, membro } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
-  const canalWhatsapp = (membro.canal_whatsapp || null) as { numero_meta_id?: string } | null;
-  const canalEmail = (membro.canal_email || null) as { email_integracao?: string } | null;
+  const { empresa, membro, emailIntegracao } = await resolverMembroDoRequester(env, requesterAccessToken);
 
   return {
     empresa_id: empresa.empresa_id,
     razao_social: empresa.razao_social,
     membro_id: membro.membro_id,
-    numero_meta_id: canalWhatsapp?.numero_meta_id || null,
-    email_integracao: canalEmail?.email_integracao || null,
+    email_integracao: emailIntegracao,
   };
 };
 
 export const sandboxListarAtendimentosService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
-  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
+  const { adminClient, empresa, membro } = await resolverMembroDoRequester(env, requesterAccessToken);
 
   const { data, error } = await adminClient
     .from('sales_atendimentos_v2')
-    .select('atendimento_id, numero_ticket, telefone_lead, email_lead, origem, status, categoria, created_at, updated_at')
+    .select('atendimento_id, numero_ticket, email_lead, assunto, status, categoria, created_at, updated_at')
     .eq('empresa_id', empresa.empresa_id)
+    .eq('membro_id', membro.membro_id)
+    .eq('sandbox', true)
     .order('updated_at', { ascending: false })
     .limit(50);
 
@@ -117,17 +168,13 @@ export const sandboxListarMensagensService = async ({
   requesterAccessToken,
   atendimentoId,
 }: SandboxServiceOptions & { atendimentoId: string }) => {
-  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
-
-  if (!atendimentoId) {
-    throw new HttpError(400, 'Informe o atendimento.');
-  }
+  const { adminClient, membro } = await resolverMembroDoRequester(env, requesterAccessToken);
+  const atendimento = await buscarAtendimentoDeTeste(adminClient, membro.membro_id, atendimentoId);
 
   const { data, error } = await adminClient
     .from('sales_mensagens_v2')
     .select('mensagem_id, created_at, origem, conteudo, anexos')
-    .eq('empresa_id', empresa.empresa_id)
-    .eq('atendimento_id', atendimentoId)
+    .eq('atendimento_id', atendimento.atendimento_id)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -137,22 +184,100 @@ export const sandboxListarMensagensService = async ({
   return { mensagens: data || [] };
 };
 
-export const sandboxConfigurarWhatsappService = async ({ env, requesterAccessToken }: SandboxServiceOptions) => {
-  const { adminClient, empresa, membro } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
+export const sandboxEnviarEmailService = async ({
+  env,
+  requesterAccessToken,
+  texto,
+  assunto,
+  atendimentoId,
+}: SandboxServiceOptions & { texto: string; assunto: string; atendimentoId: string }) => {
+  const { adminClient, membro, emailIntegracao } = await resolverMembroDoRequester(env, requesterAccessToken);
 
-  const numeroMetaIdSimulado = `sandbox-${empresa.empresa_id.slice(0, 8)}`;
-  const canalAtual = (membro.canal_whatsapp || {}) as Record<string, unknown>;
-
-  const { error: updateError } = await adminClient
-    .from('sales_membros_v2')
-    .update({ canal_whatsapp: { ...canalAtual, numero_meta_id: numeroMetaIdSimulado } })
-    .eq('membro_id', membro.membro_id);
-
-  if (updateError) {
-    throw new HttpError(500, updateError.message);
+  if (!env.sandboxWebhookToken) {
+    throw new HttpError(500, 'O ambiente de teste nao esta configurado no servidor.');
   }
 
-  return { numero_meta_id: numeroMetaIdSimulado };
+  if (!emailIntegracao) {
+    throw new HttpError(400, 'Seu usuario ainda nao tem o e-mail de integracao configurado.');
+  }
+
+  const textoLimpo = String(texto || '').trim().slice(0, LIMITE_TEXTO);
+
+  if (!textoLimpo) {
+    throw new HttpError(400, 'Escreva a mensagem do lead.');
+  }
+
+  let emailLead: string;
+  let assuntoFinal: string;
+  let inReplyTo: string | null = null;
+
+  if (atendimentoId) {
+    // Continuacao: responde "em cima" da ultima mensagem da conversa, como um
+    // cliente de e-mail faria. E assim que o "Resolver Atendimento" da Triagem
+    // acha a conversa (in-reply-to + mesmo remetente).
+    const atendimento = await buscarAtendimentoDeTeste(adminClient, membro.membro_id, atendimentoId);
+
+    const { data: ultima, error: ultimaError } = await adminClient
+      .from('sales_mensagens_v2')
+      .select('provedor_message_id')
+      .eq('atendimento_id', atendimento.atendimento_id)
+      .not('provedor_message_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (ultimaError) {
+      throw new HttpError(500, ultimaError.message);
+    }
+
+    if (!atendimento.email_lead || !ultima?.provedor_message_id) {
+      throw new HttpError(409, 'Aguarde a conversa terminar de ser processada antes de responder.');
+    }
+
+    emailLead = atendimento.email_lead;
+    assuntoFinal = /^re:/i.test(atendimento.assunto || '') ? atendimento.assunto : `Re: ${atendimento.assunto || ''}`.trim();
+    inReplyTo = ultima.provedor_message_id;
+  } else {
+    emailLead = `lead-${gerarId()}@${DOMINIO_TESTE}`;
+    assuntoFinal = String(assunto || '').trim().slice(0, LIMITE_ASSUNTO) || 'Pedido de cotação';
+  }
+
+  const messageId = `sandbox-${Date.now()}-${gerarId()}@${DOMINIO_TESTE}`;
+
+  // Mesmo formato que o Email Trigger (IMAP) entrega - a Triagem passa isso
+  // direto para o "Normalizar Email" real.
+  const payload = {
+    sandbox: true,
+    from: `Lead de teste <${emailLead}>`,
+    to: emailIntegracao,
+    subject: assuntoFinal,
+    textPlain: textoLimpo,
+    metadata: {
+      'message-id': `<${messageId}>`,
+      ...(inReplyTo ? { 'in-reply-to': `<${inReplyTo}>` } : {}),
+    },
+  };
+
+  let response: Response;
+
+  try {
+    response = await fetch(TRIAGEM_EMAIL_TESTE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sandbox-token': env.sandboxWebhookToken,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new HttpError(502, 'Nao foi possivel falar com a automacao agora. Tente de novo.');
+  }
+
+  if (!response.ok) {
+    throw new HttpError(502, `A automacao recusou a mensagem de teste (status ${response.status}).`);
+  }
+
+  return { email_lead: emailLead, assunto: assuntoFinal };
 };
 
 export const sandboxExcluirAtendimentoService = async ({
@@ -160,17 +285,17 @@ export const sandboxExcluirAtendimentoService = async ({
   requesterAccessToken,
   atendimentoId,
 }: SandboxServiceOptions & { atendimentoId: string }) => {
-  const { adminClient, empresa } = await resolverEmpresaSandboxDoRequester(env, requesterAccessToken);
+  const { adminClient, membro } = await resolverMembroDoRequester(env, requesterAccessToken);
 
-  if (!atendimentoId) {
-    throw new HttpError(400, 'Informe o atendimento.');
-  }
+  // So passa daqui se for conversa de teste do proprio membro - nunca apaga
+  // um atendimento real, mesmo que alguem mande outro id.
+  const atendimento = await buscarAtendimentoDeTeste(adminClient, membro.membro_id, atendimentoId);
+  const alvoId = atendimento.atendimento_id;
 
   const { data: orcamentos } = await adminClient
     .from('sales_orcamentos_v2')
     .select('orcamento_id')
-    .eq('empresa_id', empresa.empresa_id)
-    .eq('atendimento_id', atendimentoId);
+    .eq('atendimento_id', alvoId);
 
   const orcamentoIds = (orcamentos || []).map((item) => item.orcamento_id);
 
@@ -179,14 +304,15 @@ export const sandboxExcluirAtendimentoService = async ({
     await adminClient.from('sales_orcamentos_v2').delete().in('orcamento_id', orcamentoIds);
   }
 
-  await adminClient.from('sales_solicitacoes_itens_v2').delete().eq('atendimento_id', atendimentoId);
-  await adminClient.from('sales_mensagens_v2').delete().eq('atendimento_id', atendimentoId);
+  await adminClient.from('sales_notificacoes_v2').delete().eq('atendimento_id', alvoId);
+  await adminClient.from('sales_solicitacoes_itens_v2').delete().eq('atendimento_id', alvoId);
+  await adminClient.from('sales_mensagens_v2').delete().eq('atendimento_id', alvoId);
 
   const { error: deleteAtendimentoError } = await adminClient
     .from('sales_atendimentos_v2')
     .delete()
-    .eq('empresa_id', empresa.empresa_id)
-    .eq('atendimento_id', atendimentoId);
+    .eq('atendimento_id', alvoId)
+    .eq('sandbox', true);
 
   if (deleteAtendimentoError) {
     throw new HttpError(500, deleteAtendimentoError.message);

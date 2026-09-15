@@ -54,6 +54,8 @@ export const planoConsumoService = async ({ env, requesterAccessToken }: PlanoCo
             .select('atendimento_id', { count: 'exact', head: true })
             .eq('empresa_id', empresaId)
             .eq('categoria', 'COTACAO')
+            // conversas de teste nao consomem o plano (igual sales_v2_consumo_ciclo)
+            .eq('sandbox', false)
             .gte('created_at', inicioCicloISO as string)
             .lt('created_at', fimCicloISO as string)
         : Promise.resolve({ count: 0, error: null }),

@@ -375,6 +375,7 @@ const WhatsAppPage: React.FC = () => {
           )
           .eq('empresa_id', currentMember.empresa_id)
           .eq('origem', 'WHATSAPP')
+          .eq('sandbox', false)
           .order('created_at', { ascending: false });
 
         if (currentMember.cargo !== 'ADMIN') {

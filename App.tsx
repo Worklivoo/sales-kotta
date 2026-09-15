@@ -288,7 +288,7 @@ function App() {
           ) : currentPath === '/plano' ? (
             <PlanoPage />
           ) : currentPath === '/sandbox' ? (
-            <SandboxPage />
+            <SandboxPage onNavigate={handleNavigate} />
           ) : cotacaoEmpresaId && cotacaoNumeroTicket ? (
             <CotacaoPage
               empresaId={cotacaoEmpresaId}

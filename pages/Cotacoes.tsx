@@ -176,6 +176,8 @@ const CotacoesPage: React.FC<CotacoesPageProps> = ({ onOpenCotacao }) => {
           )
           .eq('empresa_id', currentMember.empresa_id)
           .in('categoria', ['COTACAO', 'PEDIDO_COMPRA'])
+          // conversas da pagina "Testar atendimento" ficam so la
+          .eq('sandbox', false)
           .order('created_at', { ascending: false });
 
         const scopedCotacoesQuery = adminAccess

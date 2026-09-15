@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FlaskConical,
   KeyRound,
   Lock,
   Pencil,
@@ -96,7 +97,18 @@ const generalShortcutItems = [
     icon: FileText,
     action: 'view-terms',
   },
+  // Usado nos primeiros dias depois da ativacao, por isso fica discreto aqui.
+  {
+    label: 'Testar atendimento',
+    icon: FlaskConical,
+    action: 'open-sandbox',
+  },
 ] as const;
+
+const openSandboxPage = () => {
+  window.history.pushState({}, '', '/sandbox');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
 
 const SHOW_TERMS_SHORTCUT = false;
 const SHOW_USER_PLAN_SECTION = false;
@@ -1328,7 +1340,9 @@ const GeralTab: React.FC = () => {
                       ? handleOpenChangePasswordModal
                       : item.action === 'view-terms'
                         ? handleOpenTermsModal
-                        : undefined
+                        : item.action === 'open-sandbox'
+                          ? openSandboxPage
+                          : undefined
                   }
                   className="flex w-full items-center gap-3 rounded-tile px-2 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-paper hover:text-ink"
                 >
