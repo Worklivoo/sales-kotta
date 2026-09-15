@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 import { createMemberService, HttpError } from './server/createMemberService';
 import { manageMemberService } from './server/manageMemberService';
 import { validateSmtpService } from './server/validateSmtpService';
+import { salvarSmtpService } from './server/salvarSmtpService';
+import { verificarEncaminhamentoService } from './server/verificarEncaminhamentoService';
 import { registerCompanyService } from './server/registerCompanyService';
 import { getWhatsappPerfilService, salvarWhatsappPerfilService } from './server/whatsappPerfilService';
 import { whatsappProvisionamentoService } from './server/whatsappProvisionamentoService';
@@ -182,6 +184,94 @@ const validateSmtpDevPlugin = ({
 
         console.error('Erro na API local de validacao SMTP:', error);
         sendJson(response, 500, { error: 'Nao foi possivel validar as configuracoes SMTP.' });
+      }
+    });
+  },
+});
+
+const smtpConfigDevPlugin = ({
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseServiceRoleKey,
+  anthropicApiKey,
+}: DevValidateSmtpPluginOptions): Plugin => ({
+  name: 'smtp-config-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/smtp-config', async (request, response, next) => {
+      if (request.method !== 'POST') {
+        return next();
+      }
+
+      try {
+        const payload = await readJsonBody(request);
+        const requesterAccessToken = getBearerToken(request.headers.authorization);
+        const result = await salvarSmtpService({
+          supabaseUrl,
+          supabaseAnonKey,
+          supabaseServiceRoleKey,
+          anthropicApiKey,
+          requesterAccessToken,
+          payload,
+        });
+
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error('Erro na API local de configuracao SMTP:', error);
+        sendJson(response, 500, { error: 'Nao foi possivel salvar a configuracao de e-mail.' });
+      }
+    });
+  },
+});
+
+const verificarEncaminhamentoDevPlugin = ({
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseServiceRoleKey,
+  n8nToken,
+}: DevCreateMemberPluginOptions & { n8nToken: string }): Plugin => ({
+  name: 'verificar-encaminhamento-dev-api',
+  configureServer(server) {
+    server.middlewares.use('/api/verificar-encaminhamento', async (request, response, next) => {
+      if (request.method !== 'POST') {
+        return next();
+      }
+
+      try {
+        const payload = await readJsonBody(request);
+        const requesterAccessToken = getBearerToken(request.headers.authorization);
+        const result = await verificarEncaminhamentoService({
+          supabaseUrl,
+          supabaseAnonKey,
+          supabaseServiceRoleKey,
+          n8nToken,
+          requesterAccessToken,
+          payload,
+        });
+
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (error instanceof HttpError) {
+          sendJson(response, error.statusCode, { error: error.message });
+          return;
+        }
+
+        if (error instanceof SyntaxError) {
+          sendJson(response, 400, { error: 'Corpo da requisicao invalido.' });
+          return;
+        }
+
+        console.error('Erro na API local de verificacao de encaminhamento:', error);
+        sendJson(response, 500, { error: 'Nao foi possivel verificar o encaminhamento.' });
       }
     });
   },
@@ -580,6 +670,18 @@ export default defineConfig(({ mode }) => {
         supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
         supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
         anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+      }),
+      smtpConfigDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+      }),
+      verificarEncaminhamentoDevPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
+        supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '',
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+        n8nToken: env.N8N_KOTTA_TOKEN || '',
       }),
       registerCompanyDevPlugin({
         supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL || '',
