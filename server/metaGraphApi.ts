@@ -15,7 +15,11 @@ export async function chamarGraphApi(path: string, token: string, init?: Request
   const corpo = await resposta.json().catch(() => null);
 
   if (!resposta.ok) {
-    const mensagem = corpo?.error?.message || 'Nao foi possivel falar com a API do WhatsApp.';
+    /* error_user_msg e o texto pensado pra pessoa final ler - error.message
+       e mais tecnico/generico ("Invalid parameter") e nao ajuda a entender
+       o que realmente aconteceu. Preferir o primeiro quando existir. */
+    const mensagem =
+      corpo?.error?.error_user_msg || corpo?.error?.message || 'Nao foi possivel falar com a API do WhatsApp.';
     throw new HttpError(resposta.status >= 400 && resposta.status < 500 ? 400 : 502, mensagem);
   }
 

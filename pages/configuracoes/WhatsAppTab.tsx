@@ -328,8 +328,9 @@ const WhatsAppTab: React.FC = () => {
 
   const finalizarConexaoExistente = async (code: string) => {
     const phoneNumberId = dadosSignupRef.current.phoneNumberId;
+    const wabaId = dadosSignupRef.current.wabaId;
 
-    if (!phoneNumberId) {
+    if (!phoneNumberId || !wabaId) {
       setErroWizard('Não foi possível identificar o número. Tente novamente.');
       return;
     }
@@ -338,7 +339,7 @@ const WhatsAppTab: React.FC = () => {
     setErroWizard(null);
 
     try {
-      await chamarProvisionamento('conectar_existente', { phone_number_id: phoneNumberId, code });
+      await chamarProvisionamento('conectar_existente', { phone_number_id: phoneNumberId, waba_id: wabaId, code });
       await carregarPerfil();
     } catch (error: any) {
       console.error('Erro ao concluir a conexão do WhatsApp:', error);

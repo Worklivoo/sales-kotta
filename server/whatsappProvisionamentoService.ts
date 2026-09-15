@@ -1,6 +1,41 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
-import { chamarGraphApi } from './metaGraphApi.js';
+import { chamarGraphApi, GRAPH_API_BASE } from './metaGraphApi.js';
+
+const META_ERRO_CODIGO_JA_VERIFICADO = { code: 136025, error_subcode: 2388363 };
+
+/* verify_code nao pode ser chamado duas vezes no mesmo numero - se uma
+   tentativa anterior ja tiver confirmado o codigo (por exemplo, um passo
+   seguinte falhou e o fluxo retomou do zero), a Meta recusa com esse
+   codigo/subcodigo especifico. Aqui isso conta como sucesso: o numero ja
+   esta verificado, e e exatamente o que estavamos tentando confirmar. */
+async function verificarCodigoNaMeta(phoneNumberId: string, codigo: string, token: string) {
+  const resposta = await fetch(`${GRAPH_API_BASE}/${phoneNumberId}/verify_code`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code: codigo }),
+  });
+
+  if (resposta.ok) {
+    return;
+  }
+
+  const corpo = await resposta.json().catch(() => null);
+  const erro = corpo?.error;
+
+  const jaVerificado =
+    erro?.code === META_ERRO_CODIGO_JA_VERIFICADO.code &&
+    erro?.error_subcode === META_ERRO_CODIGO_JA_VERIFICADO.error_subcode;
+
+  if (jaVerificado) {
+    return;
+  }
+
+  throw new HttpError(400, erro?.error_user_msg || erro?.message || 'Nao foi possivel confirmar o codigo recebido.');
+}
 
 const SALVY_API_BASE = 'https://api.salvy.com.br/api/v2';
 
@@ -222,15 +257,18 @@ async function conectarExistente(options: Options) {
   }
 
   const phoneNumberId = String(options.payload?.phone_number_id ?? '').trim();
+  const wabaId = String(options.payload?.waba_id ?? '').trim();
   const code = String(options.payload?.code ?? '').trim();
 
-  if (!phoneNumberId || !code) {
+  if (!phoneNumberId || !wabaId || !code) {
     throw new HttpError(400, 'Nao foi possivel identificar o numero conectado.');
   }
 
   const tokenDaSessao = await trocarCodigoPorToken(options, code);
 
-  await chamarGraphApi(`/${phoneNumberId}/subscribed_apps`, tokenDaSessao, {
+  /* subscribed_apps existe na WABA, nao no numero - assinar no ID errado
+     sempre volta "does not support this operation", mesmo com o token certo. */
+  await chamarGraphApi(`/${wabaId}/subscribed_apps`, tokenDaSessao, {
     method: 'POST',
   });
 
@@ -306,7 +344,7 @@ async function iniciarProvisionamento(options: Options) {
     method: 'POST',
     body: JSON.stringify({
       areaCode,
-      name: `${nomeEmpresa} - ${membro.nome || 'sem nome'}`,
+      name: nomeEmpresa,
     }),
   });
 
@@ -394,19 +432,17 @@ async function verificarCodigo(options: Options) {
     return { status: 'aguardando_codigo' as const, telefone: provisionamento.telefone };
   }
 
-  await chamarGraphApi(`/${provisionamento.phone_number_id}/verify_code`, options.metaSystemUserToken, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: codigo }),
-  });
+  await verificarCodigoNaMeta(provisionamento.phone_number_id, codigo, options.metaSystemUserToken);
 
+  // idempotente - registrar de novo um numero ja registrado so confirma, nao da erro
   await chamarGraphApi(`/${provisionamento.phone_number_id}/register`, options.metaSystemUserToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', pin: options.metaRegisterPin }),
   });
 
-  await chamarGraphApi(`/${provisionamento.phone_number_id}/subscribed_apps`, options.metaSystemUserToken, {
+  // subscribed_apps existe na WABA, nao no numero de telefone
+  await chamarGraphApi(`/${provisionamento.waba_id}/subscribed_apps`, options.metaSystemUserToken, {
     method: 'POST',
   });
 
