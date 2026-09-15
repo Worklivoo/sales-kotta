@@ -2,7 +2,7 @@
    Quem chega sem sessao vai para a central (kotta-login), e o Sair daqui
    desloga la tambem. O contrato de volta esta em docs/hub-login-handoff.md. */
 
-export const HUB_LOGIN_URL = (import.meta.env.VITE_HUB_LOGIN_URL as string | undefined) || 'https://kotta-login.vercel.app';
+export const HUB_LOGIN_URL = (import.meta.env.VITE_HUB_LOGIN_URL as string | undefined) || 'https://kotta.worklivoo.com';
 
 /* Rodando na maquina (npm run dev) continua a tela de login local, para nao
    depender da central publicada durante o desenvolvimento. */
