@@ -344,6 +344,17 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
      trava so cai sozinha depois de ESPERA_MAXIMA_RESPOSTA_MS, para uma
      mensagem que nunca gera resposta nao prender a conversa para sempre. */
   const campoTravado = enviando || Boolean(novaPendente) || aguardandoResposta;
+  /* O balao pontilhado e so ate a mensagem do lead ser gravada. Assim que ela
+     aparece na conversa, o rascunho some (senao a mesma mensagem fica
+     duplicada por alguns segundos); a trava continua ate a IA responder. */
+  const leadJaGravado = Boolean(
+    respostaPendente &&
+      mensagens.some(
+        (mensagem) =>
+          (mensagem.origem || '').toUpperCase() === 'LEAD' &&
+          new Date(mensagem.created_at).getTime() >= respostaPendente.enviadoEm - 5000,
+      ),
+  );
   const conversaAberta = rascunhoNovo || Boolean(atendimentoSelecionado);
   const podeAbrirCotacao =
     atendimentoSelecionado?.numero_ticket && empresaInfo &&
@@ -646,7 +657,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                       </div>
                     ) : null}
 
-                    {respostaPendente?.texto ? (
+                    {respostaPendente?.texto && !leadJaGravado ? (
                       <div className="rounded-panel border border-dashed border-line bg-card px-4 py-3.5">
                         <div
                           className={`${messageHtmlClassName} opacity-60`}
