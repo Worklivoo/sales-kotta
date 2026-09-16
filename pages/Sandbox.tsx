@@ -427,7 +427,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                   return (
                     <div
                       key={item.atendimento_id}
-                      className={`group flex items-start gap-2 rounded-tile border px-3.5 py-3 transition-all ${
+                      className={`group relative flex items-start gap-2 rounded-tile border px-3.5 py-3 transition-all ${
                         ativo ? 'border-ink/15 bg-paper' : 'border-line-soft bg-card hover:border-ink/15 hover:bg-paper'
                       }`}
                       style={{ transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
@@ -442,7 +442,10 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                           <h3 className="line-clamp-1 text-[13px] leading-5 text-ink" style={{ fontWeight: 700 }}>
                             {item.assunto || 'Sem assunto'}
                           </h3>
-                          <span className="shrink-0 whitespace-nowrap text-[10.5px] text-muted-soft" style={{ fontWeight: 600 }}>
+                          <span
+                            className="shrink-0 whitespace-nowrap text-[10.5px] text-muted-soft transition-opacity xl:group-hover:opacity-0"
+                            style={{ fontWeight: 600 }}
+                          >
                             {formatDateTime(item.updated_at)}
                           </span>
                         </div>
@@ -465,7 +468,9 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                         type="button"
                         onClick={() => handleExcluir(item.atendimento_id)}
                         disabled={excluindo}
-                        className="shrink-0 rounded-full p-1.5 text-muted-soft opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 disabled:opacity-50 xl:opacity-0 xl:group-hover:opacity-100"
+                        /* No desktop a lixeira flutua sobre a data (so aparece no hover), para
+                           nao reservar uma coluna vazia que empurrava data e numero para o meio. */
+                        className="shrink-0 rounded-full p-1.5 text-muted-soft opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 disabled:opacity-50 xl:absolute xl:right-2 xl:top-2 xl:opacity-0 xl:group-hover:opacity-100"
                         title="Excluir conversa de teste"
                         aria-label="Excluir conversa de teste"
                       >
