@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { PilulaPendente } from '../../components/StatusConfiguracao';
+import { avisarConfiguracaoAlterada } from '../../lib/pendenciasConfiguracao';
 
 interface KnowledgeItem {
   item_id: string;
@@ -295,6 +297,11 @@ const BaseConhecimentoTab: React.FC = () => {
   };
 
   const isLoading = isLoadingCompanyId || isLoadingItems;
+  const semPerguntas = !isLoading && items.length === 0;
+
+  useEffect(() => {
+    if (!isLoading) avisarConfiguracaoAlterada();
+  }, [isLoading, semPerguntas]);
 
   return (
     <div className="space-y-5">
@@ -306,7 +313,10 @@ const BaseConhecimentoTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-ink">Base de Conhecimento</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-ink">Base de Conhecimento</h2>
+                <PilulaPendente pendente={semPerguntas} />
+              </div>
               <p className="max-w-2xl text-sm leading-6 text-muted">
                 Cadastre perguntas e respostas frequentes (prazo de entrega, pagamento, garantia,
                 etc). Durante uma cotação, se o lead perguntar algo que bata com uma dessas

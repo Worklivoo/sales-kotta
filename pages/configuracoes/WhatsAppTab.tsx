@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Camera, Check, Link2, Loader2, MessageCircle, Pencil, Plus, Save, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { apiUrl } from '../../lib/apiBase';
+import { avisarConfiguracaoAlterada } from '../../lib/pendenciasConfiguracao';
 
 declare global {
   interface Window {
@@ -138,6 +139,10 @@ const WhatsAppTab: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const [etapa, setEtapa] = useState<EtapaProvisionamento>('nao_iniciado');
+
+  useEffect(() => {
+    if (!isLoading) avisarConfiguracaoAlterada();
+  }, [isLoading, conectado]);
   const [ddds, setDdds] = useState<number[]>([]);
   const [dddSelecionado, setDddSelecionado] = useState<number | null>(null);
   const [telefoneEmAndamento, setTelefoneEmAndamento] = useState<string | null>(null);

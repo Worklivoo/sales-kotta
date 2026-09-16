@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlarmClock, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { PilulaPendente } from '../../components/StatusConfiguracao';
+import { avisarConfiguracaoAlterada, followupConfigurado } from '../../lib/pendenciasConfiguracao';
 import { FOLLOWUP_TEMPLATES, buscarTemplate, renderizarTemplate } from '../../lib/followupTemplates';
 
 /* Teto duro. A RPC sales_v2_followup_registrar recusa a partir da quarta
@@ -111,6 +113,12 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
   const [isEditando, setIsEditando] = useState(false);
   /* Ultima versao gravada no banco: e para ela que o Cancelar volta. */
   const [configSalva, setConfigSalva] = useState<FollowupConfig>(CONFIG_PADRAO);
+  /* Pendente ate a empresa salvar a configuracao uma vez (ligada ou nao). */
+  const [jaConfigurado, setJaConfigurado] = useState(true);
+
+  useEffect(() => {
+    if (!isLoading) avisarConfiguracaoAlterada();
+  }, [isLoading, jaConfigurado]);
 
   useEffect(() => {
     let ativo = true;
@@ -139,6 +147,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
           return;
         }
 
+        setJaConfigurado(followupConfigurado(data?.followup_config));
         const normalizada = normalizarConfig(data?.followup_config);
         const carregada = normalizada.tentativas.length
           ? normalizada
@@ -260,6 +269,7 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
       }
 
       setConfigSalva(config);
+      setJaConfigurado(true);
       setIsEditando(false);
       setSucesso('Follow-ups salvos com sucesso.');
     } catch (error: any) {
@@ -513,7 +523,10 @@ const FollowUpSection: React.FC<Props> = ({ empresaId, podeEditar }) => {
             <AlarmClock size={16} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-ink">Follow-ups</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink">Follow-ups</h3>
+              <PilulaPendente pendente={!isLoading && !jaConfigurado} />
+            </div>
             <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">{descricao}</p>
           </div>
         </div>

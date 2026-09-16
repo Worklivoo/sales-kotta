@@ -9,6 +9,8 @@ import NotificacoesTab from './configuracoes/NotificacoesTab';
 import ProdutosTab from './configuracoes/ProdutosTab';
 import WhatsAppTab from './configuracoes/WhatsAppTab';
 import { supabase } from '../lib/supabase';
+import { IconePendente } from '../components/StatusConfiguracao';
+import { usePendenciasConfiguracao, type AbaConfiguracao } from '../lib/pendenciasConfiguracao';
 
 type ConfigTabKey =
   | 'geral'
@@ -37,6 +39,12 @@ const ConfiguracoesPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ConfigTabKey>('geral');
   const [isAdminMember, setIsAdminMember] = useState(false);
   const [isAccessLoading, setIsAccessLoading] = useState(true);
+  const { pendencias, recarregar } = usePendenciasConfiguracao();
+
+  /* Trocar de aba reconfere: a aba anterior pode ter acabado de ser configurada. */
+  useEffect(() => {
+    recarregar();
+  }, [activeTab, recarregar]);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,12 +148,13 @@ const ConfiguracoesPage: React.FC = () => {
                 aria-controls={`configuracoes-tabpanel-${tab.key}`}
                 id={`configuracoes-tab-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex shrink-0 items-center rounded-pill px-4 py-2.5 text-[13px] transition-colors ${
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-pill px-4 py-2.5 text-[13px] transition-colors ${
                   isActive ? 'bg-lime text-ink' : 'bg-paper text-muted hover:text-ink'
                 }`}
                 style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
               >
                 {tab.label}
+                {pendencias[tab.key as AbaConfiguracao] ? <IconePendente size={12} /> : null}
               </button>
             );
           })}

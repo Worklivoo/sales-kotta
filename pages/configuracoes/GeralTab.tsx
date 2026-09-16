@@ -22,6 +22,8 @@ import {
 import { supabase } from '../../lib/supabase';
 import ImportarPlanilhaModal from '../../components/ImportarPlanilhaModal';
 import FollowUpSection from './FollowUpSection';
+import { PilulaPendente } from '../../components/StatusConfiguracao';
+import { avisarConfiguracaoAlterada } from '../../lib/pendenciasConfiguracao';
 
 type BudgetMode = 'AUTO' | 'SEMI';
 type QuoteRuleLevel = 'OBRIGATORIO' | 'DESEJAVEL';
@@ -562,6 +564,10 @@ const GeralTab: React.FC = () => {
       ? (companyPlan.integracao_clientes.url as string).trim()
       : '') || '';
   const hasCompanyClientSourceConfigured = Boolean(companyClientSourceLink) || Boolean(companyPlan?.integracao_clientes?.tipo);
+
+  useEffect(() => {
+    if (companyPlan && !isCompanyPlanLoading) avisarConfiguracaoAlterada();
+  }, [companyPlan, isCompanyPlanLoading]);
   const companyClientSourceTipo =
     typeof companyPlan?.integracao_clientes?.tipo === 'string'
       ? (companyPlan.integracao_clientes.tipo as string)
@@ -598,6 +604,10 @@ const GeralTab: React.FC = () => {
     [visibleCompanyQuoteRules],
   );
   const quoteRulesPreview = activeVisibleCompanyQuoteRules.slice(0, 3);
+  /* Pendente so antes de a empresa ter carregado: sem isso a pilula piscaria
+     vermelha em toda abertura da aba. */
+  const planoCarregado = Boolean(companyPlan) && !isCompanyPlanLoading;
+  const regrasPendentes = planoCarregado && visibleCompanyQuoteRules.length === 0;
   const isEditingQuoteRule = Boolean(quoteRuleForm.originalName);
   const hasQuoteRulesChanges =
     JSON.stringify(serializeQuoteRules(sortQuoteRules(visibleCompanyQuoteRules))) !==
@@ -1363,7 +1373,10 @@ const GeralTab: React.FC = () => {
                     <ClipboardCheck size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-ink">Regras de Cotação</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-ink">Regras de Cotação</h3>
+                      <PilulaPendente pendente={regrasPendentes} />
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-muted">
                       Defina as informações obrigatórias e desejáveis que o KOTTA IA deve solicitar ao cliente antes de gerar qualquer cotação.
                     </p>
@@ -1588,7 +1601,10 @@ const GeralTab: React.FC = () => {
                     <Database size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Produtos</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Produtos</h3>
+                      <PilulaPendente pendente={Boolean(companyPlan) && !isCompanyPlanLoading && !hasCompanySourceConfigured} />
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-muted">
                       De onde o KOTTA IA busca os produtos da sua empresa.
                     </p>
@@ -1647,7 +1663,10 @@ const GeralTab: React.FC = () => {
                     <Database size={16} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Clientes</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-ink">Fonte de Dados - Clientes</h3>
+                      <PilulaPendente pendente={Boolean(companyPlan) && !isCompanyPlanLoading && !hasCompanyClientSourceConfigured} />
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-muted">
                       De onde o KOTTA IA reconhece quem está pedindo a cotação.
                     </p>

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { Pilula } from '../../components/StatusConfiguracao';
+import { avisarConfiguracaoAlterada } from '../../lib/pendenciasConfiguracao';
 import { apiUrl } from '../../lib/apiBase';
 
 interface CanalEmailConfig {
@@ -68,26 +70,6 @@ const hasAnyEmailConfig = (memberConfig?: MemberEmailConfigRecord | null) => {
       canalEmail?.smtp_ssl,
   );
 };
-
-/* Uma pilula so para os dois blocos: verde quando esta pronto, vermelha
-   enquanto falta. O vermelho e proposital - "pendente" tem que incomodar,
-   senao o cliente acha que terminou a configuracao e nao terminou. */
-const Pilula: React.FC<{ pronto: boolean; rotuloPronto?: string; rotuloPendente?: string }> = ({
-  pronto,
-  rotuloPronto = 'Configurado',
-  rotuloPendente = 'Pendente',
-}) => (
-  <span
-    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-      pronto
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-        : 'border-red-200 bg-red-50 text-red-600'
-    }`}
-  >
-    {pronto ? <Check size={12} /> : <AlertCircle size={12} />}
-    {pronto ? rotuloPronto : rotuloPendente}
-  </span>
-);
 
 const EmailTab: React.FC = () => {
   const [memberConfig, setMemberConfig] = useState<MemberEmailConfigRecord | null>(null);
@@ -188,6 +170,10 @@ const EmailTab: React.FC = () => {
   const mostrandoSenhaGuardada = senhaGuardada && emailConfigForm.smtp_senha === '';
 
   const encaminhamentoValidado = Boolean(encaminhamento.validado_em);
+
+  useEffect(() => {
+    if (!isLoadingConfig) avisarConfiguracaoAlterada();
+  }, [isLoadingConfig, encaminhamentoValidado, senhaGuardada]);
   const caixaDoTeste =
     memberConfig?.canal_email?.smtp_email?.trim() || '';
 

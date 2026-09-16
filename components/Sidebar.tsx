@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { LogOut, ChevronLeft, ChevronRight, FileText, Mail, MessageCircle, Settings, Bell, X, ArrowUpRight, CreditCard } from 'lucide-react';
+import { AlertCircle, LogOut, ChevronLeft, ChevronRight, FileText, Mail, MessageCircle, Settings, Bell, X, ArrowUpRight, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { usePendenciasConfiguracao } from '../lib/pendenciasConfiguracao';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -81,6 +82,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
   const visibleNavigationItems = navigationItems.filter((item) => !item.adminOnly || isAdminMember);
+  const { algumaPendente: configuracaoPendente, recarregar: recarregarPendencias } = usePendenciasConfiguracao();
+
+  /* Ao trocar de pagina reconfere, para a engrenagem refletir o que foi salvo. */
+  useEffect(() => {
+    recarregarPendencias();
+  }, [currentPath, recarregarPendencias]);
+
+  const PontoPendente = ({ path }: { path: string }) =>
+    path === '/configuracoes' && configuracaoPendente ? (
+      <span
+        className="absolute -right-1.5 -top-1.5 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-red-500 text-white ring-2 ring-ink"
+        title="Há configurações pendentes"
+        aria-label="Há configurações pendentes"
+      >
+        <AlertCircle size={11} strokeWidth={2.5} />
+      </span>
+    ) : null;
 
   const loadNotifications = useCallback(async () => {
     setIsLoadingNotifications(true);
@@ -516,7 +534,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                   }`}
                   style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
                 >
-                  <Icon size={22} className="shrink-0" strokeWidth={isActive ? 2.25 : 2} />
+                  <span className="relative inline-flex shrink-0">
+                    <Icon size={22} className="shrink-0" strokeWidth={isActive ? 2.25 : 2} />
+                    <PontoPendente path={item.path} />
+                  </span>
                   {!isCollapsed && (
                     <span
                       className="whitespace-nowrap overflow-hidden text-ellipsis animate-in fade-in slide-in-from-left-2 duration-200 text-[14px]"
@@ -655,7 +676,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               }`}
               style={{ transitionDuration: '.22s', transitionTimingFunction: EASE }}
             >
-              <Icon size={20} strokeWidth={isActive ? 2.25 : 2} />
+              <span className="relative inline-flex">
+                <Icon size={20} strokeWidth={isActive ? 2.25 : 2} />
+                <PontoPendente path={item.path} />
+              </span>
               <span className="text-[10.5px] leading-none" style={{ fontWeight: 700 }}>
                 {item.label}
               </span>

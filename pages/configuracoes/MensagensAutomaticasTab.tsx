@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { MessageSquareText, Save } from 'lucide-react';
+import { MessageSquareText, Pencil, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { PilulaPendente } from '../../components/StatusConfiguracao';
+import { avisarConfiguracaoAlterada, mensagemAutomaticaConfigurada } from '../../lib/pendenciasConfiguracao';
 
 interface CategoriaMensagem {
   ativo: boolean;
@@ -67,6 +69,16 @@ const MensagensAutomaticasTab: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  /* O que esta gravado no banco: e o que o resumo mostra e para onde o
+     Cancelar volta. */
+  const [mensagensSalvas, setMensagensSalvas] = useState<MensagensPorCategoria>(EMPTY_MENSAGENS);
+  const [isEditando, setIsEditando] = useState(false);
+
+  const pendente = !isLoading && !loadError && !mensagemAutomaticaConfigurada(mensagensSalvas);
+
+  useEffect(() => {
+    if (!isLoading) avisarConfiguracaoAlterada();
+  }, [isLoading, pendente]);
 
   useEffect(() => {
     let isMounted = true;
@@ -128,6 +140,7 @@ const MensagensAutomaticasTab: React.FC = () => {
           };
         });
         setMensagens(mesclado);
+        setMensagensSalvas(mesclado);
       } catch (error: any) {
         console.error('Erro ao carregar mensagens automáticas:', error);
 
@@ -205,6 +218,8 @@ const MensagensAutomaticasTab: React.FC = () => {
         throw error;
       }
 
+      setMensagensSalvas(mensagens);
+      setIsEditando(false);
       setSaveSuccess('Mensagens automáticas salvas com sucesso.');
     } catch (error: any) {
       console.error('Erro ao salvar mensagens automáticas:', error);
@@ -214,36 +229,56 @@ const MensagensAutomaticasTab: React.FC = () => {
     }
   };
 
+  const abrirEdicao = () => {
+    setMensagens(mensagensSalvas);
+    setSaveError(null);
+    setSaveSuccess(null);
+    setIsEditando(true);
+  };
+
+  const cancelarEdicao = () => {
+    setMensagens(mensagensSalvas);
+    setSaveError(null);
+    setIsEditando(false);
+  };
+
+  const descricao =
+    'Quando um lead manda uma mensagem que não é pedido de cotação (financeiro, dúvida técnica, reclamação, etc), o KOTTA IA não gera orçamento — só notifica seu time. Aqui você configura uma resposta automática opcional para cada categoria, que é enviada pro lead na hora (por e-mail ou WhatsApp, dependendo de onde ele mandou a mensagem), além da notificação interna que já acontece.';
+
   return (
     <div className="space-y-5">
       <section className="rounded-panel border border-line-soft bg-paper p-5 max-lg:p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
-            <MessageSquareText className="h-5 w-5" />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime text-ink">
+              <MessageSquareText className="h-5 w-5" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-ink">Mensagens Automáticas</h2>
+                <PilulaPendente pendente={pendente} />
+              </div>
+              <p className="max-w-2xl text-sm leading-6 text-muted">{descricao}</p>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold text-ink">Mensagens Automáticas</h2>
-            <p className="max-w-2xl text-sm leading-6 text-muted">
-              Quando um lead manda uma mensagem que não é pedido de cotação (financeiro, dúvida
-              técnica, reclamação, etc), o KOTTA IA não gera orçamento — só notifica seu time. Aqui você
-              configura uma resposta automática opcional para cada categoria, que é enviada pro
-              lead na hora (por e-mail ou WhatsApp, dependendo de onde ele mandou a mensagem),
-              além da notificação interna que já acontece.
-            </p>
-          </div>
+          {!isLoading && !loadError ? (
+            <button
+              type="button"
+              onClick={abrirEdicao}
+              className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-panel border border-line bg-card px-3 py-2 text-xs font-semibold text-ink transition-colors hover:border-ink/25"
+            >
+              <Pencil size={13} />
+              Editar
+            </button>
+          ) : null}
         </div>
       </section>
 
       {loadError ? (
         <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
           {loadError}
-        </div>
-      ) : null}
-
-      {saveError ? (
-        <div className="rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-          {saveError}
         </div>
       ) : null}
 
@@ -259,40 +294,24 @@ const MensagensAutomaticasTab: React.FC = () => {
         ) : (
           <div className="divide-y divide-line-soft">
             {CATEGORIAS.map((categoria) => {
-              const config = mensagens[categoria.key] || { ativo: false, mensagem: '' };
+              const config = mensagensSalvas[categoria.key] || { ativo: false, mensagem: '' };
+              const ativa = config.ativo && Boolean(config.mensagem.trim());
 
               return (
-                <div key={categoria.key} className="space-y-3 px-5 py-5 max-lg:px-4">
-                  <div className="flex items-start justify-between gap-4 max-lg:flex-wrap">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-ink">{categoria.titulo}</p>
-                      <p className="text-sm leading-6 text-muted">{categoria.descricao}</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={config.ativo}
-                      onClick={() => handleToggle(categoria.key)}
-                      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
-                        config.ativo ? 'bg-lime' : 'bg-stone'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-pill bg-card shadow-sm transition-transform ${
-                          config.ativo ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
+                <div key={categoria.key} className="flex items-start justify-between gap-4 px-5 py-4 max-lg:px-4">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-ink">{categoria.titulo}</p>
+                    <p className="line-clamp-2 text-sm leading-6 text-muted">
+                      {ativa ? config.mensagem : 'Sem resposta automática.'}
+                    </p>
                   </div>
-
-                  <textarea
-                    value={config.mensagem}
-                    onChange={(event) => handleMensagemChange(categoria.key, event.target.value)}
-                    rows={3}
-                    className="w-full resize-none rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
-                    placeholder={categoria.placeholder}
-                  />
+                  <span
+                    className={`shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-semibold ${
+                      ativa ? 'bg-lime text-ink' : 'bg-stone text-muted'
+                    }`}
+                  >
+                    {ativa ? 'Ativa' : 'Desativada'}
+                  </span>
                 </div>
               );
             })}
@@ -300,17 +319,100 @@ const MensagensAutomaticasTab: React.FC = () => {
         )}
       </section>
 
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving || isLoading}
-          className="inline-flex items-center gap-2 rounded-panel bg-lime px-5 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Save size={16} />
-          {isSaving ? 'Salvando...' : 'Salvar mensagens'}
-        </button>
-      </div>
+      {isEditando ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] px-4 py-6 backdrop-blur-sm">
+          <div className="absolute inset-0" aria-hidden="true" onClick={cancelarEdicao} />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mensagens-modal-title"
+            className="relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-card border border-line-soft bg-card shadow-[0_30px_90px_rgba(15,23,42,0.18)]"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line-soft px-6 py-5 max-lg:px-4 max-lg:py-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-panel bg-lime/20 text-ink">
+                  <MessageSquareText size={18} />
+                </div>
+                <div>
+                  <h2 id="mensagens-modal-title" className="text-base font-semibold tracking-tight text-ink">
+                    Mensagens Automáticas
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
+                    Ative as categorias que devem receber resposta automática e escreva o texto de cada uma.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={cancelarEdicao}
+                  disabled={isSaving}
+                  className="rounded-panel border border-line bg-card px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-2 rounded-panel bg-lime px-4 py-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {isSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+
+            {saveError ? (
+              <div className="border-b border-red-100 bg-red-50 px-6 py-4 text-sm font-medium text-red-600">{saveError}</div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 divide-y divide-line-soft overflow-y-auto bg-card">
+              {CATEGORIAS.map((categoria) => {
+                const config = mensagens[categoria.key] || { ativo: false, mensagem: '' };
+
+                return (
+                  <div key={categoria.key} className="space-y-3 px-6 py-5 max-lg:px-4">
+                    <div className="flex items-start justify-between gap-4 max-lg:flex-wrap">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-ink">{categoria.titulo}</p>
+                        <p className="text-sm leading-6 text-muted">{categoria.descricao}</p>
+                      </div>
+
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={config.ativo}
+                        aria-label={categoria.titulo}
+                        onClick={() => handleToggle(categoria.key)}
+                        className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-pill transition-colors ${
+                          config.ativo ? 'bg-lime' : 'bg-stone'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-pill bg-card shadow-sm transition-transform ${
+                            config.ativo ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <textarea
+                      value={config.mensagem}
+                      onChange={(event) => handleMensagemChange(categoria.key, event.target.value)}
+                      rows={3}
+                      className="w-full resize-none rounded-panel border border-line bg-paper px-4 py-3 text-sm font-medium text-ink outline-none transition-colors focus:border-ink/25"
+                      placeholder={categoria.placeholder}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
