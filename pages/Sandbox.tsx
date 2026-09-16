@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronRight,
-  ExternalLink,
   FlaskConical,
   Hash,
   Loader2,
@@ -356,9 +355,6 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
       ),
   );
   const conversaAberta = rascunhoNovo || Boolean(atendimentoSelecionado);
-  const podeAbrirCotacao =
-    atendimentoSelecionado?.numero_ticket && empresaInfo &&
-    ['COTACAO', 'PEDIDO_COMPRA'].includes(atendimentoSelecionado.categoria || '');
 
   return (
     <div className="h-full w-full font-sans">
@@ -537,23 +533,6 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                           <Tag size={11} />
                           {formatEnumLabel(atendimentoSelecionado.status)}
                         </span>
-                        {podeAbrirCotacao ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onNavigate(
-                                `/cotacao/${encodeURIComponent(empresaInfo!.empresa_id)}/${encodeURIComponent(
-                                  String(atendimentoSelecionado.numero_ticket),
-                                )}`,
-                              )
-                            }
-                            className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-2.5 py-1 text-[10.5px] text-muted hover:text-ink"
-                            style={{ fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}
-                          >
-                            <ExternalLink size={11} />
-                            Ver cotação
-                          </button>
-                        ) : null}
                       </div>
                       <h2 className="mt-2.5 text-[19px] text-ink" style={{ fontWeight: 800, letterSpacing: '-.01em' }}>
                         {atendimentoSelecionado.assunto || 'Sem assunto'}
