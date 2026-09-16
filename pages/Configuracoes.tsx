@@ -154,7 +154,7 @@ const ConfiguracoesPage: React.FC = () => {
                 style={{ fontWeight: 700, transitionDuration: '.22s', transitionTimingFunction: 'var(--ease)' }}
               >
                 {tab.label}
-                {pendencias[tab.key as AbaConfiguracao] ? <IconePendente size={12} /> : null}
+                {pendencias[tab.key as AbaConfiguracao] ? <IconePendente size={16} className="p-0.5" /> : null}
               </button>
             );
           })}

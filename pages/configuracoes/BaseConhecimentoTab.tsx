@@ -394,12 +394,23 @@ const BaseConhecimentoTab: React.FC = () => {
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
+                  {/* Mesma chave de "Modo do Orçamento" na aba Geral. */}
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={item.ativo}
+                    aria-label={item.ativo ? `Desativar pergunta "${item.pergunta}"` : `Ativar pergunta "${item.pergunta}"`}
+                    title={item.ativo ? 'Ativa' : 'Inativa'}
                     onClick={() => handleToggleActive(item)}
-                    className="rounded-tile border border-line px-3 py-2 text-xs font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
+                    className={`mr-1 flex h-6 w-11 items-center rounded-pill px-1 transition-colors ${
+                      item.ativo ? 'bg-lime' : 'bg-stone'
+                    }`}
                   >
-                    {item.ativo ? 'Desativar' : 'Ativar'}
+                    <div
+                      className={`h-4 w-4 rounded-pill bg-card shadow-sm transition-transform ${
+                        item.ativo ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
                   <button
                     type="button"
