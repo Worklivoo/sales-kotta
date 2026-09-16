@@ -16,6 +16,7 @@ import {
 import MelhorarResposta from '../components/feedback/MelhorarResposta';
 import { messageHtmlClassName, sanitizeHtmlContent, stripAttachmentAnalysisFromContent } from '../lib/htmlContent';
 import { supabase } from '../lib/supabase';
+import { apiUrl } from '../lib/apiBase';
 
 /* "Testar atendimento": o cliente escreve como se fosse um lead mandando
    e-mail para a propria empresa e acompanha a IA respondendo. A mensagem roda
@@ -130,7 +131,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
     }
 
     const query = options.params ? `?${new URLSearchParams(options.params).toString()}` : '';
-    const response = await fetch(`/api/sandbox/${acao}${query}`, {
+    const response = await fetch(apiUrl(`/api/sandbox/${acao}${query}`), {
       method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, Building2, Lock, Mail, Phone, ShieldCheck, User2 } from 'lucide-react';
+import { apiUrl } from '../lib/apiBase';
 
 const ACCESS_PASSWORD = import.meta.env.VITE_REGISTER_ACCESS_PASSWORD || '';
 
@@ -138,7 +139,7 @@ const RegisterPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/register-company', {
+      const response = await fetch(apiUrl('/api/register-company'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

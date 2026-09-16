@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../../server/createMemberService.js';
+import { aplicarCors } from '../../server/cors.js';
 import {
   sandboxObterMinhaEmpresaService,
   sandboxListarAtendimentosService,
@@ -84,6 +85,8 @@ const ACOES: Record<string, Acao> = {
 };
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
+  if (aplicarCors(request, response)) return;
+
   const nomeAcao = queryParam(request.query.acao);
   const acao = ACOES[nomeAcao];
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, MoreVertical, Plus, User, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { apiUrl } from '../../lib/apiBase';
 
 interface TeamMemberRecord {
   membro_id: string;
@@ -427,7 +428,7 @@ const MembrosTab: React.FC = () => {
 
   const executeMemberAction = async (payload: Record<string, unknown>) => {
     const accessToken = await getSessionAccessToken();
-    const response = await fetch('/api/manage-member', {
+    const response = await fetch(apiUrl('/api/manage-member'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -672,7 +673,7 @@ const MembrosTab: React.FC = () => {
         },
       });
 
-      const response = await fetch('/api/create-member', {
+      const response = await fetch(apiUrl('/api/create-member'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

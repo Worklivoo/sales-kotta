@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Mail, Pencil, Save, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { apiUrl } from '../../lib/apiBase';
 
 interface CanalEmailConfig {
   email_integracao?: string | null;
@@ -204,7 +205,7 @@ const EmailTab: React.FC = () => {
       throw new Error('Sua sessão expirou. Entre de novo para continuar.');
     }
 
-    const resposta = await fetch('/api/verificar-encaminhamento', {
+    const resposta = await fetch(apiUrl('/api/verificar-encaminhamento'), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -434,7 +435,7 @@ const EmailTab: React.FC = () => {
 
       // valida e salva no servidor: a senha vai para o cofre, nunca para
       // a tabela de membros - qualquer colega da empresa a leria de la
-      const validationResponse = await fetch('/api/smtp-config', {
+      const validationResponse = await fetch(apiUrl('/api/smtp-config'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

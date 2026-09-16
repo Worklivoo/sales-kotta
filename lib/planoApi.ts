@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { apiUrl } from './apiBase';
 
 export class PlanoApiError extends Error {}
 
@@ -22,7 +23,7 @@ const getSessionAccessToken = async () => {
 const chamarApi = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const accessToken = await getSessionAccessToken();
 
-  const resposta = await fetch(path, {
+  const resposta = await fetch(apiUrl(path), {
     ...init,
     headers: {
       'Content-Type': 'application/json',

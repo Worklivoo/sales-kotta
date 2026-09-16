@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { HttpError } from '../server/createMemberService.js';
 import { getWhatsappPerfilService, salvarWhatsappPerfilService } from '../server/whatsappPerfilService.js';
+import { aplicarCors } from '../server/cors.js';
 
 const getBearerToken = (authorizationHeader?: string) => {
   if (!authorizationHeader?.startsWith('Bearer ')) {
@@ -20,6 +21,8 @@ const buildBaseOptions = (request: VercelRequest) => ({
 });
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
+  if (aplicarCors(request, response)) return;
+
   try {
     if (request.method === 'GET') {
       const resultado = await getWhatsappPerfilService(buildBaseOptions(request));

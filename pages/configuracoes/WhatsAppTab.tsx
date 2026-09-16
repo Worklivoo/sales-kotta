@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Camera, Check, Link2, Loader2, MessageCircle, Pencil, Plus, Save, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { apiUrl } from '../../lib/apiBase';
 
 declare global {
   interface Window {
@@ -205,7 +206,7 @@ const WhatsAppTab: React.FC = () => {
       throw new Error('Sua sessão expirou. Entre de novo para continuar.');
     }
 
-    const resposta = await fetch('/api/whatsapp-perfil', {
+    const resposta = await fetch(apiUrl('/api/whatsapp-perfil'), {
       method: metodo,
       headers: {
         'content-type': 'application/json',
@@ -232,7 +233,7 @@ const WhatsAppTab: React.FC = () => {
       throw new Error('Sua sessão expirou. Entre de novo para continuar.');
     }
 
-    const resposta = await fetch('/api/whatsapp-provisionamento', {
+    const resposta = await fetch(apiUrl('/api/whatsapp-provisionamento'), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

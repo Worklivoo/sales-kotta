@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { lerCsv, type PlanilhaLida } from '../lib/csv';
 import { supabase } from '../lib/supabase';
+import { apiUrl } from '../lib/apiBase';
 
 /* O catalogo de campos vem do MESMO arquivo que o servidor usa. Manter
    uma copia aqui era garantia de divergir no primeiro campo novo. */
@@ -170,7 +171,7 @@ const ImportarPlanilhaModal: React.FC<Props> = ({ tipo, aberto, aoFechar, aoConc
       throw new Error('Sua sessão expirou. Entre novamente para continuar.');
     }
 
-    const resposta = await fetch('/api/import-csv', {
+    const resposta = await fetch(apiUrl('/api/import-csv'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(corpo),

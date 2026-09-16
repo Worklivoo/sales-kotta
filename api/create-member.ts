@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createMemberService, HttpError } from '../server/createMemberService.js';
+import { aplicarCors } from '../server/cors.js';
 
 const getBearerToken = (authorizationHeader?: string) => {
   if (!authorizationHeader?.startsWith('Bearer ')) {
@@ -22,6 +23,8 @@ const maskSecret = (value: string | null | undefined) => {
 };
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
+  if (aplicarCors(request, response)) return;
+
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
     return response.status(405).json({ error: 'Metodo nao permitido.' });
