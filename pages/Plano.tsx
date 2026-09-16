@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { avisarConfiguracaoAlterada } from '../lib/pendenciasConfiguracao';
 import {
   cancelarPlano,
   fetchCatalogoPlanos,
@@ -94,6 +95,8 @@ const PlanoPage: React.FC = () => {
 
       setConsumo(consumoResposta);
       setCatalogo(catalogoResposta.planos);
+      // Atualiza o icone de pendente da aba Plano no menu (pagou, assinou, resgatou teste).
+      avisarConfiguracaoAlterada();
 
       /* Assinou por Pix e ainda nao pagou a primeira cobranca: reabre o QR Code
          a cada carregamento, ate o pagamento cair. */

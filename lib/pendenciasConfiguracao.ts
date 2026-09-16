@@ -13,7 +13,7 @@ export type AbaConfiguracao =
   | 'conhecimento'
   | 'mensagens_automaticas';
 
-export type Pendencias = Record<AbaConfiguracao, boolean>;
+export type Pendencias = Record<AbaConfiguracao, boolean> & { plano: boolean };
 
 const SEM_PENDENCIAS: Pendencias = {
   geral: false,
@@ -22,6 +22,7 @@ const SEM_PENDENCIAS: Pendencias = {
   notificacoes: false,
   conhecimento: false,
   mensagens_automaticas: false,
+  plano: false,
 };
 
 const EVENTO = 'kotta:configuracao-alterada';
@@ -66,6 +67,24 @@ export const mensagemAutomaticaConfigurada = (mensagens: unknown) => {
   );
 };
 
+/* Plano em dia = assinatura paga (plano_status ATIVO) ou teste gratis ainda
+   valendo. Todo o resto pede atencao: sem plano, teste vencido, primeiro Pix
+   ainda nao pago (plano_status nulo), pagamento em atraso ou cancelado. */
+export const planoEmDia = (empresa: {
+  plano_status?: string | null;
+  asaas_subscription_id?: string | null;
+  cliente_status?: string | null;
+  data_final_trial?: string | null;
+} | null | undefined) => {
+  if (!empresa) return true;
+  if (empresa.asaas_subscription_id && empresa.plano_status === 'ATIVO') return true;
+  return (
+    empresa.cliente_status === 'TRIAL' &&
+    Boolean(empresa.data_final_trial) &&
+    new Date(empresa.data_final_trial as string).getTime() > Date.now()
+  );
+};
+
 // ---- carga ----------------------------------------------------------------
 
 export const carregarPendencias = async (): Promise<Pendencias> => {
@@ -86,7 +105,7 @@ export const carregarPendencias = async (): Promise<Pendencias> => {
   const [{ data: empresa }, { count: perguntas }] = await Promise.all([
     supabase
       .from('sales_empresas_v2')
-      .select('regras_cotacao, followup_config, integracao_produtos, integracao_clientes, mensagens_automaticas_categoria')
+      .select('regras_cotacao, followup_config, integracao_produtos, integracao_clientes, mensagens_automaticas_categoria, plano_status, asaas_subscription_id, cliente_status, data_final_trial')
       .eq('empresa_id', membro.empresa_id)
       .maybeSingle(),
     supabase
@@ -112,6 +131,8 @@ export const carregarPendencias = async (): Promise<Pendencias> => {
     notificacoes: !notificacaoConfigurada(membro.preferencias_notificacao),
     conhecimento: (perguntas ?? 0) === 0,
     mensagens_automaticas: !mensagemAutomaticaConfigurada(empresa?.mensagens_automaticas_categoria),
+    /* A aba Plano so aparece para admin. */
+    plano: isAdmin && !planoEmDia(empresa),
   };
 };
 
@@ -130,7 +151,9 @@ export const usePendenciasConfiguracao = () => {
     return () => window.removeEventListener(EVENTO, recarregar);
   }, [recarregar]);
 
-  const algumaPendente = Object.values(pendencias).some(Boolean);
+  /* Engrenagem: so as abas das Configuracoes. O plano tem icone proprio. */
+  const { plano: planoPendente, ...abas } = pendencias;
+  const algumaPendente = Object.values(abas).some(Boolean);
 
-  return { pendencias, algumaPendente, recarregar };
+  return { pendencias, algumaPendente, planoPendente, recarregar };
 };

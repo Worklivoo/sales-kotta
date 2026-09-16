@@ -82,7 +82,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
   const visibleNavigationItems = navigationItems.filter((item) => !item.adminOnly || isAdminMember);
-  const { algumaPendente: configuracaoPendente, recarregar: recarregarPendencias } = usePendenciasConfiguracao();
+  const { algumaPendente: configuracaoPendente, planoPendente, recarregar: recarregarPendencias } = usePendenciasConfiguracao();
 
   /* Ao trocar de pagina reconfere, para a engrenagem refletir o que foi salvo. */
   useEffect(() => {
@@ -90,11 +90,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   }, [currentPath, recarregarPendencias]);
 
   const PontoPendente = ({ path }: { path: string }) =>
-    path === '/configuracoes' && configuracaoPendente ? (
+    (path === '/configuracoes' && configuracaoPendente) || (path === '/plano' && planoPendente) ? (
       <span
         className="absolute -right-1.5 -top-1.5 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-red-500 text-white ring-2 ring-ink"
-        title="Há configurações pendentes"
-        aria-label="Há configurações pendentes"
+        title={path === '/plano' ? 'Plano pendente' : 'Há configurações pendentes'}
+        aria-label={path === '/plano' ? 'Plano pendente' : 'Há configurações pendentes'}
       >
         <AlertCircle size={11} strokeWidth={2.5} />
       </span>
