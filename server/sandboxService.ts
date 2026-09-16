@@ -153,6 +153,9 @@ export const sandboxListarAtendimentosService = async ({ env, requesterAccessTok
     .eq('empresa_id', empresa.empresa_id)
     .eq('membro_id', membro.membro_id)
     .eq('sandbox', true)
+    // Conversas da auditoria interna da Worklivoo tambem sao sandbox, mas nao
+    // podem aparecer na tela "Testar atendimento" do cliente.
+    .not('email_lead', 'like', '%@auditoria-worklivoo.invalid')
     .order('updated_at', { ascending: false })
     .limit(50);
 
