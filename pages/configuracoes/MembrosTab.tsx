@@ -429,6 +429,7 @@ const MembrosTab: React.FC = () => {
   const executeMemberAction = async (payload: Record<string, unknown>) => {
     const accessToken = await getSessionAccessToken();
     const response = await fetch(apiUrl('/api/manage-member'), {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -674,6 +675,7 @@ const MembrosTab: React.FC = () => {
       });
 
       const response = await fetch(apiUrl('/api/create-member'), {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

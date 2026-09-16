@@ -132,6 +132,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
 
     const query = options.params ? `?${new URLSearchParams(options.params).toString()}` : '';
     const response = await fetch(apiUrl(`/api/sandbox/${acao}${query}`), {
+      cache: 'no-store',
       method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',

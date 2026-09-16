@@ -140,6 +140,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       const response = await fetch(apiUrl('/api/register-company'), {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

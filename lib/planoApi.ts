@@ -24,6 +24,7 @@ const chamarApi = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const accessToken = await getSessionAccessToken();
 
   const resposta = await fetch(apiUrl(path), {
+    cache: 'no-store',
     ...init,
     headers: {
       'Content-Type': 'application/json',

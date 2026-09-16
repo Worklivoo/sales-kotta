@@ -206,6 +206,7 @@ const EmailTab: React.FC = () => {
     }
 
     const resposta = await fetch(apiUrl('/api/verificar-encaminhamento'), {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -436,6 +437,7 @@ const EmailTab: React.FC = () => {
       // valida e salva no servidor: a senha vai para o cofre, nunca para
       // a tabela de membros - qualquer colega da empresa a leria de la
       const validationResponse = await fetch(apiUrl('/api/smtp-config'), {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

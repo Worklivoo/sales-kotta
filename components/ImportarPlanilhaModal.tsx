@@ -172,6 +172,7 @@ const ImportarPlanilhaModal: React.FC<Props> = ({ tipo, aberto, aoFechar, aoConc
     }
 
     const resposta = await fetch(apiUrl('/api/import-csv'), {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(corpo),

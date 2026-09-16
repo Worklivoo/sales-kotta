@@ -207,6 +207,7 @@ const WhatsAppTab: React.FC = () => {
     }
 
     const resposta = await fetch(apiUrl('/api/whatsapp-perfil'), {
+      cache: 'no-store',
       method: metodo,
       headers: {
         'content-type': 'application/json',
@@ -234,6 +235,7 @@ const WhatsAppTab: React.FC = () => {
     }
 
     const resposta = await fetch(apiUrl('/api/whatsapp-provisionamento'), {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         'content-type': 'application/json',
