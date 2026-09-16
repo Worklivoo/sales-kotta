@@ -209,11 +209,15 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
       const data = await chamarSandboxApi('mensagens', { params: { atendimento_id: atendimentoId } });
       const novas: SandboxMensagem[] = data.mensagens || [];
 
-      // Chegou mensagem que nao e do lead depois do envio: a resposta saiu.
+      // Chegou mensagem que nao e do lead DEPOIS do envio: a resposta saiu.
+      // Comparar com a hora do envio evita destravar com uma resposta antiga
+      // que so apareceu agora na tela.
       if (novas.length !== totalMensagensRef.current) {
         const ultima = novas[novas.length - 1];
         if (ultima && (ultima.origem || '').toUpperCase() !== 'LEAD') {
-          setRespostaPendente(null);
+          setRespostaPendente((pendente) =>
+            pendente && new Date(ultima.created_at).getTime() < pendente.enviadoEm - 2000 ? pendente : null,
+          );
         }
       }
 
@@ -261,7 +265,8 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
 
   const handleEnviar = async () => {
     const mensagemTexto = texto.trim();
-    if (!mensagemTexto || enviando) return;
+    // Uma mensagem por vez: so libera depois que a IA responder a anterior.
+    if (!mensagemTexto || enviando || novaPendente || respostaPendente) return;
 
     setEnviando(true);
     setErro(null);
@@ -335,6 +340,10 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
   }
 
   const aguardandoResposta = Boolean(respostaPendente);
+  /* Campo e botao ficam travados do envio ate a resposta da IA chegar. A
+     trava so cai sozinha depois de ESPERA_MAXIMA_RESPOSTA_MS, para uma
+     mensagem que nunca gera resposta nao prender a conversa para sempre. */
+  const campoTravado = enviando || Boolean(novaPendente) || aguardandoResposta;
   const conversaAberta = rascunhoNovo || Boolean(atendimentoSelecionado);
   const podeAbrirCotacao =
     atendimentoSelecionado?.numero_ticket && empresaInfo &&
@@ -674,7 +683,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                         }
                       }}
                       rows={3}
-                      disabled={Boolean(novaPendente)}
+                      disabled={campoTravado}
                       placeholder={rascunhoNovo ? 'Olá, gostaria de uma cotação de...' : 'Responder como o lead...'}
                       className="min-h-[68px] flex-1 resize-none rounded-[9px] border border-line bg-paper px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-muted-soft disabled:opacity-60"
                       maxLength={5000}
@@ -682,7 +691,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                     <button
                       type="button"
                       onClick={handleEnviar}
-                      disabled={enviando || !texto.trim() || Boolean(novaPendente)}
+                      disabled={campoTravado || !texto.trim()}
                       className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-[9px] bg-ink px-4 text-[13px] text-white hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-50"
                       style={{ fontWeight: 700 }}
                     >
