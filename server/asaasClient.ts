@@ -137,7 +137,7 @@ export const buscarClientePorCpfCnpj = async (
 
 export const criarCliente = async (
   config: AsaasClientConfig,
-  dados: { name: string; cpfCnpj: string; email?: string; mobilePhone?: string },
+  dados: { name: string; cpfCnpj: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean },
 ): Promise<AsaasCustomer> =>
   chamarAsaas<AsaasCustomer>(config, '/customers', {
     method: 'POST',
@@ -147,7 +147,7 @@ export const criarCliente = async (
 export const atualizarCliente = async (
   config: AsaasClientConfig,
   customerId: string,
-  dados: { name?: string; email?: string; mobilePhone?: string },
+  dados: { name?: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean },
 ): Promise<AsaasCustomer> =>
   chamarAsaas<AsaasCustomer>(config, `/customers/${encodeURIComponent(customerId)}`, {
     method: 'POST',
@@ -187,6 +187,29 @@ export const criarAssinaturaComCartao = async (
     method: 'POST',
     body: JSON.stringify({ billingType: 'CREDIT_CARD', ...dados }),
   });
+
+/* Padrao de Nota Fiscal aplicado em toda assinatura da conta (validado nas
+   assinaturas ja existentes no Asaas de producao: mesmo servico municipal,
+   emissao so na confirmacao do pagamento, sem retencao de imposto). */
+export const CONFIGURACAO_NOTA_FISCAL_PADRAO = {
+  municipalServiceId: '282549',
+  invoiceCreationPeriod: 'ON_PAYMENT_CONFIRMATION' as const,
+  deductions: 0,
+  taxes: {
+    retainIss: false,
+    iss: 0,
+  },
+};
+
+export const configurarNotaFiscalDaAssinatura = async (
+  config: AsaasClientConfig,
+  subscriptionId: string,
+): Promise<void> => {
+  await chamarAsaas(config, `/subscriptions/${encodeURIComponent(subscriptionId)}/invoiceSettings`, {
+    method: 'POST',
+    body: JSON.stringify(CONFIGURACAO_NOTA_FISCAL_PADRAO),
+  });
+};
 
 export const obterQrCodePix = async (
   config: AsaasClientConfig,

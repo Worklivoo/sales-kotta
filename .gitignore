@@ -29,3 +29,6 @@ dist-ssr
 .mcp.json
 .claude/
 supabase/.temp/
+
+.vercel
+.env*

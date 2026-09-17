@@ -14,6 +14,7 @@ import {
   criarAssinatura,
   criarAssinaturaComCartao,
   atualizarAssinatura,
+  configurarNotaFiscalDaAssinatura,
   listarCobrancasDaAssinatura,
   obterQrCodePix,
 } from './asaasClient.js';
@@ -203,10 +204,15 @@ export const planoAssinarService = async ({
   let asaasCustomerId = empresa?.asaas_customer_id as string | null;
 
   const dadosClienteAsaas = {
-    name: dadosCobranca.nome,
+    // Identifica no painel do Asaas (conta compartilhada com outros produtos
+    // da Worklivoo) de qual produto/cliente e essa cobranca.
+    name: `${dadosCobranca.nome.toUpperCase()} - Kotta Vendas`,
     cpfCnpj: dadosCobranca.cnpj,
     email: dadosCobranca.email,
     mobilePhone: dadosCobranca.celular,
+    // O Asaas nao deve notificar o cliente diretamente (email/SMS de cobranca,
+    // boleto, etc) - toda comunicacao com o cliente e feita pelo proprio Sales Kotta.
+    notificationDisabled: true,
   };
 
   if (asaasCustomerId) {
@@ -300,6 +306,8 @@ export const planoAssinarService = async ({
       },
     });
 
+    await configurarNotaFiscalDaAssinatura(asaasConfig, assinatura.id);
+
     const aprovado = assinatura.status === 'ACTIVE';
 
     atualizacaoEmpresa.asaas_subscription_id = assinatura.id;
@@ -355,6 +363,8 @@ export const planoAssinarService = async ({
       description: descricao,
       billingType: 'PIX',
     });
+
+    await configurarNotaFiscalDaAssinatura(asaasConfig, assinatura.id);
 
     atualizacaoEmpresa.asaas_subscription_id = assinatura.id;
     atualizacaoEmpresa.assinatura_periodo_fim = assinatura.nextDueDate;
