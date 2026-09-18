@@ -58,6 +58,17 @@ interface NovaConversaPendente {
 // na automacao e a execucao real e onde se investiga.
 const ESPERA_MAXIMA_RESPOSTA_MS = 4 * 60 * 1000;
 
+// Preferencia so deste navegador: aprovar sozinho o orcamento que parar em
+// "Aguardando aprovacao" (simula o modo automatico).
+const CHAVE_APROVAR_AUTOMATICO = 'kotta_sandbox_aprovar_automatico';
+const lerAprovarAutomatico = () => {
+  try {
+    return window.localStorage.getItem(CHAVE_APROVAR_AUTOMATICO) !== 'nao';
+  } catch {
+    return true;
+  }
+};
+
 const parseAnexos = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -118,6 +129,10 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
   const [enviando, setEnviando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [propostaPdfUrl, setPropostaPdfUrl] = useState<string | null>(null);
+  const [aprovarAutomatico, setAprovarAutomatico] = useState(lerAprovarAutomatico);
+  const [avisoAprovacao, setAvisoAprovacao] = useState<string | null>(null);
+  const aprovacoesDisparadas = useRef(new Set<string>());
 
   const atendimentoSelecionado = atendimentos.find((item) => item.atendimento_id === atendimentoId) || null;
 
@@ -222,6 +237,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
 
       totalMensagensRef.current = novas.length;
       setMensagens(novas);
+      setPropostaPdfUrl(data.proposta_pdf_url || null);
       if (!silencioso) setErro(null);
     } catch (error: any) {
       if (!silencioso) setErro(error?.message || 'Nao foi possivel carregar as mensagens.');
@@ -231,6 +247,8 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     totalMensagensRef.current = 0;
     setMensagens([]);
+    setPropostaPdfUrl(null);
+    setAvisoAprovacao(null);
     if (!atendimentoId) return;
     carregarMensagens();
     const interval = window.setInterval(() => carregarMensagens(true), 4000);
@@ -243,6 +261,38 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
     const timeout = window.setTimeout(() => setRespostaPendente(null), Math.max(restante, 0));
     return () => window.clearTimeout(timeout);
   }, [respostaPendente]);
+
+  /* Modo semiautomatico: a IA para em "Aguardando aprovacao" e, na vida real,
+     o vendedor aprova. No teste, com a opcao ligada, aprovamos sozinhos para a
+     proposta em PDF chegar na conversa (envio simulado). */
+  const statusSelecionado = atendimentos.find((item) => item.atendimento_id === atendimentoId)?.status || null;
+  useEffect(() => {
+    if (!atendimentoId || !aprovarAutomatico || statusSelecionado !== 'AGUARDANDO_APROVACAO') return;
+    if (aprovacoesDisparadas.current.has(atendimentoId)) return;
+    aprovacoesDisparadas.current.add(atendimentoId);
+
+    chamarSandboxApi('aprovar-orcamento', { method: 'POST', body: { atendimento_id: atendimentoId } })
+      .then((data) => {
+        if (data?.aprovado) {
+          setAvisoAprovacao('Orçamento aprovado automaticamente (simulando o modo automático). A proposta em PDF chega em instantes.');
+          setRespostaPendente({ texto: '', enviadoEm: Date.now() });
+        }
+      })
+      .catch((error: any) => {
+        aprovacoesDisparadas.current.delete(atendimentoId);
+        setErro(error?.message || 'Nao foi possivel aprovar o orcamento de teste.');
+      });
+  }, [atendimentoId, statusSelecionado, aprovarAutomatico]);
+
+  const alternarAprovarAutomatico = () => {
+    const proximo = !aprovarAutomatico;
+    setAprovarAutomatico(proximo);
+    try {
+      window.localStorage.setItem(CHAVE_APROVAR_AUTOMATICO, proximo ? 'sim' : 'nao');
+    } catch {
+      // sem localStorage (aba anonima etc.): vale so ate recarregar
+    }
+  };
 
   const handleNovaConversa = () => {
     setAtendimentoId(null);
@@ -355,6 +405,10 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
       ),
   );
   const conversaAberta = rascunhoNovo || Boolean(atendimentoSelecionado);
+  // A mensagem da proposta e salva sem anexo; o PDF vem do orcamento aprovado.
+  const mensagemDaProposta = propostaPdfUrl
+    ? [...mensagens].reverse().find((mensagem) => (mensagem.origem || '').toUpperCase() !== 'LEAD')?.mensagem_id || null
+    : null;
 
   return (
     <div className="h-full w-full font-sans">
@@ -369,6 +423,28 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
               conversas de teste não contam no seu plano.
             </p>
           </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={aprovarAutomatico}
+            onClick={alternarAprovarAutomatico}
+            className="flex max-w-sm items-center gap-3 rounded-tile border border-line bg-card px-3.5 py-2.5 text-left"
+            title="Na vida real, no modo semiautomático, o vendedor aprova o orçamento. No teste, aprovamos sozinhos para a proposta em PDF chegar."
+          >
+            <span
+              className={`relative h-5 w-9 shrink-0 rounded-pill transition-colors ${aprovarAutomatico ? 'bg-ink' : 'bg-stone'}`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${aprovarAutomatico ? 'left-[18px]' : 'left-0.5'}`}
+              />
+            </span>
+            <span className="text-[12px] leading-snug text-muted" style={{ fontWeight: 500 }}>
+              <span className="block text-ink" style={{ fontWeight: 700 }}>
+                Aprovar orçamento automaticamente
+              </span>
+              Simula o modo automático para a proposta em PDF chegar no teste.
+            </span>
+          </button>
         </section>
 
         {erro ? (
@@ -570,6 +646,9 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                     {mensagens.map((mensagem) => {
                       const origem = (mensagem.origem || '').toUpperCase();
                       const anexos = parseAnexos(mensagem.anexos);
+                      if (mensagem.mensagem_id === mensagemDaProposta && propostaPdfUrl && !anexos.includes(propostaPdfUrl)) {
+                        anexos.push(propostaPdfUrl);
+                      }
 
                       return (
                         <div key={mensagem.mensagem_id} className="rounded-panel border border-line-soft bg-card">
@@ -647,6 +726,12 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
                           className={`${messageHtmlClassName} opacity-60`}
                           dangerouslySetInnerHTML={{ __html: `<p>${escapeHtml(respostaPendente.texto)}</p>` }}
                         />
+                      </div>
+                    ) : null}
+
+                    {avisoAprovacao ? (
+                      <div className="rounded-tile border border-line bg-card px-4 py-3 text-[12px] text-muted" style={{ fontWeight: 600 }}>
+                        {avisoAprovacao}
                       </div>
                     ) : null}
 

@@ -13,6 +13,8 @@ import { HttpError } from './createMemberService.js';
    conta consumo do plano. */
 
 const TRIAGEM_EMAIL_TESTE_URL = 'https://primary-production-b86f1.up.railway.app/webhook/triagem-email-teste-v2';
+// Mesmo webhook do botao "Aprovar" do orcamento (components/OrcamentoEditorModal.tsx).
+const APROVAR_ORCAMENTO_URL = 'https://primary-production-b86f1.up.railway.app/webhook/aprovar-orcamento-v2';
 
 // .invalid e reservado (RFC 2606): nenhum e-mail para esse dominio e entregue,
 // entao mesmo que algum envio escapasse da trava, nao chegaria a ninguem.
@@ -184,7 +186,80 @@ export const sandboxListarMensagensService = async ({
     throw new HttpError(500, error.message);
   }
 
-  return { mensagens: data || [] };
+  // A mensagem da proposta e salva sem anexo; o PDF fica no orcamento.
+  const { data: orcamento } = await adminClient
+    .from('sales_orcamentos_v2')
+    .select('pdf_url, data_aprovacao')
+    .eq('atendimento_id', atendimento.atendimento_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    mensagens: data || [],
+    proposta_pdf_url: orcamento?.data_aprovacao && orcamento.pdf_url ? orcamento.pdf_url : null,
+  };
+};
+
+/* Simula o modo AUTOMATICO no teste: quando a IA para o orcamento em
+   "Aguardando aprovacao" (membro no modo semiautomatico), aprova como o
+   vendedor faria. So conversa de teste do proprio membro; o fluxo de
+   aprovacao trata atendimento sandbox como envio simulado e nunca manda para
+   o sistema externo do cliente (sales_v2_worker_buscar_contexto_aprovacao). */
+export const sandboxAprovarOrcamentoService = async ({
+  env,
+  requesterAccessToken,
+  atendimentoId,
+}: SandboxServiceOptions & { atendimentoId: string }) => {
+  const { adminClient, membro } = await resolverMembroDoRequester(env, requesterAccessToken);
+  const atendimento = await buscarAtendimentoDeTeste(adminClient, membro.membro_id, atendimentoId);
+
+  const { data: estado } = await adminClient
+    .from('sales_atendimentos_v2')
+    .select('status')
+    .eq('atendimento_id', atendimento.atendimento_id)
+    .eq('sandbox', true)
+    .maybeSingle();
+
+  if (estado?.status !== 'AGUARDANDO_APROVACAO') {
+    return { aprovado: false, motivo: 'A conversa nao esta aguardando aprovacao.' };
+  }
+
+  const { data: orcamento } = await adminClient
+    .from('sales_orcamentos_v2')
+    .select('orcamento_id, data_aprovacao')
+    .eq('atendimento_id', atendimento.atendimento_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!orcamento) {
+    return { aprovado: false, motivo: 'Ainda nao ha orcamento nesta conversa.' };
+  }
+  if (orcamento.data_aprovacao) {
+    return { aprovado: false, motivo: 'O orcamento ja foi aprovado.' };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(APROVAR_ORCAMENTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orcamento_id: orcamento.orcamento_id,
+        atendimento_id: atendimento.atendimento_id,
+        membro_id: membro.membro_id,
+      }),
+    });
+  } catch {
+    throw new HttpError(502, 'Nao foi possivel falar com a automacao de aprovacao agora.');
+  }
+
+  if (!response.ok) {
+    throw new HttpError(502, `A automacao de aprovacao recusou o pedido (status ${response.status}).`);
+  }
+
+  return { aprovado: true };
 };
 
 export const sandboxEnviarEmailService = async ({

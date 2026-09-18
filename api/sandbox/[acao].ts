@@ -7,6 +7,7 @@ import {
   sandboxListarMensagensService,
   sandboxEnviarEmailService,
   sandboxExcluirAtendimentoService,
+  sandboxAprovarOrcamentoService,
 } from '../../server/sandboxService.js';
 
 /* Todas as acoes do sandbox de testes numa unica Serverless Function, pelo
@@ -69,6 +70,16 @@ const ACOES: Record<string, Acao> = {
         requesterAccessToken,
         texto: request.body?.texto || '',
         assunto: request.body?.assunto || '',
+        atendimentoId: request.body?.atendimento_id || '',
+      }),
+  },
+  'aprovar-orcamento': {
+    metodo: 'POST',
+    erro: 'Nao foi possivel aprovar o orcamento de teste.',
+    executar: (request, requesterAccessToken) =>
+      sandboxAprovarOrcamentoService({
+        env: env(),
+        requesterAccessToken,
         atendimentoId: request.body?.atendimento_id || '',
       }),
   },
