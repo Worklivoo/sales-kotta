@@ -136,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       const { data, error } = await supabase
         .from('sales_notificacoes_v2')
-        .select('notificacao_id, tipo, titulo, descricao, atendimento_id, created_at, lida')
+        .select('notificacao_id, tipo, titulo, descricao, atendimento_id, created_at, lida, sales_atendimentos_v2(sandbox)')
         .eq('membro_id', memberRow.membro_id)
         .neq('tipo', 'ERRO_AUTOMACAO')
         .order('created_at', { ascending: false });
@@ -145,7 +145,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         throw error;
       }
 
-      const mappedNotifications: NotificationRecord[] = (data ?? []).map((item) => ({
+      // Conversas de teste ("Testar atendimento" e auditoria interna da
+      // Worklivoo) tem sandbox = true: nao entram nas notificacoes, como ja nao
+      // entram no kanban.
+      const deConversaReal = (data ?? []).filter((item) => {
+        const atendimento = item.sales_atendimentos_v2 as { sandbox?: boolean } | { sandbox?: boolean }[] | null;
+        const sandbox = Array.isArray(atendimento) ? atendimento[0]?.sandbox : atendimento?.sandbox;
+        return sandbox !== true;
+      });
+
+      const mappedNotifications: NotificationRecord[] = deConversaReal.map((item) => ({
         notificacao_id: item.notificacao_id,
         notificacao_tipo: item.tipo,
         notificacao_titulo: item.titulo,

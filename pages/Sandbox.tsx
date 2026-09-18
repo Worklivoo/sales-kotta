@@ -58,16 +58,6 @@ interface NovaConversaPendente {
 // na automacao e a execucao real e onde se investiga.
 const ESPERA_MAXIMA_RESPOSTA_MS = 4 * 60 * 1000;
 
-// Preferencia so deste navegador: aprovar sozinho o orcamento que parar em
-// "Aguardando aprovacao" (simula o modo automatico).
-const CHAVE_APROVAR_AUTOMATICO = 'kotta_sandbox_aprovar_automatico';
-const lerAprovarAutomatico = () => {
-  try {
-    return window.localStorage.getItem(CHAVE_APROVAR_AUTOMATICO) !== 'nao';
-  } catch {
-    return true;
-  }
-};
 
 const parseAnexos = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
@@ -130,7 +120,6 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [propostaPdfUrl, setPropostaPdfUrl] = useState<string | null>(null);
-  const [aprovarAutomatico, setAprovarAutomatico] = useState(lerAprovarAutomatico);
   const [avisoAprovacao, setAvisoAprovacao] = useState<string | null>(null);
   const aprovacoesDisparadas = useRef(new Set<string>());
 
@@ -263,18 +252,18 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
   }, [respostaPendente]);
 
   /* Modo semiautomatico: a IA para em "Aguardando aprovacao" e, na vida real,
-     o vendedor aprova. No teste, com a opcao ligada, aprovamos sozinhos para a
-     proposta em PDF chegar na conversa (envio simulado). */
+     o vendedor aprova. No teste aprovamos sempre sozinhos, para a proposta em
+     PDF chegar na conversa (envio simulado). */
   const statusSelecionado = atendimentos.find((item) => item.atendimento_id === atendimentoId)?.status || null;
   useEffect(() => {
-    if (!atendimentoId || !aprovarAutomatico || statusSelecionado !== 'AGUARDANDO_APROVACAO') return;
+    if (!atendimentoId || statusSelecionado !== 'AGUARDANDO_APROVACAO') return;
     if (aprovacoesDisparadas.current.has(atendimentoId)) return;
     aprovacoesDisparadas.current.add(atendimentoId);
 
     chamarSandboxApi('aprovar-orcamento', { method: 'POST', body: { atendimento_id: atendimentoId } })
       .then((data) => {
         if (data?.aprovado) {
-          setAvisoAprovacao('Orçamento aprovado automaticamente (simulando o modo automático). A proposta em PDF chega em instantes.');
+          setAvisoAprovacao('No teste, o orçamento é aprovado automaticamente (como no modo automático). A proposta em PDF chega em instantes.');
           setRespostaPendente({ texto: '', enviadoEm: Date.now() });
         }
       })
@@ -282,17 +271,7 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
         aprovacoesDisparadas.current.delete(atendimentoId);
         setErro(error?.message || 'Nao foi possivel aprovar o orcamento de teste.');
       });
-  }, [atendimentoId, statusSelecionado, aprovarAutomatico]);
-
-  const alternarAprovarAutomatico = () => {
-    const proximo = !aprovarAutomatico;
-    setAprovarAutomatico(proximo);
-    try {
-      window.localStorage.setItem(CHAVE_APROVAR_AUTOMATICO, proximo ? 'sim' : 'nao');
-    } catch {
-      // sem localStorage (aba anonima etc.): vale so ate recarregar
-    }
-  };
+  }, [atendimentoId, statusSelecionado]);
 
   const handleNovaConversa = () => {
     setAtendimentoId(null);
@@ -423,28 +402,6 @@ const SandboxPage: React.FC<SandboxPageProps> = ({ onNavigate }) => {
               conversas de teste não contam no seu plano.
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={aprovarAutomatico}
-            onClick={alternarAprovarAutomatico}
-            className="flex max-w-sm items-center gap-3 rounded-tile border border-line bg-card px-3.5 py-2.5 text-left"
-            title="Na vida real, no modo semiautomático, o vendedor aprova o orçamento. No teste, aprovamos sozinhos para a proposta em PDF chegar."
-          >
-            <span
-              className={`relative h-5 w-9 shrink-0 rounded-pill transition-colors ${aprovarAutomatico ? 'bg-ink' : 'bg-stone'}`}
-            >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${aprovarAutomatico ? 'left-[18px]' : 'left-0.5'}`}
-              />
-            </span>
-            <span className="text-[12px] leading-snug text-muted" style={{ fontWeight: 500 }}>
-              <span className="block text-ink" style={{ fontWeight: 700 }}>
-                Aprovar orçamento automaticamente
-              </span>
-              Simula o modo automático para a proposta em PDF chegar no teste.
-            </span>
-          </button>
         </section>
 
         {erro ? (
