@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { PERGUNTAS_PADRAO } from './perguntasPadrao';
 
 /* Um lugar so decide o que esta pendente nas Configuracoes. As pilulas de
    cada secao, os icones das abas e a engrenagem da barra lateral usam a
@@ -102,7 +103,7 @@ export const carregarPendencias = async (): Promise<Pendencias> => {
 
   if (!membro?.empresa_id) return SEM_PENDENCIAS;
 
-  const [{ data: empresa }, { count: perguntas }] = await Promise.all([
+  const [{ data: empresa }, { data: perguntas }] = await Promise.all([
     supabase
       .from('sales_empresas_v2')
       .select('regras_cotacao, followup_config, integracao_produtos, integracao_clientes, mensagens_automaticas_categoria, plano_status, asaas_subscription_id, cliente_status, data_final_trial')
@@ -110,7 +111,7 @@ export const carregarPendencias = async (): Promise<Pendencias> => {
       .maybeSingle(),
     supabase
       .from('sales_base_conhecimento_v2')
-      .select('item_id', { count: 'exact', head: true })
+      .select('codigo_padrao')
       .eq('empresa_id', membro.empresa_id),
   ]);
 
@@ -129,7 +130,12 @@ export const carregarPendencias = async (): Promise<Pendencias> => {
     email: !canalEmail.redirecionamento_validado_em || canalEmail.senha_configurada !== true,
     whatsapp: !canalWhatsapp.numero_meta_id,
     notificacoes: !notificacaoConfigurada(membro.preferencias_notificacao),
-    conhecimento: (perguntas ?? 0) === 0,
+    /* Pendente enquanto faltar responder alguma pergunta padrao (nao basta ter
+       uma pergunta qualquer cadastrada). */
+    conhecimento: (() => {
+      const respondidas = new Set((perguntas ?? []).map((p) => p.codigo_padrao).filter(Boolean));
+      return PERGUNTAS_PADRAO.some((p) => !respondidas.has(p.codigo));
+    })(),
     mensagens_automaticas: !mensagemAutomaticaConfigurada(empresa?.mensagens_automaticas_categoria),
     /* A aba Plano so aparece para admin. */
     plano: isAdmin && !planoEmDia(empresa),

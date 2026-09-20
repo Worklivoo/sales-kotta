@@ -3,6 +3,7 @@ import { BookOpen, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { PilulaPendente } from '../../components/StatusConfiguracao';
 import { avisarConfiguracaoAlterada } from '../../lib/pendenciasConfiguracao';
+import { PERGUNTAS_PADRAO, PerguntaPadrao } from '../../lib/perguntasPadrao';
 
 interface KnowledgeItem {
   item_id: string;
@@ -10,15 +11,22 @@ interface KnowledgeItem {
   resposta: string;
   ativo: boolean;
   created_at: string;
+  codigo_padrao: string | null;
 }
 
 interface ItemFormState {
   pergunta: string;
   resposta: string;
   ativo: boolean;
+  codigo_padrao: string | null;
 }
 
-const INITIAL_FORM: ItemFormState = { pergunta: '', resposta: '', ativo: true };
+const INITIAL_FORM: ItemFormState = {
+  pergunta: '',
+  resposta: '',
+  ativo: true,
+  codigo_padrao: null,
+};
 
 const BaseConhecimentoTab: React.FC = () => {
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -30,6 +38,7 @@ const BaseConhecimentoTab: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null);
+  const [sugestao, setSugestao] = useState<PerguntaPadrao | null>(null);
   const [form, setForm] = useState<ItemFormState>(INITIAL_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,8 +127,10 @@ const BaseConhecimentoTab: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('sales_base_conhecimento_v2')
-          .select('item_id, pergunta, resposta, ativo, created_at')
+          .select('item_id, pergunta, resposta, ativo, created_at, codigo_padrao')
           .eq('empresa_id', companyId)
+          // Inativas vao para o fim da lista; dentro de cada grupo, a mais nova primeiro.
+          .order('ativo', { ascending: false })
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -160,6 +171,7 @@ const BaseConhecimentoTab: React.FC = () => {
 
   const handleOpenCreateModal = () => {
     setEditingItem(null);
+    setSugestao(null);
     setForm(INITIAL_FORM);
     setFormError(null);
     setIsModalOpen(true);
@@ -167,7 +179,23 @@ const BaseConhecimentoTab: React.FC = () => {
 
   const handleOpenEditModal = (item: KnowledgeItem) => {
     setEditingItem(item);
-    setForm({ pergunta: item.pergunta, resposta: item.resposta, ativo: item.ativo });
+    setSugestao(PERGUNTAS_PADRAO.find((p) => p.codigo === item.codigo_padrao) ?? null);
+    setForm({
+      pergunta: item.pergunta,
+      resposta: item.resposta,
+      ativo: item.ativo,
+      codigo_padrao: item.codigo_padrao,
+    });
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  // Sugestao: abre o mesmo formulario com a pergunta preenchida. A linha no banco
+  // so nasce quando ele salva a resposta.
+  const handleOpenSugestao = (padrao: PerguntaPadrao) => {
+    setEditingItem(null);
+    setSugestao(padrao);
+    setForm({ pergunta: padrao.pergunta, resposta: '', ativo: true, codigo_padrao: padrao.codigo });
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -179,6 +207,7 @@ const BaseConhecimentoTab: React.FC = () => {
 
     setIsModalOpen(false);
     setEditingItem(null);
+    setSugestao(null);
     setForm(INITIAL_FORM);
     setFormError(null);
   };
@@ -204,7 +233,7 @@ const BaseConhecimentoTab: React.FC = () => {
       if (editingItem) {
         const { error } = await supabase
           .from('sales_base_conhecimento_v2')
-          .update({ pergunta, resposta, ativo: form.ativo })
+          .update({ pergunta, resposta, ativo: form.ativo, codigo_padrao: form.codigo_padrao })
           .eq('item_id', editingItem.item_id);
 
         if (error) {
@@ -215,7 +244,13 @@ const BaseConhecimentoTab: React.FC = () => {
       } else {
         const { error } = await supabase
           .from('sales_base_conhecimento_v2')
-          .insert({ empresa_id: companyId, pergunta, resposta, ativo: form.ativo });
+          .insert({
+            empresa_id: companyId,
+            pergunta,
+            resposta,
+            ativo: form.ativo,
+            codigo_padrao: form.codigo_padrao,
+          });
 
         if (error) {
           throw error;
@@ -226,6 +261,7 @@ const BaseConhecimentoTab: React.FC = () => {
 
       setIsModalOpen(false);
       setEditingItem(null);
+      setSugestao(null);
       setForm(INITIAL_FORM);
       handleRetry();
     } catch (error: any) {
@@ -299,9 +335,13 @@ const BaseConhecimentoTab: React.FC = () => {
   const isLoading = isLoadingCompanyId || isLoadingItems;
   const semPerguntas = !isLoading && items.length === 0;
 
+  // Sugeridas que ainda faltam = as padrao menos as que a empresa ja respondeu.
+  const codigosRespondidos = new Set(items.map((i) => i.codigo_padrao).filter(Boolean));
+  const sugestoesPendentes = PERGUNTAS_PADRAO.filter((p) => !codigosRespondidos.has(p.codigo));
+
   useEffect(() => {
     if (!isLoading) avisarConfiguracaoAlterada();
-  }, [isLoading, semPerguntas]);
+  }, [isLoading, sugestoesPendentes.length]);
 
   return (
     <div className="space-y-5">
@@ -315,7 +355,7 @@ const BaseConhecimentoTab: React.FC = () => {
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-semibold text-ink">Base de Conhecimento</h2>
-                <PilulaPendente pendente={semPerguntas} />
+                <PilulaPendente pendente={!isLoading && sugestoesPendentes.length > 0} />
               </div>
               <p className="max-w-2xl text-sm leading-6 text-muted">
                 Cadastre perguntas e respostas frequentes (prazo de entrega, pagamento, garantia,
@@ -350,6 +390,46 @@ const BaseConhecimentoTab: React.FC = () => {
         </div>
       ) : null}
 
+      {!isLoading && !loadError && sugestoesPendentes.length > 0 ? (
+        <section className="rounded-panel border border-line-soft bg-card shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
+          <div className="flex flex-col gap-1 border-b border-line-soft px-5 py-4 max-lg:px-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink">Sugestões para responder</h3>
+              <span className="rounded-pill bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-red-700">
+                {sugestoesPendentes.length} pendente(s)
+              </span>
+            </div>
+            <p className="text-sm text-muted">
+              Perguntas que os clientes mais fazem. Responda todas com as suas palavras: a KOTTA IA
+              passa a usar cada resposta nas cotações. Você pode editar a pergunta antes de salvar.
+            </p>
+          </div>
+
+          <div className="grid gap-3 p-5 max-lg:p-4 lg:grid-cols-2">
+            {sugestoesPendentes.map((padrao) => (
+              <button
+                key={padrao.codigo}
+                type="button"
+                onClick={() => handleOpenSugestao(padrao)}
+                className="flex flex-col gap-1.5 rounded-panel border border-red-100 bg-red-50 px-4 py-3 text-left transition-colors hover:border-red-200 hover:brightness-[0.98]"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-ink">{padrao.pergunta}</span>
+                  <span className="rounded-pill bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-red-700">
+                    Pendente
+                  </span>
+                </div>
+                <span className="text-sm leading-5 text-red-900/70">{padrao.dica}</span>
+                <span className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-red-700">
+                  <Plus className="h-3.5 w-3.5" />
+                  Responder
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-panel border border-line-soft bg-card shadow-[0_16px_50px_rgba(15,23,42,0.04)]">
         <div className="flex flex-col gap-1 border-b border-line-soft px-5 py-4 max-lg:px-4">
           <h3 className="text-sm font-semibold text-ink">Perguntas cadastradas</h3>
@@ -376,9 +456,14 @@ const BaseConhecimentoTab: React.FC = () => {
             Nenhuma pergunta cadastrada ainda. Clique em "Adicionar pergunta" para começar.
           </div>
         ) : (
-          <ul className="divide-y divide-line-soft">
+          <ul className="grid gap-3 p-5 max-lg:p-4">
             {items.map((item) => (
-              <li key={item.item_id} className="flex flex-col gap-3 px-5 py-4 max-lg:px-4 sm:flex-row sm:items-start sm:justify-between">
+              <li
+                key={item.item_id}
+                className={`flex flex-col gap-3 rounded-panel border px-4 py-4 sm:flex-row sm:items-start sm:justify-between ${
+                  item.ativo ? 'border-line-soft bg-card' : 'border-line-soft bg-paper opacity-75'
+                }`}
+              >
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-ink">{item.pergunta}</p>
@@ -449,11 +534,12 @@ const BaseConhecimentoTab: React.FC = () => {
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <h2 id="base-conhecimento-modal-title" className="text-base font-semibold tracking-tight text-ink">
-                  {editingItem ? 'Editar pergunta' : 'Adicionar pergunta'}
+                  {editingItem ? 'Editar pergunta' : sugestao ? 'Responder sugestão' : 'Adicionar pergunta'}
                 </h2>
                 <p className="mt-1 text-sm leading-5 text-muted">
-                  A resposta é usada pelo KOTTA IA quando um lead perguntar algo parecido durante uma
-                  cotação.
+                  {sugestao
+                    ? sugestao.dica
+                    : 'A resposta é usada pelo KOTTA IA quando um lead perguntar algo parecido durante uma cotação.'}
                 </p>
               </div>
 
