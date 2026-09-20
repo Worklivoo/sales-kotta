@@ -6,6 +6,26 @@ Stack: React 19 + Vite + TypeScript (front, Vercel), Supabase (auth/dados), N8N 
 
 Esta pasta (`SALES KOTTA .v2`) é o ambiente de desenvolvimento da reconstrução do Sales Kotta — n8n rodando numa instância própria, separada da instância de produção que atende o cliente-piloto.
 
+## Arquitetura de deploy: a Vercel não é só "ambiente de visualização"
+
+O fluxo de publicação é: `npm run build` gera o front estático (`dist/`), que é
+copiado manualmente para dentro do subdomínio no cPanel/Hostgator. Isso pode
+dar a impressão de que a Vercel serve só para o time da Worklivoo visualizar
+antes de ir pra produção — **não é o caso**.
+
+O front, onde quer que esteja hospedado, chama a API sempre por URL absoluta e
+fixa (`lib/apiBase.ts`): `https://sales-kotta.vercel.app`. Todo o backend
+(pastas `api/` e `server/` — pagamento/Asaas, WhatsApp, e-mail, cotação, tudo
+que usa alguma chave/segredo) roda como Serverless Functions **só na Vercel**,
+porque hospedagem compartilhada (cPanel) não roda Node/Serverless. O cPanel
+serve apenas o HTML/JS estático; a aplicação em si depende da Vercel de pé.
+
+**Na prática:** apagar ou pausar o projeto `sales-kotta` na Vercel quebra a
+produção real (subdomínio no cPanel) por inteiro — login, cotação, IA,
+assinatura, WhatsApp, e-mail — mesmo a página estática continuando no ar.
+Tratar esse projeto Vercel como infraestrutura crítica de produção, no mesmo
+nível do projeto Supabase, nunca como "ambiente de preview" descartável.
+
 ## Escopo do banco de dados (Supabase MCP)
 
 O MCP `supabase` está conectado ao projeto **KOTTA WORKLIVOO** (`wppdbqeulhjwdcpljyks`) — **e apenas a esse projeto**. Esse projeto Supabase é compartilhado com outros produtos além do Sales Kotta.

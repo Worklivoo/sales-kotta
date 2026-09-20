@@ -193,11 +193,21 @@ export const criarAssinaturaComCartao = async (
    emissao so na confirmacao do pagamento, sem retencao de imposto). */
 export const CONFIGURACAO_NOTA_FISCAL_PADRAO = {
   municipalServiceId: '282549',
-  invoiceCreationPeriod: 'ON_PAYMENT_CONFIRMATION' as const,
+  municipalServiceName:
+    '749019909 - OUTRAS ATIVIDADES PROFISSIONAIS CIENTIFICAS E TECNICAS NAO ESPECIFICADAS ANTERIORMENTE ESCRITORIO ADMINISTRATIVO',
+  /* O GET de assinaturas antigas devolve esse mesmo dado como
+     "invoiceCreationPeriod" - o POST (criacao) usa "effectiveDatePeriod".
+     Nomes diferentes para a mesma coisa, assimetria da API do Asaas. */
+  effectiveDatePeriod: 'ON_PAYMENT_CONFIRMATION' as const,
   deductions: 0,
   taxes: {
     retainIss: false,
     iss: 0,
+    pis: 0,
+    cofins: 0,
+    csll: 0,
+    inss: 0,
+    ir: 0,
   },
 };
 
