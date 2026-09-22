@@ -135,9 +135,17 @@ export const buscarClientePorCpfCnpj = async (
   return resultado.data?.[0] || null;
 };
 
+interface DadosEnderecoAsaas {
+  postalCode?: string;
+  address?: string;
+  addressNumber?: string;
+  complement?: string;
+  province?: string;
+}
+
 export const criarCliente = async (
   config: AsaasClientConfig,
-  dados: { name: string; cpfCnpj: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean },
+  dados: { name: string; cpfCnpj: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean } & DadosEnderecoAsaas,
 ): Promise<AsaasCustomer> =>
   chamarAsaas<AsaasCustomer>(config, '/customers', {
     method: 'POST',
@@ -147,7 +155,7 @@ export const criarCliente = async (
 export const atualizarCliente = async (
   config: AsaasClientConfig,
   customerId: string,
-  dados: { name?: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean },
+  dados: { name?: string; email?: string; mobilePhone?: string; notificationDisabled?: boolean } & DadosEnderecoAsaas,
 ): Promise<AsaasCustomer> =>
   chamarAsaas<AsaasCustomer>(config, `/customers/${encodeURIComponent(customerId)}`, {
     method: 'POST',

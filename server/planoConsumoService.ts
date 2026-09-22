@@ -132,8 +132,10 @@ export const planoConsumoService = async ({ env, requesterAccessToken }: PlanoCo
       telefoneResponsavel: empresa.telefone_responsavel,
       enderecoFaturamento: empresa.endereco_faturamento as {
         cep?: string;
+        rua?: string;
         numero?: string;
         complemento?: string;
+        bairro?: string;
       } | null,
       temAssinaturaAtiva: Boolean(empresa.asaas_subscription_id),
       emTrialAtivo,

@@ -19,11 +19,20 @@ import {
   obterQrCodePix,
 } from './asaasClient.js';
 
+interface EnderecoPayload {
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+}
+
 interface DadosCobrancaPayload {
   nome?: string;
   cnpj?: string;
   email?: string;
   celular?: string;
+  endereco?: EnderecoPayload;
 }
 
 interface CartaoPayload {
@@ -32,9 +41,6 @@ interface CartaoPayload {
   validadeMes?: string;
   validadeAno?: string;
   cvv?: string;
-  cep?: string;
-  numeroEndereco?: string;
-  complemento?: string;
 }
 
 interface PlanoAssinarPayload {
@@ -76,11 +82,38 @@ const passaNoLuhn = (numero: string) => {
   return soma % 10 === 0;
 };
 
+const validarEndereco = (endereco: EnderecoPayload | undefined) => {
+  const cep = somenteDigitos(endereco?.cep);
+  const rua = (endereco?.rua || '').trim();
+  const numero = (endereco?.numero || '').trim();
+  const complemento = (endereco?.complemento || '').trim();
+  const bairro = (endereco?.bairro || '').trim();
+
+  if (cep.length !== 8) {
+    throw new HttpError(400, 'Informe um CEP válido para o endereço de faturamento.');
+  }
+
+  if (!rua) {
+    throw new HttpError(400, 'Informe a rua do endereço de faturamento.');
+  }
+
+  if (!numero) {
+    throw new HttpError(400, 'Informe o número do endereço de faturamento.');
+  }
+
+  if (!bairro) {
+    throw new HttpError(400, 'Informe o bairro do endereço de faturamento.');
+  }
+
+  return { cep, rua, numero, complemento, bairro };
+};
+
 const validarDadosCobranca = (dados: DadosCobrancaPayload) => {
   const nome = (dados.nome || '').trim();
   const cnpj = somenteDigitos(dados.cnpj);
   const email = (dados.email || '').trim();
   const celular = somenteDigitos(dados.celular);
+  const endereco = validarEndereco(dados.endereco);
 
   if (!nome) {
     throw new HttpError(400, 'Informe a razão social/nome do responsável.');
@@ -98,7 +131,7 @@ const validarDadosCobranca = (dados: DadosCobrancaPayload) => {
     throw new HttpError(400, 'Informe um WhatsApp de cobrança válido, com DDD (ex: 11 91234-5678).');
   }
 
-  return { nome, cnpj, email, celular };
+  return { nome, cnpj, email, celular, endereco };
 };
 
 const validarCartao = (cartao: CartaoPayload | undefined) => {
@@ -107,9 +140,6 @@ const validarCartao = (cartao: CartaoPayload | undefined) => {
   const validadeMes = (cartao?.validadeMes || '').trim().padStart(2, '0');
   const validadeAno = (cartao?.validadeAno || '').trim();
   const cvv = somenteDigitos(cartao?.cvv);
-  const cep = somenteDigitos(cartao?.cep);
-  const numeroEndereco = (cartao?.numeroEndereco || '').trim();
-  const complemento = (cartao?.complemento || '').trim();
 
   if (numero.length < 13 || numero.length > 19 || !passaNoLuhn(numero)) {
     throw new HttpError(400, 'Número do cartão inválido.');
@@ -132,15 +162,7 @@ const validarCartao = (cartao: CartaoPayload | undefined) => {
     throw new HttpError(400, 'Código de segurança (CVV) do cartão inválido.');
   }
 
-  if (cep.length !== 8) {
-    throw new HttpError(400, 'Informe um CEP válido para o endereço de cobrança.');
-  }
-
-  if (!numeroEndereco) {
-    throw new HttpError(400, 'Informe o número do endereço de cobrança.');
-  }
-
-  return { numero, nomeImpresso, validadeMes, validadeAno, cvv, cep, numeroEndereco, complemento };
+  return { numero, nomeImpresso, validadeMes, validadeAno, cvv };
 };
 
 export const planoAssinarService = async ({
@@ -213,6 +235,13 @@ export const planoAssinarService = async ({
     // O Asaas nao deve notificar o cliente diretamente (email/SMS de cobranca,
     // boleto, etc) - toda comunicacao com o cliente e feita pelo proprio Sales Kotta.
     notificationDisabled: true,
+    // Endereco de faturamento - fica vinculado ao cliente no Asaas para constar
+    // na Nota Fiscal. Cidade/estado o proprio Asaas resolve a partir do CEP.
+    postalCode: dadosCobranca.endereco.cep,
+    address: dadosCobranca.endereco.rua,
+    addressNumber: dadosCobranca.endereco.numero,
+    complement: dadosCobranca.endereco.complemento || undefined,
+    province: dadosCobranca.endereco.bairro,
   };
 
   if (asaasCustomerId) {
@@ -257,6 +286,7 @@ export const planoAssinarService = async ({
     cnpj: dadosCobranca.cnpj,
     email_responsavel: dadosCobranca.email,
     telefone_responsavel: `55${dadosCobranca.celular}`,
+    endereco_faturamento: dadosCobranca.endereco,
     // Contratacao nova ou troca de plano reinicia o ciclo de consumo: o
     // limite mensal passa a contar a partir de hoje.
     data_contratacao_atual: new Date().toISOString(),
@@ -299,9 +329,9 @@ export const planoAssinarService = async ({
         name: dadosCobranca.nome,
         email: dadosCobranca.email,
         cpfCnpj: dadosCobranca.cnpj,
-        postalCode: cartao.cep,
-        addressNumber: cartao.numeroEndereco,
-        addressComplement: cartao.complemento || undefined,
+        postalCode: dadosCobranca.endereco.cep,
+        addressNumber: dadosCobranca.endereco.numero,
+        addressComplement: dadosCobranca.endereco.complemento || undefined,
         phone: dadosCobranca.celular,
       },
     });
@@ -312,11 +342,6 @@ export const planoAssinarService = async ({
 
     atualizacaoEmpresa.asaas_subscription_id = assinatura.id;
     atualizacaoEmpresa.assinatura_periodo_fim = assinatura.nextDueDate;
-    atualizacaoEmpresa.endereco_faturamento = {
-      cep: cartao.cep,
-      numero: cartao.numeroEndereco,
-      complemento: cartao.complemento || null,
-    };
     atualizacaoEmpresa.pagamento = {
       ...novoPagamento,
       forma: 'CREDIT_CARD',

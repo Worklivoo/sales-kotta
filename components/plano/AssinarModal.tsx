@@ -19,7 +19,15 @@ interface AssinarModalProps {
   onFechar: () => void;
 }
 
-type Etapa = 'dados' | 'pagamento' | 'pix' | 'cartao';
+type Etapa = 'dados' | 'endereco' | 'pagamento' | 'pix' | 'cartao';
+
+interface ViaCepResposta {
+  logradouro?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+}
 
 const somenteDigitos = (valor: string) => valor.replace(/\D/g, '');
 
@@ -133,9 +141,44 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
   const [nomeImpresso, setNomeImpresso] = useState('');
   const [validade, setValidade] = useState('');
   const [cvv, setCvv] = useState('');
+
   const [cep, setCep] = useState(formatarCep(empresa.enderecoFaturamento?.cep || ''));
+  const [rua, setRua] = useState(empresa.enderecoFaturamento?.rua || '');
   const [numeroEndereco, setNumeroEndereco] = useState(empresa.enderecoFaturamento?.numero || '');
   const [complemento, setComplemento] = useState(empresa.enderecoFaturamento?.complemento || '');
+  const [bairro, setBairro] = useState(empresa.enderecoFaturamento?.bairro || '');
+  const [cidadeUf, setCidadeUf] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [cepErro, setCepErro] = useState<string | null>(null);
+
+  /* Busca automatica pelo CEP (ViaCEP - gratuito, sem chave). So dispara
+     quando o CEP fica completo (8 digitos); o proprio input ja corta em 8. */
+  const buscarCep = async (cepDigitado: string) => {
+    const digitos = somenteDigitos(cepDigitado);
+    if (digitos.length !== 8) return;
+
+    setBuscandoCep(true);
+    setCepErro(null);
+
+    try {
+      const resposta = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
+      const dados: ViaCepResposta = await resposta.json();
+
+      if (dados.erro) {
+        setCepErro('CEP não encontrado.');
+        setCidadeUf('');
+        return;
+      }
+
+      setRua(dados.logradouro || '');
+      setBairro(dados.bairro || '');
+      setCidadeUf(dados.localidade && dados.uf ? `${dados.localidade} - ${dados.uf}` : '');
+    } catch {
+      setCepErro('Não foi possível buscar o CEP. Preencha o endereço manualmente.');
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
 
   const errosDados = useMemo(() => {
     const problemas: Record<string, string> = {};
@@ -166,14 +209,23 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
     }
 
     if (somenteDigitos(cvv).length < 3) problemas.cvv = 'CVV inválido.';
-    if (somenteDigitos(cep).length !== 8) problemas.cep = 'CEP inválido.';
-    if (!numeroEndereco.trim()) problemas.numeroEndereco = 'Informe o número.';
 
     return problemas;
-  }, [forma, numeroCartao, nomeImpresso, validade, cvv, cep, numeroEndereco]);
+  }, [forma, numeroCartao, nomeImpresso, validade, cvv]);
+
+  const errosEndereco = useMemo(() => {
+    const problemas: Record<string, string> = {};
+    if (somenteDigitos(cep).length !== 8) problemas.cep = 'CEP inválido.';
+    if (!rua.trim()) problemas.rua = 'Informe a rua.';
+    if (!numeroEndereco.trim()) problemas.numeroEndereco = 'Informe o número.';
+    if (!bairro.trim()) problemas.bairro = 'Informe o bairro.';
+
+    return problemas;
+  }, [cep, rua, numeroEndereco, bairro]);
 
   const dadosOk = Object.keys(errosDados).length === 0;
   const cartaoOk = Object.keys(errosCartao).length === 0;
+  const enderecoOk = Object.keys(errosEndereco).length === 0;
 
   /* Erro so aparece depois que o campo foi tocado - abrir o formulario de
      cartao com tudo em vermelho passa a impressao de que algo deu errado. */
@@ -216,7 +268,7 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
   };
 
   const enviar = async () => {
-    if (!dadosOk) return;
+    if (!dadosOk || !enderecoOk) return;
     if (!jaTemAssinatura && forma === 'CREDIT_CARD' && !cartaoOk) return;
 
     setEnviando(true);
@@ -233,6 +285,13 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
           cnpj: somenteDigitos(cnpj),
           email: email.trim(),
           celular: somenteDigitos(celular),
+          endereco: {
+            cep: somenteDigitos(cep),
+            rua: rua.trim(),
+            numero: numeroEndereco.trim(),
+            complemento: complemento.trim() || undefined,
+            bairro: bairro.trim(),
+          },
         },
         cupom: cupomAplicado?.codigo,
         pagamento: jaTemAssinatura
@@ -247,9 +306,6 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
                       validadeMes,
                       validadeAno: `20${validadeAno}`,
                       cvv: somenteDigitos(cvv),
-                      cep: somenteDigitos(cep),
-                      numeroEndereco: numeroEndereco.trim(),
-                      complemento: complemento.trim() || undefined,
                     }
                   : undefined,
             },
@@ -303,16 +359,18 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
 
   const titulo =
     etapa === 'dados'
-      ? jaTemAssinatura
-        ? 'Confirmar troca de plano'
-        : 'Dados de cobrança'
-      : etapa === 'pagamento'
-        ? 'Forma de pagamento'
-        : etapa === 'pix'
-          ? 'Pague com Pix para ativar'
-          : resultado?.aprovado
-            ? 'Assinatura ativada'
-            : 'Pagamento não aprovado';
+      ? 'Dados de cobrança'
+      : etapa === 'endereco'
+        ? jaTemAssinatura
+          ? 'Confirmar troca de plano'
+          : 'Endereço de faturamento'
+        : etapa === 'pagamento'
+          ? 'Forma de pagamento'
+          : etapa === 'pix'
+            ? 'Pague com Pix para ativar'
+            : resultado?.aprovado
+              ? 'Assinatura ativada'
+              : 'Pagamento não aprovado';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(20,20,20,0.55)] p-4 backdrop-blur-sm">
@@ -529,13 +587,153 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
 
             <button
               type="button"
-              onClick={() => (jaTemAssinatura ? enviar() : setEtapa('pagamento'))}
-              disabled={enviando || !dadosOk}
+              onClick={() => setEtapa('endereco')}
+              disabled={!dadosOk}
               className="mt-5 w-full rounded-pill bg-lime px-4 py-3 text-[13px] text-ink transition-colors hover:bg-lime-deep disabled:opacity-40"
               style={{ fontWeight: 700 }}
             >
-              {enviando ? 'Confirmando...' : jaTemAssinatura ? 'Confirmar troca de plano' : 'Continuar'}
+              Continuar
             </button>
+          </>
+        ) : null}
+
+        {etapa === 'endereco' ? (
+          <>
+            <div className="mt-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass} style={labelStyle}>
+                    CEP
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={cep}
+                    onChange={(e) => {
+                      const formatado = formatarCep(e.target.value);
+                      setCep(formatado);
+                      if (somenteDigitos(formatado).length === 8) buscarCep(formatado);
+                    }}
+                    onBlur={() => marcarTocado('cep')}
+                    placeholder="00000-000"
+                    className={inputClass}
+                  />
+                  {buscandoCep ? (
+                    <p className="mt-1 text-[11.5px] text-muted" style={{ fontWeight: 600 }}>
+                      Buscando endereço...
+                    </p>
+                  ) : cepErro ? (
+                    <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
+                      {cepErro}
+                    </p>
+                  ) : erroDe(errosEndereco, 'cep') ? (
+                    <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
+                      {errosEndereco.cep}
+                    </p>
+                  ) : cidadeUf ? (
+                    <p className="mt-1 text-[11.5px] text-muted" style={{ fontWeight: 600 }}>
+                      {cidadeUf}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className={labelClass} style={labelStyle}>
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={numeroEndereco}
+                    onChange={(e) => setNumeroEndereco(e.target.value)}
+                    onBlur={() => marcarTocado('numeroEndereco')}
+                    placeholder="123"
+                    className={inputClass}
+                  />
+                  {erroDe(errosEndereco, 'numeroEndereco') ? (
+                    <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
+                      {errosEndereco.numeroEndereco}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass} style={labelStyle}>
+                  Rua
+                </label>
+                <input
+                  type="text"
+                  value={rua}
+                  onChange={(e) => setRua(e.target.value)}
+                  onBlur={() => marcarTocado('rua')}
+                  className={inputClass}
+                />
+                {erroDe(errosEndereco, 'rua') ? (
+                  <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
+                    {errosEndereco.rua}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass} style={labelStyle}>
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={bairro}
+                    onChange={(e) => setBairro(e.target.value)}
+                    onBlur={() => marcarTocado('bairro')}
+                    className={inputClass}
+                  />
+                  {erroDe(errosEndereco, 'bairro') ? (
+                    <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
+                      {errosEndereco.bairro}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className={labelClass} style={labelStyle}>
+                    Complemento (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={complemento}
+                    onChange={(e) => setComplemento(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {erro ? (
+              <p className="mt-4 rounded-tile bg-red-50 p-3 text-[12px] text-red-700" style={{ fontWeight: 600 }}>
+                {erro}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEtapa('dados')}
+                disabled={enviando}
+                className="rounded-pill bg-paper px-4 py-3 text-[13px] text-ink disabled:opacity-40"
+                style={{ fontWeight: 700 }}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => (jaTemAssinatura ? enviar() : setEtapa('pagamento'))}
+                disabled={enviando || !enderecoOk}
+                className="flex-1 rounded-pill bg-lime px-4 py-3 text-[13px] text-ink transition-colors hover:bg-lime-deep disabled:opacity-40"
+                style={{ fontWeight: 700 }}
+              >
+                {enviando ? 'Confirmando...' : jaTemAssinatura ? 'Confirmar troca de plano' : 'Continuar'}
+              </button>
+            </div>
           </>
         ) : null}
 
@@ -662,57 +860,6 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass} style={labelStyle}>
-                      CEP de cobrança
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={cep}
-                      onChange={(e) => setCep(formatarCep(e.target.value))}
-                      onBlur={() => marcarTocado('cep')}
-                      placeholder="00000-000"
-                      className={inputClass}
-                    />
-                    {erroDe(errosCartao, 'cep') ? (
-                      <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
-                        {errosCartao.cep}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <label className={labelClass} style={labelStyle}>
-                      Número
-                    </label>
-                    <input
-                      type="text"
-                      value={numeroEndereco}
-                      onChange={(e) => setNumeroEndereco(e.target.value)}
-                      onBlur={() => marcarTocado('numeroEndereco')}
-                      placeholder="123"
-                      className={inputClass}
-                    />
-                    {erroDe(errosCartao, 'numeroEndereco') ? (
-                      <p className="mt-1 text-[11.5px] text-red-600" style={{ fontWeight: 600 }}>
-                        {errosCartao.numeroEndereco}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div>
-                  <label className={labelClass} style={labelStyle}>
-                    Complemento (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={complemento}
-                    onChange={(e) => setComplemento(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
               </div>
             ) : (
               <p className="mt-4 rounded-tile bg-paper p-3.5 text-[12.5px] text-muted" style={{ fontWeight: 500 }}>
@@ -729,7 +876,7 @@ const AssinarModal: React.FC<AssinarModalProps> = ({
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
-                onClick={() => setEtapa('dados')}
+                onClick={() => setEtapa('endereco')}
                 disabled={enviando}
                 className="rounded-pill bg-paper px-4 py-3 text-[13px] text-ink disabled:opacity-40"
                 style={{ fontWeight: 700 }}

@@ -107,7 +107,7 @@ export interface ConsumoResposta {
     cnpj: string | null;
     emailResponsavel: string | null;
     telefoneResponsavel: string | null;
-    enderecoFaturamento: { cep?: string; numero?: string; complemento?: string } | null;
+    enderecoFaturamento: { cep?: string; rua?: string; numero?: string; complemento?: string; bairro?: string } | null;
     temAssinaturaAtiva: boolean;
     emTrialAtivo: boolean;
     formaPagamento: string | null;
@@ -139,11 +139,20 @@ export interface CupomValidado {
   descontoAplicado: number;
 }
 
+export interface DadosEndereco {
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento?: string;
+  bairro: string;
+}
+
 export interface DadosCobranca {
   nome: string;
   cnpj: string;
   email: string;
   celular: string;
+  endereco: DadosEndereco;
 }
 
 export interface DadosCartao {
@@ -152,9 +161,6 @@ export interface DadosCartao {
   validadeMes: string;
   validadeAno: string;
   cvv: string;
-  cep: string;
-  numeroEndereco: string;
-  complemento?: string;
 }
 
 export type FormaPagamento = 'PIX' | 'CREDIT_CARD';
