@@ -23,36 +23,32 @@ const CATEGORIAS: CategoriaDefinicao[] = [
     key: 'FINANCEIRO',
     titulo: 'Financeiro',
     descricao: 'Mensagens sobre boletos, notas fiscais, cobrança, dados bancários.',
-    placeholder:
-      'Recebemos sua mensagem sobre o assunto financeiro. Nosso time vai verificar e retornar em breve.',
+    placeholder: 'Assuntos financeiros são com a Karina, pelo WhatsApp (11) 99999-0000.',
   },
   {
     key: 'DUVIDA_TECNICA',
     titulo: 'Dúvida técnica',
     descricao: 'Perguntas técnicas sobre produto, aplicação, especificação, compatibilidade.',
-    placeholder:
-      'Obrigado pela sua pergunta! Um de nossos especialistas vai te responder em breve.',
+    placeholder: 'Dúvidas técnicas mais detalhadas: fale com nosso time técnico pelo (11) 99999-0000.',
   },
   {
     key: 'RECLAMACAO',
     titulo: 'Reclamação',
     descricao: 'Reclamações sobre produto, prazo, atendimento ou entrega.',
-    placeholder:
-      'Lamentamos pelo ocorrido. Sua mensagem foi registrada e nosso time vai entrar em contato o quanto antes.',
+    placeholder: 'Reclamações são tratadas pelo pós-venda: posvenda@suaempresa.com.br ou (11) 99999-0000.',
   },
   {
     key: 'OUTROS',
     titulo: 'Outros assuntos',
     descricao: 'Qualquer assunto que não se encaixe nas demais categorias.',
-    placeholder: 'Recebemos sua mensagem! Nosso time vai analisar e retornar em breve.',
+    placeholder: 'Para outros assuntos, nosso atendimento é pelo (11) 99999-0000.',
   },
   {
     key: 'PEDIDO_COMPRA',
     titulo: 'Pedido de compra',
     descricao:
       'Autorização de faturamento, envio de pedido de compra/PO, aprovação de orçamento pedindo nota fiscal.',
-    placeholder:
-      'Recebemos seu pedido de compra! Nosso time vai confirmar os detalhes e dar sequência o quanto antes.',
+    placeholder: 'Pedidos e faturamento são com o Alberto, pelo WhatsApp (11) 99999-0000.',
   },
 ];
 
@@ -243,7 +239,7 @@ const MensagensAutomaticasTab: React.FC = () => {
   };
 
   const descricao =
-    'Quando um lead manda uma mensagem que não é pedido de cotação (financeiro, dúvida técnica, reclamação, etc), o KOTTA IA não gera orçamento — só notifica seu time. Aqui você configura uma resposta automática opcional para cada categoria, que é enviada pro lead na hora (por e-mail ou WhatsApp, dependendo de onde ele mandou a mensagem), além da notificação interna que já acontece.';
+    'Quando um lead manda uma mensagem que não é pedido de cotação (financeiro, dúvida técnica, reclamação, etc), o KOTTA IA responde na hora usando a sua Base de Conhecimento e o catálogo. Aqui você diz para onde encaminhar cada assunto — normalmente um contato (nome, WhatsApp, e-mail). A IA usa essa orientação dentro da resposta, com as palavras dela, e avisa seu time quando o caso precisa de alguém.';
 
   return (
     <div className="space-y-5">
@@ -339,7 +335,9 @@ const MensagensAutomaticasTab: React.FC = () => {
                     Mensagens Automáticas
                   </h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
-                    Ative as categorias que devem receber resposta automática e escreva o texto de cada uma.
+                    Ative as categorias e escreva para onde a IA deve encaminhar cada assunto. Não precisa ser uma
+                    mensagem pronta: a IA reescreve de forma natural, mantendo nomes, telefones e e-mails exatamente
+                    como você escrever.
                   </p>
                 </div>
               </div>

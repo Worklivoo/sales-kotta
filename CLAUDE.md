@@ -45,6 +45,43 @@ O MCP `n8n-mcp` está conectado à instância n8n de desenvolvimento (`primary-p
 - **Layout sempre organizado**: nós dispostos em grid limpo — fluxo principal numa linha horizontal, ramos paralelos (ex: diferentes tipos de integração, diferentes tipos de mídia) em linhas separadas alinhadas verticalmente, sem sobreposição nem posições soltas. Espaçamento consistente entre colunas (ex: 240px) e entre linhas de ramos paralelos. Nós terminais (fim de caminho, tipo "Fim - X") ficam deslocados acima/abaixo da linha principal do fluxo em vez de misturados nela. Nunca deixar nós criados em posições aleatórias/tortas, mesmo em rascunho. Ao adicionar nós num workflow existente, se o layout ficar apertado ou desalinhado, reorganizar antes de seguir — não empilhar em cima do que já existe.
 - **Nó "No Operation" (No Op) só no fim de um caminho**, quando não existe mais nada depois dele (ex: "Fim - Sem mensagem", "Fim - Membro inativo"). Nunca usar No Operation como ponto de convergência/checkpoint no meio do fluxo (ex: para múltiplos ramos se juntarem antes de continuar, ou só para dar nome a um ponto de referência) — nesses casos usar um node Set sem nenhum assignment (passthrough, com "Include Other Fields" ligado), que também serve de referência nomeada via `$('Nome do Node')` mas deixa claro visualmente que o fluxo continua dali.
 
+## Atendimento: dois workers (cotação x geral)
+
+A **Triagem Global (v2)** classifica cada mensagem e, depois de "Lead Pediu
+para Parar?", lê `sales_empresas_v2.atendimento_worker_geral`:
+
+- **ligada** (padrão para toda empresa desde 2026-09-28):
+  - `COTACAO` → **Worker Global (v2)** (cotação: Conduzir Conversa → Cotar e Orçar → Enviar ao Lead);
+  - `SPAM` → fim;
+  - qualquer outra categoria → **🟢 Worker · Atendimento Geral** (webhook `worker-geral-v3`).
+- **desligada**: caminho antigo (mensagem automática fixa + notificação "fora do fluxo"). Serve só de rollback por empresa.
+
+O Worker Geral é independente do de cotação (envio próprio) e funciona assim:
+
+- responde com a Base de Conhecimento inteira, a busca no catálogo e a mensagem automática da categoria, que ele reescreve como orientação;
+- nunca encerra o atendimento; o estado fica em `sales_atendimentos_v2.metadata.atendimento_geral`;
+- quando percebe intenção de compra, passa o atendimento para cotação (`sales_v3_geral_passar_para_cotacao`) e chama o Worker Global;
+- só notifica a equipe quando encaminha ou não sabe responder.
+
+Funções do banco: `sales_v3_geral_*` (só `service_role`).
+
+**Regra fixa: o Worker Geral nunca fala de valores. Preço só aparece no
+orçamento, que é do Worker de Cotação.** As proteções são em camadas, e
+nenhuma pode ser removida:
+
+1. **Banco:** `sales_v3_geral_buscar_produtos` e `sales_v3_geral_buscar_contexto` montam tudo por lista de campos permitidos. Ficam de fora preço, moeda, estoque, cadastro do cliente, itens e regras de cotação, regra de prazo e CNPJ.
+   - Nunca troque essas funções pelas `sales_v2_worker_*`, que devolvem preço.
+   - Se precisar de um campo novo, inclua-o na lista de permitidos.
+2. **Contexto:** o nó `Preparar Contexto` troca qualquer valor em dinheiro da base de conhecimento e das mensagens automáticas por "(valor informado no orçamento)".
+3. **Saída:** o nó `Mensagem Final` remove qualquer frase com valor monetário antes do envio.
+
+**Testes em empresa real**: criar atendimento com `sandbox = true` e
+`email_lead` terminando em `@auditoria-worklivoo.invalid`. Assim:
+
+- o envio é simulado;
+- a conversa não aparece no "Testar atendimento" do cliente;
+- o Worker Geral não notifica a equipe.
+
 ## Regra: etiqueta `restrito` no n8n
 
 A instância `primary-production-b86f1` é compartilhada. Nela convivem os
