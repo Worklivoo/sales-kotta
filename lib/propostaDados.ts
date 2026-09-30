@@ -11,6 +11,7 @@
 
 import { supabase } from './supabase';
 import {
+  formatarEndereco,
   montarCondicoes,
   normalizarDados,
   normalizarModelo,
@@ -67,16 +68,8 @@ const texto = (v: unknown): string | undefined => {
   return s || undefined;
 };
 
-/** "Rua X, 123 — Bairro, Cidade/UF". Devolve undefined se o cadastro nao tem nada util. */
-export const formatarEndereco = (bruto: unknown): string | undefined => {
-  if (typeof bruto !== 'object' || bruto === null) return undefined;
-  const e = bruto as Record<string, unknown>;
-  const rua = [texto(e.rua) || texto(e.endereco), texto(e.numero)].filter(Boolean).join(', ');
-  const cidade = texto(e.cidade);
-  const estado = texto(e.estado);
-  const local = [texto(e.bairro), cidade && estado ? `${cidade}/${estado}` : cidade || estado].filter(Boolean).join(', ');
-  return [rua, local].filter(Boolean).join(' — ') || undefined;
-};
+// A formatacao do endereco mora no arquivo puro (o servidor tambem a usa); reexportada aqui para quem ja importa daqui.
+export { formatarEndereco };
 
 export const modeloDaEmpresa = (empresa: EmpresaParaProposta | null): ModeloProposta => {
   const base = normalizarModelo(empresa?.modelo_proposta);

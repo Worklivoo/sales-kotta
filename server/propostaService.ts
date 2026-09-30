@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { HttpError } from './createMemberService.js';
 import {
+  formatarEndereco,
   gerarProposta,
   montarCondicoes,
   normalizarDados,
@@ -132,7 +133,7 @@ export const propostaRenderService = async (options: PropostaRenderOptions): Pro
 
   const { data: empresa, error: empresaError } = await clients.adminClient
     .from('sales_empresas_v2')
-    .select('logo_url, texto_rodape_pdf, modelo_proposta')
+    .select('razao_social, cnpj, email_responsavel, telefone_responsavel, endereco_faturamento, logo_url, texto_rodape_pdf, modelo_proposta')
     .eq('empresa_id', empresaId)
     .maybeSingle();
 
@@ -147,6 +148,18 @@ export const propostaRenderService = async (options: PropostaRenderOptions): Pro
     logoUrl: normalizarModelo({ logoUrl: empresa.logo_url }).logoUrl,
     // Observacoes: o que a empresa configurou; sem isso, o texto antigo do rodape do PDF.
     observacoes: base.observacoes || String(empresa.texto_rodape_pdf || '').trim(),
+  };
+
+  // Emitente: o que o chamador mandar vale; o que faltar (ex.: o endereco, que o n8n nao tem) vem do cadastro da empresa.
+  dados = {
+    ...dados,
+    emitente: {
+      nome: dados.emitente.nome || String(empresa.razao_social || ''),
+      cnpj: dados.emitente.cnpj || String(empresa.cnpj || '') || undefined,
+      email: dados.emitente.email || String(empresa.email_responsavel || '') || undefined,
+      telefone: dados.emitente.telefone || String(empresa.telefone_responsavel || '') || undefined,
+      endereco: dados.emitente.endereco || formatarEndereco(empresa.endereco_faturamento),
+    },
   };
 
   if (dados.condicoes === undefined) {

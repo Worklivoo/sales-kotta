@@ -641,6 +641,18 @@ const renderTotais = (dados: DadosProposta, calculo: TotaisCalculados): string =
   return `<div class="fecho"><div class="totais">${linhas.join('')}</div></div>`;
 };
 
+/** "Rua X, 123 — Bairro, Cidade/UF" a partir de `sales_empresas_v2.endereco_faturamento`. Undefined se nao houver nada util. */
+export const formatarEndereco = (bruto: unknown): string | undefined => {
+  if (!ehObjeto(bruto)) return undefined;
+  const rua = [opcional(bruto.rua) || opcional(bruto.endereco), opcional(bruto.numero)].filter(Boolean).join(', ');
+  const cidade = opcional(bruto.cidade);
+  const estado = opcional(bruto.estado);
+  const local = [opcional(bruto.bairro), cidade && estado ? `${cidade}/${estado}` : cidade || estado]
+    .filter(Boolean)
+    .join(', ');
+  return [rua, local].filter(Boolean).join(' — ') || undefined;
+};
+
 /**
  * Condicoes comerciais a partir das respostas da base de conhecimento, na ordem que a empresa
  * escolheu no modelo. Codigo sem resposta ativa fica de fora.
