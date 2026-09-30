@@ -75,6 +75,84 @@ nenhuma pode ser removida:
 2. **Contexto:** o nó `Preparar Contexto` troca qualquer valor em dinheiro da base de conhecimento e das mensagens automáticas por "(valor informado no orçamento)".
 3. **Saída:** o nó `Mensagem Final` remove qualquer frase com valor monetário antes do envio.
 
+**Regra fixa: nenhum dado real de cliente nos prompts.** Os prompts dos
+workers são os mesmos para todas as empresas, e a IA copia exemplos. Em
+2026-09-28, um exemplo com o contato da Systec foi parar num teste da SQUALO.
+
+- Em exemplos, use sempre marcadores: `(XX) XXXX-XXXX`, `[produto]`, `[cidade]`.
+- Última barreira: o `Mensagem Final` remove qualquer telefone ou e-mail que não exista nas mensagens automáticas ou na base da própria empresa.
+
+**Regra fixa: o Worker Geral só afirma ou nega o que está na base.** Em
+2026-09-28, ele confirmou uma visita no sábado para uma empresa que não abre
+no sábado. Em outro caso, inventou "não temos catálogo em PDF". As proteções
+são em camadas, e nenhuma pode ser removida:
+
+1. **Redator:** regras 3.4 e 3.5.
+   - Detalhe do cliente (dia, horário, cidade, medida) só pode ser confirmado se bater com a base inteira.
+   - Negativa só se a base negar.
+   - O campo `plano` lista a fonte de cada fato.
+2. **Verificador (`Verificar Fatos (OpenAI)`, gpt-4.1):** roda em **toda** resposta, sem filtro por palavra.
+   - Cruza cada afirmação com a base, as mensagens automáticas e os produtos.
+   - O que contradiz a base é corrigido; o que não tem base sai ou vira "vou confirmar com a equipe", e a equipe é avisada.
+   - O resultado fica em `metadata.verificacao` da mensagem.
+3. **Código (`Finalizar Mensagem`):**
+   - trava de dia: sábado ou domingo que não aparece na base nunca é confirmado, e entra o horário real;
+   - trava de negativa: é reserva e só age se o verificador falhar, porque a regra por palavra corta negativas corretas deduzidas da base.
+
+Feriado fica de fora da trava de dia: o horário semanal não diz nada sobre
+feriado.
+
+O verificador também cobre dois outros casos:
+
+- **Marca e modelo:** número igual não basta. "BHM 250" não é "Bison 250". Se o catálogo não traz a marca pedida, a resposta diz isso.
+- **Política aplicada a outro caso:** por exemplo, troca por defeito de fabricação não cobre peça quebrada no transporte.
+
+Frases de registro e encaminhamento ("já registrei e passei para a equipe")
+nunca são removidas.
+
+**Cotação: base de conhecimento antes do "não temos".** O catálogo de quem
+fabrica sob medida raramente tem tudo. Em 2026-09-29, a 4Truck tinha 10
+produtos no catálogo e a IA negou "baú isotérmico", que a base lista.
+
+- No Conduzir Conversa, o nó `Buscar Base (itens)` lê a base ativa da empresa.
+- O `Produtos (atendente)` só mantém um item como "não temos" se o núcleo dele (ex.: "baú isotérmico") não aparecer em nenhuma **resposta** da base, ou se aparecer precedido de "não".
+- Quando o item está na base, ele ganha `na_base`, e o Redator recebe o aviso "ATENCAO - ITENS DA BASE".
+
+**Cotação: subtipo diferente.** O `Conferir parecidos (conversa)` separa o que
+é do mesmo tipo do que é da mesma família, mas de **outro subtipo**
+(`subtipo_diferente`). Exemplos: furadeira de bancada × de impacto; disco de
+corte × de desbaste. Medida, cor, acabamento e marca diferentes não contam
+como outro subtipo.
+
+- Se há produto exato, os de outro subtipo saem da lista.
+- Se só há de outro subtipo, o item recebe `subtipo_diferente`, e o Redator avisa: "não temos X; o mais próximo é Y, que é de outro tipo".
+- Opcionais e características extras ("baú de alumínio **com porta lateral**") nunca contam como outro subtipo. Na dúvida, o item não é marcado.
+- Em 2026-09-29, a primeira versão da regra negou um baú que a 4Truck faz. Desde essa correção, o nó usa o gpt-4.1.
+
+**Cotação: compatibilidade nunca é afirmada.** O `Finalizar mensagem` do
+Conduzir Conversa remove frases afirmativas como "deve atender", "vai servir"
+e "é compatível". No lugar, entra "o time técnico confirma se ele serve para o
+seu caso". Perguntas como "Serve para você?" ficam.
+
+**Idioma:** os dois workers detectam em código se o lead escreveu em inglês
+ou espanhol e mandam o Redator responder no mesmo idioma. Só a regra no
+prompt não bastava.
+
+**Regra fixa: identidade da IA.** Se o lead perguntar se é robô, IA ou
+pessoa, a resposta é "Sou a responsável pelo atendimento da [empresa]".
+Decisão do cliente em 2026-09-28.
+
+- Nunca "assistente virtual".
+- Nunca afirmar ser pessoa ou humano, nem negar ser IA ("não sou robô", "atendo pessoalmente").
+- Está no prompt dos dois workers (Redator do Geral e Redator Pergunta da Cotação).
+- A garantia fica em código, no `Mensagem Final` (Geral) e no `Finalizar mensagem` (Conduzir Conversa): a frase proibida sai e a apresentação entra.
+- Nas regex dessas travas, não use `\b` depois de letra acentuada. O `\b` do JavaScript não reconhece "robô" nem "é".
+
+**Publicação no n8n:** o MCP oficial (`update_workflow`) grava em rascunho, e
+só vai ao ar com `publish_workflow`. O `n8n-mcp`
+(`n8n_update_partial_workflow`) publica **na hora** quando o workflow está
+ativo. Em workflow ativo de produção, use o MCP oficial.
+
 **Testes em empresa real**: criar atendimento com `sandbox = true` e
 `email_lead` terminando em `@auditoria-worklivoo.invalid`. Assim:
 
