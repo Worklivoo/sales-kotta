@@ -230,22 +230,6 @@ export const carregarProposta = async (ctx: ContextoProposta): Promise<PropostaC
   const condicoes = await carregarCondicoes(ctx.empresaId, modelo.condicoesCodigos);
   const orcamento = ctx.orcamento;
 
-  // 1. Fotografia gravada.
-  if (orcamento?.dados_proposta) {
-    try {
-      const dados = normalizarDados(orcamento.dados_proposta);
-      return {
-        // Condicoes: sempre as atuais da empresa. O editor so abre orcamento ainda pendente (os ja
-        // enviados ficam congelados no HTML/PDF), e quem configurou condicoes depois espera te-las.
-        dados: { ...dados, orcamentoId: dados.orcamentoId || orcamento.orcamento_id, condicoes },
-        modelo,
-        fonte: 'snapshot',
-      };
-    } catch {
-      // Snapshot ilegivel: cai para a remontagem abaixo em vez de travar o editor.
-    }
-  }
-
   const emitente = {
     nome: texto(ctx.empresa?.razao_social) || '',
     cnpj: texto(ctx.empresa?.cnpj),
@@ -253,6 +237,36 @@ export const carregarProposta = async (ctx: ContextoProposta): Promise<PropostaC
     telefone: texto(ctx.empresa?.telefone_responsavel),
     endereco: formatarEndereco(ctx.empresa?.endereco_faturamento),
   };
+
+  // 1. Fotografia gravada.
+  if (orcamento?.dados_proposta) {
+    try {
+      const dados = normalizarDados(orcamento.dados_proposta);
+      return {
+        dados: {
+          ...dados,
+          orcamentoId: dados.orcamentoId || orcamento.orcamento_id,
+          // Emitente: o que o snapshot trouxer vale; o que faltar (o n8n nao manda o endereco, quem o
+          // completa e o endpoint so na hora de renderizar) vem do cadastro. Sem isso o endereco sumia
+          // do PDF quando o editor salvava de novo na aprovacao.
+          emitente: {
+            nome: dados.emitente.nome || emitente.nome,
+            cnpj: dados.emitente.cnpj || emitente.cnpj,
+            email: dados.emitente.email || emitente.email,
+            telefone: dados.emitente.telefone || emitente.telefone,
+            endereco: dados.emitente.endereco || emitente.endereco,
+          },
+          // Condicoes: sempre as atuais da empresa. O editor so abre orcamento ainda pendente (os ja
+          // enviados ficam congelados no HTML/PDF), e quem configurou condicoes depois espera te-las.
+          condicoes,
+        },
+        modelo,
+        fonte: 'snapshot',
+      };
+    } catch {
+      // Snapshot ilegivel: cai para a remontagem abaixo em vez de travar o editor.
+    }
+  }
 
   const comum = {
     numero: ctx.numeroTicket != null ? String(ctx.numeroTicket) : undefined,
