@@ -98,6 +98,12 @@ export interface ItemProposta {
   extras?: Record<string, string>;
   /** As palavras do cliente ("um bau de 6 metros"). */
   pedidoComo?: string;
+  /**
+   * Ligacoes com o banco (sales_orcamentos_itens_v2 / sales_produtos_v2). O renderer ignora: servem
+   * ao editor para manter a tabela de itens em dia sem perder o vinculo de cada linha.
+   */
+  itemId?: string;
+  produtoId?: string;
 }
 
 export interface TotaisProposta {
@@ -204,6 +210,11 @@ const estado = (v: unknown, padrao: EstadoColuna): EstadoColuna =>
   v === 'sempre' || v === 'nunca' || v === 'auto' ? v : padrao;
 
 const opcional = (v: unknown, limite?: number): string | undefined => texto(v, limite) || undefined;
+
+const uuidOuUndefined = (v: unknown): string | undefined =>
+  typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim())
+    ? v.trim().toLowerCase()
+    : undefined;
 
 /** Aceita so #rrggbb: a cor vai para dentro de um <style>, entao nada alem disso passa. */
 const corValida = (v: unknown): string | null =>
@@ -317,6 +328,8 @@ export const normalizarDados = (entrada: unknown): DadosProposta => {
       moeda: (texto(i.moeda, 3) || 'BRL').toUpperCase(),
       extras: Object.keys(extras).length ? extras : undefined,
       pedidoComo: opcional(i.pedidoComo, 500),
+      itemId: uuidOuUndefined(i.itemId),
+      produtoId: uuidOuUndefined(i.produtoId),
     };
   });
 

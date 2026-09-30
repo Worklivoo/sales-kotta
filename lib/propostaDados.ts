@@ -156,7 +156,7 @@ const montarItensDoCatalogo = async (
 ): Promise<ItemProposta[]> => {
   const { data: linhas, error } = await supabase
     .from('sales_orcamentos_itens_v2')
-    .select('produto_id, solicitacao_id, quantidade, preco_unitario')
+    .select('item_id, produto_id, solicitacao_id, quantidade, preco_unitario')
     .eq('empresa_id', empresaId)
     .eq('orcamento_id', orcamentoId);
 
@@ -224,6 +224,8 @@ const montarItensDoCatalogo = async (
         moeda: 'BRL',
         extras: Object.keys(extras).length ? extras : undefined,
         pedidoComo: texto(solicitacao.produto_nome),
+        itemId: texto(linha.item_id),
+        produtoId: texto(linha.produto_id),
       } satisfies ItemProposta;
     });
 };

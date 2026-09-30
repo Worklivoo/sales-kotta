@@ -45,6 +45,8 @@ interface EditorField {
 
 interface OrcamentoItemRow {
   id: string;
+  /** Linha da tabela de itens do orcamento (sales_orcamentos_itens_v2); vazio em item adicionado agora. */
+  itemId?: string;
   produtoId: string | null;
   isManuallyAdded: boolean;
   nome: string;
@@ -218,7 +220,8 @@ const clientFieldsFromDados = (dados: DadosProposta): EditorField[] => {
 const itemRowsFromDados = (dados: DadosProposta): OrcamentoItemRow[] =>
   dados.itens.map((item, index) => ({
     id: buildFieldId(`item-row-${index}`),
-    produtoId: null,
+    itemId: item.itemId,
+    produtoId: item.produtoId ?? null,
     isManuallyAdded: false,
     nome: item.nome,
     quantidade: formatarQuantidade(item.quantidade),
@@ -245,6 +248,8 @@ const itemFromRow = (row: OrcamentoItemRow): ItemProposta => ({
   moeda: row.moeda,
   extras: row.extras,
   pedidoComo: row.pedidoComo,
+  itemId: row.itemId,
+  produtoId: row.produtoId ?? undefined,
 });
 
 const clienteFromFields = (fields: EditorField[]): NonNullable<DadosProposta['cliente']> => {
@@ -554,11 +559,21 @@ const OrcamentoEditorModal: React.FC<OrcamentoEditorModalProps> = ({
       throw new Error('Não foi possível identificar os dados do orçamento para salvar.');
     }
 
-    // valor_total acompanha o que o cliente ve no PDF (aparece no painel do orcamento e no funil).
-    const { error } = await supabase
-      .from('sales_orcamentos_v2')
-      .update({ html_orcamento: propostaHtml, dados_proposta: dadosEditados, valor_total: valorTotal })
-      .eq('orcamento_id', orcamentoId);
+    // Uma unica chamada, atomica: grava o HTML, o snapshot e o valor_total (que acompanham o que o
+    // cliente ve no PDF) e mantem a tabela de itens em dia com a tela (atualiza, insere e remove).
+    const { error } = await supabase.rpc('sales_v2_editor_salvar_orcamento', {
+      p_orcamento_id: orcamentoId,
+      p_html: propostaHtml,
+      p_dados: dadosEditados,
+      p_valor_total: valorTotal,
+      p_itens: dadosEditados.itens.map((item) => ({
+        item_id: item.itemId ?? null,
+        produto_id: item.produtoId ?? null,
+        sku: item.sku ?? null,
+        quantidade: item.quantidade,
+        preco_unitario: typeof item.precoUnitario === 'number' ? item.precoUnitario : null,
+      })),
+    });
 
     if (error) {
       throw error;
