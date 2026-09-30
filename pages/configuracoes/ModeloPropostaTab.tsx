@@ -65,6 +65,16 @@ const paraGravar = (modelo: ModeloProposta) => {
   return resto;
 };
 
+/** Frase curta sobre o que o estado escolhido faz, mostrada embaixo de cada linha. */
+const explicarEstado = (valor: EstadoColuna, soMostrarOuOcultar?: boolean) => {
+  if (soMostrarOuOcultar) {
+    return valor === 'nunca' ? 'Não aparece no PDF.' : 'Aparece nos itens que têm esse dado.';
+  }
+  if (valor === 'sempre') return 'Aparece em todos os itens; onde faltar o dado, sai um traço (—).';
+  if (valor === 'nunca') return 'Não aparece no PDF, mesmo que o produto tenha o dado.';
+  return 'Aparece só se pelo menos um item da proposta tiver esse dado.';
+};
+
 const ESTADOS_MOSTRAR_OCULTAR: Array<{ valor: EstadoColuna; rotulo: string }> = [
   { valor: 'auto', rotulo: 'Mostrar' },
   { valor: 'nunca', rotulo: 'Ocultar' },
@@ -611,6 +621,10 @@ const ModeloPropostaTab: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  <span className="block text-[11.5px] text-muted">
+                    É o nome do documento, em letras grandes no canto superior direito do PDF, acima do número
+                    (ex.: "PROPOSTA COMERCIAL Nº 146"). Muda só o nome; o conteúdo é o mesmo.
+                  </span>
                 </label>
               </div>
             </Secao>
@@ -655,13 +669,29 @@ const ModeloPropostaTab: React.FC = () => {
 
             <Secao
               titulo="Colunas da tabela"
-              descricao='Automático: aparece só quando o item tem o dado. Sempre: aparece em todos os itens, com "—" quando faltar. Nunca: fica de fora. A unidade só tem Mostrar ou Ocultar.'
+              descricao="Escolha o que aparece na tabela de itens. Cada informação tem três opções:"
             >
+              <ul className="space-y-1 rounded-[9px] bg-stone/60 px-3 py-2.5 text-[12px] leading-5 text-muted">
+                <li>
+                  <b className="text-ink">Automático</b> (recomendado): mostra só quando algum item da proposta tem o
+                  dado. Se nenhum tiver, a coluna some sozinha.
+                </li>
+                <li>
+                  <b className="text-ink">Sempre</b>: mostra em todas as propostas; onde o item não tem o dado, sai um
+                  traço (—).
+                </li>
+                <li>
+                  <b className="text-ink">Nunca</b>: não mostra, mesmo que os produtos tenham o dado.
+                </li>
+              </ul>
               {COLUNAS.map((coluna) => (
                 <div key={coluna.key} className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[13px] text-ink" style={{ fontWeight: 700 }}>{coluna.titulo}</p>
                     <p className="text-[11.5px] text-muted">{coluna.ajuda}</p>
+                    <p className="text-[11.5px] text-muted-soft">
+                      {explicarEstado(rascunho.colunas[coluna.key], coluna.soMostrarOuOcultar)}
+                    </p>
                   </div>
                   <Segmentado
                     rotulo={coluna.titulo}
@@ -682,7 +712,12 @@ const ModeloPropostaTab: React.FC = () => {
                   <div className="mt-2 space-y-2.5">
                     {carregado.chaves.map(({ chave }) => (
                       <div key={chave} className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="min-w-0 truncate text-[13px] text-ink" style={{ fontWeight: 600 }}>{chave}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] text-ink" style={{ fontWeight: 600 }}>{chave}</p>
+                          <p className="text-[11.5px] text-muted-soft">
+                            {explicarEstado(rascunho.metadata[chave] ?? 'nunca')}
+                          </p>
+                        </div>
                         <Segmentado
                           rotulo={chave}
                           valor={rascunho.metadata[chave] ?? 'nunca'}
