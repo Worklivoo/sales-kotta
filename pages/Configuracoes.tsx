@@ -5,6 +5,7 @@ import EmailTab from './configuracoes/EmailTab';
 import GeralTab from './configuracoes/GeralTab';
 import MembrosTab from './configuracoes/MembrosTab';
 import MensagensAutomaticasTab from './configuracoes/MensagensAutomaticasTab';
+import ModeloPropostaTab from './configuracoes/ModeloPropostaTab';
 import NotificacoesTab from './configuracoes/NotificacoesTab';
 import ProdutosTab from './configuracoes/ProdutosTab';
 import WhatsAppTab from './configuracoes/WhatsAppTab';
@@ -21,7 +22,8 @@ type ConfigTabKey =
   | 'produtos'
   | 'clientes'
   | 'conhecimento'
-  | 'mensagens_automaticas';
+  | 'mensagens_automaticas'
+  | 'modelo_proposta';
 
 const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'geral', label: 'Geral' },
@@ -33,6 +35,7 @@ const tabs: Array<{ key: ConfigTabKey; label: string }> = [
   { key: 'clientes', label: 'Clientes' },
   { key: 'conhecimento', label: 'Base de Conhecimento' },
   { key: 'mensagens_automaticas', label: 'Mensagens Automáticas' },
+  { key: 'modelo_proposta', label: 'Modelo de Proposta' },
 ];
 
 const ConfiguracoesPage: React.FC = () => {
@@ -175,6 +178,7 @@ const ConfiguracoesPage: React.FC = () => {
           {activeTab === 'clientes' ? <ClientesTab /> : null}
           {activeTab === 'conhecimento' ? <BaseConhecimentoTab /> : null}
           {activeTab === 'mensagens_automaticas' ? <MensagensAutomaticasTab /> : null}
+          {activeTab === 'modelo_proposta' ? <ModeloPropostaTab /> : null}
         </section>
       </div>
     </div>

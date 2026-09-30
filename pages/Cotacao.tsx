@@ -81,6 +81,9 @@ interface EmpresaRecord {
   logo_url: string | null;
   email_responsavel: string | null;
   telefone_responsavel: string | null;
+  endereco_faturamento: unknown;
+  modelo_proposta: unknown;
+  texto_rodape_pdf: string | null;
 }
 
 interface OrcamentoRecord {
@@ -94,6 +97,7 @@ interface OrcamentoRecord {
   updated_at: string | null;
   pdf_url: string | null;
   html_orcamento: string | null;
+  dados_proposta: unknown;
 }
 
 interface OrcamentoItemRecord {
@@ -543,7 +547,7 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
           supabase
             .from('sales_orcamentos_v2')
             .select(
-              'orcamento_id, data_emissao, validade, valor_total, status, aprovado_por, data_aprovacao, updated_at, pdf_url, html_orcamento',
+              'orcamento_id, data_emissao, validade, valor_total, status, aprovado_por, data_aprovacao, updated_at, pdf_url, html_orcamento, dados_proposta',
             )
             .eq('empresa_id', currentMember.empresa_id)
             .eq('atendimento_id', atendimento.atendimento_id)
@@ -551,7 +555,9 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
             .limit(1),
           supabase
             .from('sales_empresas_v2')
-            .select('razao_social, cnpj, logo_url, email_responsavel, telefone_responsavel')
+            .select(
+              'razao_social, cnpj, logo_url, email_responsavel, telefone_responsavel, endereco_faturamento, modelo_proposta, texto_rodape_pdf',
+            )
             .eq('empresa_id', currentMember.empresa_id)
             .limit(1),
           supabase
@@ -814,11 +820,14 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
   const etapasDestino = podeMoverParaCustom
     ? etapas.filter((etapa) => !etapa.is_fixed && etapa.etapa_id !== etapaAtual!.etapa_id)
     : [];
-  const hasOrcamentoHtml = Boolean((orcamentoData?.html_orcamento || '').trim());
+  const hasOrcamentoHtml =
+    Boolean((orcamentoData?.html_orcamento || '').trim()) || Boolean(orcamentoData?.dados_proposta);
   // Mesma cadeia de fallback usada na automacao (n8n) ao montar o orcamento: cliente
   // cadastrado > dado capturado automaticamente no atendimento > em branco.
   const clienteInfoParaOrcamento = {
     razaoSocial: clientData?.razao_social || clientData?.nome || null,
+    // Com razao social cadastrada, o "nome" do cliente e a pessoa de contato.
+    contato: clientData?.razao_social ? clientData?.nome || null : null,
     cnpjCpf: clientData?.cnpj || cotacao.documento_lead || null,
     email: clientData?.email || (cotacao.origem === 'EMAIL' ? cotacao.email_lead : null) || null,
     telefone: clientData?.telefone || (cotacao.origem === 'WHATSAPP' ? cotacao.telefone_lead : null) || null,
@@ -916,27 +925,20 @@ const CotacaoPage: React.FC<CotacaoPageProps> = ({ empresaId, numeroTicket }) =>
         isOpen={isOrcamentoModalOpen}
         onClose={() => setIsOrcamentoModalOpen(false)}
         assunto={cotacao.assunto}
-        htmlOrcamento={orcamentoData?.html_orcamento || null}
-        numeroTicket={cotacao.numero_ticket ? String(cotacao.numero_ticket) : null}
         empresaId={cotacao.empresa_id || null}
-        empresaInfo={
-          empresaData
-            ? {
-                logoUrl: empresaData.logo_url,
-                razaoSocial: empresaData.razao_social,
-                cnpj: empresaData.cnpj,
-                email: empresaData.email_responsavel,
-                telefone: empresaData.telefone_responsavel,
-              }
-            : null
-        }
-        clienteInfo={clienteInfoParaOrcamento}
-        orcamentoId={orcamentoData?.orcamento_id || null}
+        orcamento={orcamentoData}
+        empresa={empresaData}
+        numeroTicket={cotacao.numero_ticket ?? null}
+        origem={cotacao.origem}
+        vendedor={responsibleName === 'Membro nao identificado' ? null : responsibleName}
+        cliente={clienteInfoParaOrcamento}
         atendimentoId={cotacao.atendimento_id}
         membroId={cotacao.membro_id}
-        onHtmlSaved={(html) =>
+        onSaved={(html, dados, valorTotal) =>
           setOrcamentoData((currentValue) =>
-            currentValue ? { ...currentValue, html_orcamento: html } : currentValue,
+            currentValue
+              ? { ...currentValue, html_orcamento: html, dados_proposta: dados, valor_total: String(valorTotal) }
+              : currentValue,
           )
         }
       />
