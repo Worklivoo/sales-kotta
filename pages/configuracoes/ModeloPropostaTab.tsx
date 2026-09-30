@@ -22,6 +22,11 @@ import { formatarEndereco, modeloDaEmpresa, type EmpresaParaProposta } from '../
 
 const LARGURA_PAGINA_A4 = 794; // px a 96dpi
 const ALTURA_PAGINA_A4 = 1123;
+
+/* So na previa: o documento usa margens de impressao (@page), que o iframe ignora, e o conteudo
+   ficava colado nas bordas. Aqui viram padding (14mm) e o rodape acompanha. Nao entra no PDF. */
+const ESTILO_PREVIA =
+  '<style>html{background:#fff}body{padding:14mm 14mm 24mm}.rodape{left:14mm!important;right:14mm!important;bottom:10mm!important}</style>';
 const LIMITE_LOGO_BYTES = 2 * 1024 * 1024;
 const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp'];
 
@@ -368,7 +373,8 @@ const ModeloPropostaTab: React.FC = () => {
 
   const previaHtml = useMemo(() => {
     if (!carregado) return '';
-    return renderPropostaHtml(montarDadosExemplo(carregado, rascunho, emitidaEm), rascunho);
+    const html = renderPropostaHtml(montarDadosExemplo(carregado, rascunho, emitidaEm), rascunho);
+    return html.includes('</head>') ? html.replace('</head>', `${ESTILO_PREVIA}</head>`) : html + ESTILO_PREVIA;
   }, [carregado, rascunho, emitidaEm]);
 
   // Sempre em cima do estado mais recente (funcao), nunca do `rascunho` do render anterior: dois
